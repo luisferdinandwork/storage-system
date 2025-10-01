@@ -1,0 +1,104 @@
+import { pgTable, text, timestamp, boolean, uuid, integer } from 'drizzle-orm/pg-core';
+import { relations } from 'drizzle-orm';
+
+// Users table
+export const users = pgTable('users', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: text('name').notNull(),
+  email: text('email').notNull().unique(),
+  password: text('password').notNull(),
+  role: text('role', { enum: ['admin', 'manager', 'user'] }).notNull().default('user'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Items table
+export const items = pgTable('items', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  quantity: integer('quantity').notNull().default(1),
+  available: integer('available').notNull().default(1),
+  addedBy: uuid('added_by').references(() => users.id).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Borrow requests table
+export const borrowRequests = pgTable('borrow_requests', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  itemId: uuid('item_id').references(() => items.id).notNull(),
+  userId: uuid('user_id').references(() => users.id).notNull(),
+  requestedAt: timestamp('requested_at').defaultNow().notNull(),
+  startDate: timestamp('start_date').notNull(),
+  endDate: timestamp('end_date').notNull(),
+  reason: text('reason').notNull(),
+  status: text('status', { enum: ['pending', 'approved', 'rejected'] }).notNull().default('pending'),
+  managerApproved: boolean('manager_approved').default(false),
+  adminApproved: boolean('admin_approved').default(false),
+  managerApprovedBy: uuid('manager_approved_by').references(() => users.id),
+  adminApprovedBy: uuid('admin_approved_by').references(() => users.id),
+  managerApprovedAt: timestamp('manager_approved_at'),
+  adminApprovedAt: timestamp('admin_approved_at'),
+  rejectionReason: text('rejection_reason'),
+  returnedAt: timestamp('returned_at'),
+});
+
+// Item removal history table
+export const itemRemovals = pgTable('item_removals', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  itemId: uuid('item_id').references(() => items.id).notNull(),
+  removedBy: uuid('removed_by').references(() => users.id).notNull(),
+  reason: text('reason').notNull(),
+  removedAt: timestamp('removed_at').defaultNow().notNull(),
+});
+
+// Relations
+export const usersRelations = relations(users, ({ many }) => ({
+  itemsAdded: many(items),
+  borrowRequests: many(borrowRequests),
+  managerApprovals: many(borrowRequests, { relationName: 'managerApproval' }),
+  adminApprovals: many(borrowRequests, { relationName: 'adminApproval' }),
+  itemRemovals: many(itemRemovals),
+}));
+
+export const itemsRelations = relations(items, ({ one, many }) => ({
+  addedBy: one(users, {
+    fields: [items.addedBy],
+    references: [users.id],
+  }),
+  borrowRequests: many(borrowRequests),
+  removals: many(itemRemovals),
+}));
+
+export const borrowRequestsRelations = relations(borrowRequests, ({ one }) => ({
+  item: one(items, {
+    fields: [borrowRequests.itemId],
+    references: [items.id],
+  }),
+  user: one(users, {
+    fields: [borrowRequests.userId],
+    references: [users.id],
+  }),
+  managerApprovedBy: one(users, {
+    fields: [borrowRequests.managerApprovedBy],
+    references: [users.id],
+    relationName: 'managerApproval',
+  }),
+  adminApprovedBy: one(users, {
+    fields: [borrowRequests.adminApprovedBy],
+    references: [users.id],
+    relationName: 'adminApproval',
+  }),
+}));
+
+export const itemRemovalsRelations = relations(itemRemovals, ({ one }) => ({
+  item: one(items, {
+    fields: [itemRemovals.itemId],
+    references: [items.id],
+  }),
+  removedBy: one(users, {
+    fields: [itemRemovals.removedBy],
+    references: [users.id],
+  }),
+}));
