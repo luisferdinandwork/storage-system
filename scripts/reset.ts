@@ -1,76 +1,51 @@
-// scripts/seed.ts
+// scripts/reset.ts
 
-import 'dotenv/config'; // Add this line at the very top
+import 'dotenv/config';
 import { db } from '../lib/db';
-import { users, items } from '../lib/db/schema';
+import { users, items, borrowRequests, itemRemovals } from '../lib/db/schema';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 
-async function seed() {
+async function reset() {
   try {
-    // Delete all existing items first
-    console.log('Removing all existing items...');
+    console.log('Resetting database...');
+    
+    // Delete all data in reverse order of dependencies
+    await db.delete(itemRemovals);
+    await db.delete(borrowRequests);
     await db.delete(items);
-    console.log('All items removed successfully');
-
-    // Check if admin user already exists
-    const existingAdmin = await db.select().from(users).where(eq(users.email, 'admin@example.com')).limit(1);
+    await db.delete(users);
     
-    let adminUser, managerUser, regularUser;
+    console.log('Database reset successfully');
 
-    if (existingAdmin.length === 0) {
-      // Create admin user
-      const adminPassword = await bcrypt.hash('admin123', 10);
-      [adminUser] = await db.insert(users).values({
-        name: 'Admin User',
-        email: 'admin@example.com',
-        password: adminPassword,
-        role: 'admin',
-      }).returning();
-      console.log('Admin user created');
-    } else {
-      adminUser = existingAdmin[0];
-      console.log('Admin user already exists');
-    }
+    // Create admin user
+    const adminPassword = await bcrypt.hash('admin123', 10);
+    const [adminUser] = await db.insert(users).values({
+      name: 'Admin User',
+      email: 'admin@example.com',
+      password: adminPassword,
+      role: 'admin',
+    }).returning();
 
-    // Check if manager user already exists
-    const existingManager = await db.select().from(users).where(eq(users.email, 'manager@example.com')).limit(1);
-    
-    if (existingManager.length === 0) {
-      // Create manager user
-      const managerPassword = await bcrypt.hash('manager123', 10);
-      [managerUser] = await db.insert(users).values({
-        name: 'Manager User',
-        email: 'manager@example.com',
-        password: managerPassword,
-        role: 'manager',
-      }).returning();
-      console.log('Manager user created');
-    } else {
-      managerUser = existingManager[0];
-      console.log('Manager user already exists');
-    }
+    // Create manager user
+    const managerPassword = await bcrypt.hash('manager123', 10);
+    const [managerUser] = await db.insert(users).values({
+      name: 'Manager User',
+      email: 'manager@example.com',
+      password: managerPassword,
+      role: 'manager',
+    }).returning();
 
-    // Check if regular user already exists
-    const existingUser = await db.select().from(users).where(eq(users.email, 'user@example.com')).limit(1);
-    
-    if (existingUser.length === 0) {
-      // Create regular user
-      const userPassword = await bcrypt.hash('user123', 10);
-      [regularUser] = await db.insert(users).values({
-        name: 'Regular User',
-        email: 'user@example.com',
-        password: userPassword,
-        role: 'user',
-      }).returning();
-      console.log('Regular user created');
-    } else {
-      regularUser = existingUser[0];
-      console.log('Regular user already exists');
-    }
+    // Create regular user
+    const userPassword = await bcrypt.hash('user123', 10);
+    const [regularUser] = await db.insert(users).values({
+      name: 'Regular User',
+      email: 'user@example.com',
+      password: userPassword,
+      role: 'user',
+    }).returning();
 
     // Create items with categories and sizes
-    // Explicitly type the itemsData array to fix the TypeScript error
     const itemsData: Array<{
       name: string;
       description: string;
@@ -109,14 +84,13 @@ async function seed() {
     ];
 
     await db.insert(items).values(itemsData);
-    console.log('Items created successfully');
 
-    console.log('Seed data created successfully');
+    console.log('Database reset and seed data created successfully');
     process.exit(0);
   } catch (error) {
-    console.error('Error seeding data:', error);
+    console.error('Error resetting database:', error);
     process.exit(1);
   }
 }
 
-seed();
+reset();

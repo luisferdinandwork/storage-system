@@ -1,3 +1,5 @@
+// app/api/items/route.ts
+
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -23,15 +25,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { name, description, quantity } = await request.json();
+    const { name, description, category, size, quantity } = await request.json();
     
-    if (!name || !quantity) {
-      return NextResponse.json({ error: 'Name and quantity are required' }, { status: 400 });
+    if (!name || !category || !size || !quantity) {
+      return NextResponse.json({ error: 'Name, category, size, and quantity are required' }, { status: 400 });
     }
 
     const newItem = await db.insert(items).values({
       name,
       description: description || null,
+      category,
+      size,
       quantity: parseInt(quantity),
       available: parseInt(quantity),
       addedBy: session.user.id,

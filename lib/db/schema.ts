@@ -1,3 +1,5 @@
+// lib/db/schema.ts
+
 import { pgTable, text, timestamp, boolean, uuid, integer } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
@@ -17,6 +19,8 @@ export const items = pgTable('items', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: text('name').notNull(),
   description: text('description'),
+  category: text('category', { enum: ['shoes', 'apparel', 'accessories', 'equipment'] }).notNull(),
+  size: text('size').notNull(),
   quantity: integer('quantity').notNull().default(1),
   available: integer('available').notNull().default(1),
   addedBy: uuid('added_by').references(() => users.id).notNull(),
