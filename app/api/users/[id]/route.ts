@@ -10,7 +10,7 @@ import { eq } from 'drizzle-orm';
 // PUT update user (Admin only)
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
