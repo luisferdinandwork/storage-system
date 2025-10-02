@@ -7,7 +7,7 @@ import { eq } from 'drizzle-orm';
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -22,7 +22,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Department name is required' }, { status: 400 });
     }
 
-    const deptId = params.id;
+    const { id: deptId } = await params; // Await params here
     
     // Update department
     const updatedDept = await db.update(departments)
@@ -47,7 +47,7 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -56,7 +56,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const deptId = params.id;
+    const { id: deptId } = await params; // Await params here
     
     // Check if there are users in this department
     const usersInDept = await db.select().from(users).where(eq(users.departmentId, deptId)).limit(1);
