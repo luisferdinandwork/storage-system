@@ -1,6 +1,5 @@
-import type { Config } from 'tailwindcss';
-
-export default {
+/** @type {import('tailwindcss').Config} */
+module.exports = {
   content: [
     './pages/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -15,7 +14,7 @@ export default {
           200: '#fff9c2',
           300: '#fff59d',
           400: '#fff176',
-          500: '#ffee58', // Primary yellow
+          500: '#ffee58',
           600: '#fdd835',
           700: '#fbc02d',
           800: '#f9a825',
@@ -32,10 +31,10 @@ export default {
           700: '#616161',
           800: '#424242',
           900: '#212121',
-          dove: '#6d6d6d', // Dove gray
+          dove: '#6d6d6d',
         },
       },
     },
   },
   plugins: [],
-} satisfies Config;
+}

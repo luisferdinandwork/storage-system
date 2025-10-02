@@ -1,5 +1,16 @@
+// lib/db/schema.ts
+
 import { pgTable, text, timestamp, boolean, uuid, integer } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
+
+// Departments table
+export const departments = pgTable('departments', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
 
 // Users table
 export const users = pgTable('users', {
@@ -8,6 +19,7 @@ export const users = pgTable('users', {
   email: text('email').notNull().unique(),
   password: text('password').notNull(),
   role: text('role', { enum: ['admin', 'manager', 'user'] }).notNull().default('user'),
+  departmentId: uuid('department_id').references(() => departments.id),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -17,6 +29,8 @@ export const items = pgTable('items', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: text('name').notNull(),
   description: text('description'),
+  category: text('category', { enum: ['shoes', 'apparel', 'accessories', 'equipment'] }).notNull(),
+  size: text('size').notNull(),
   quantity: integer('quantity').notNull().default(1),
   available: integer('available').notNull().default(1),
   addedBy: uuid('added_by').references(() => users.id).notNull(),
@@ -54,7 +68,15 @@ export const itemRemovals = pgTable('item_removals', {
 });
 
 // Relations
-export const usersRelations = relations(users, ({ many }) => ({
+export const departmentsRelations = relations(departments, ({ many }) => ({
+  users: many(users),
+}));
+
+export const usersRelations = relations(users, ({ one, many }) => ({
+  department: one(departments, {
+    fields: [users.departmentId],
+    references: [departments.id],
+  }),
   itemsAdded: many(items),
   borrowRequests: many(borrowRequests),
   managerApprovals: many(borrowRequests, { relationName: 'managerApproval' }),
