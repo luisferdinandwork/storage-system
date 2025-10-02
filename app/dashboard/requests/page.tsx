@@ -1,12 +1,10 @@
-// app/dashboard/requests/page.tsx (Updated)
-
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { FileText, Calendar, Clock, CheckCircle, XCircle, Plus, Package } from 'lucide-react';
+import { FileText, Calendar, Clock, CheckCircle, XCircle, Plus, Package, Building, Filter, Shield } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDate, calculateDaysLeft } from '@/lib/utils';
 import { AddRequestModal } from '@/components/requests/add-request-modal';
@@ -23,17 +21,24 @@ interface BorrowRequest {
     id: string;
     name: string;
     email: string;
+    role: 'admin' | 'manager' | 'user';
+    department?: {
+      id: string;
+      name: string;
+    };
   };
   startDate: string;
   endDate: string;
   reason: string;
   status: 'pending' | 'approved' | 'rejected';
-  managerApproved: boolean;
-  adminApproved: boolean;
+  managerApproved: boolean | null;
+  adminApproved: boolean | null;
   managerApprovedBy?: {
+    id: string;
     name: string;
   };
   adminApprovedBy?: {
+    id: string;
     name: string;
   };
   managerApprovedAt?: string;
@@ -50,10 +55,14 @@ export default function RequestsPage() {
   const [approvingRequestId, setApprovingRequestId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [rejectionRequestId, setRejectionRequestId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const isAdmin = session?.user?.role === 'admin';
   const isManager = session?.user?.role === 'manager';
   const isUser = session?.user?.role === 'user';
+
+  // Helper function to convert nullable boolean to boolean
+  const isApproved = (approved: boolean | null) => approved === true;
 
   useEffect(() => {
     fetchRequests();
@@ -80,10 +89,13 @@ export default function RequestsPage() {
       });
 
       if (response.ok) {
+        const result = await response.json();
+        alert(result.message);
         setApprovingRequestId(null);
         fetchRequests();
       } else {
-        alert('Failed to approve request');
+        const error = await response.json();
+        alert(error.error || 'Failed to approve request');
       }
     } catch (error) {
       console.error('Failed to approve request:', error);
@@ -111,7 +123,8 @@ export default function RequestsPage() {
         setRejectionReason('');
         fetchRequests();
       } else {
-        alert('Failed to reject request');
+        const error = await response.json();
+        alert(error.error || 'Failed to reject request');
       }
     } catch (error) {
       console.error('Failed to reject request:', error);
@@ -125,11 +138,13 @@ export default function RequestsPage() {
         method: 'POST',
       });
 
-      if (response.ok) {
-        fetchRequests();
-      } else {
-        alert('Failed to return item');
+      if (!response.ok) {
+        const error = await response.json();
+        alert(error.error || 'Failed to return item');
+        return;
       }
+
+      fetchRequests();
     } catch (error) {
       console.error('Failed to return item:', error);
       alert('Failed to return item');
@@ -177,20 +192,56 @@ export default function RequestsPage() {
     }
   };
 
+  const getRoleColor = (role: string) => {
+    switch (role) {
+      case 'admin':
+        return 'bg-red-100 text-red-800';
+      case 'manager':
+        return 'bg-blue-100 text-blue-800';
+      case 'user':
+        return 'bg-gray-100 text-gray-800';
+      default:
+        return '';
+    }
+  };
+
   const canApprove = (request: BorrowRequest) => {
     if (request.status !== 'pending') return false;
     
-    if (isAdmin && !request.adminApproved) return true;
-    if (isManager && !request.managerApproved) return true;
+    if (isAdmin) {
+      // Admin can approve if admin approval is pending
+      return !isApproved(request.adminApproved);
+    }
+    
+    if (isManager) {
+      // Manager can approve if:
+      // 1. The request is from a regular user (not a manager)
+      // 2. Manager approval is pending
+      return request.user.role !== 'manager' && !isApproved(request.managerApproved);
+    }
     
     return false;
   };
 
+  // Filter requests based on status
+  const filteredRequests = requests.filter(request => {
+    if (statusFilter === 'all') return true;
+    return request.status === statusFilter;
+  });
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Borrow Requests</h1>
-        {isUser && (
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Borrow Requests</h1>
+          {isManager && (
+            <p className="text-sm text-gray-500 mt-1">
+              Showing requests from your department only
+            </p>
+          )}
+        </div>
+        {/* FIXED: Updated condition to include managers */}
+        {(isUser || isManager) && (
           <Button 
             onClick={() => setShowRequestModal(true)} 
             className="bg-primary-500 hover:bg-primary-600"
@@ -201,13 +252,33 @@ export default function RequestsPage() {
         )}
       </div>
 
+      {/* Status Filter */}
+      <div className="mb-6 flex items-center space-x-4">
+        <div className="relative">
+          <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="pl-10 pr-8 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          >
+            <option value="all">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </div>
+        <div className="text-sm text-gray-500">
+          {filteredRequests.length} {filteredRequests.length === 1 ? 'request' : 'requests'} found
+        </div>
+      </div>
+
       {isLoading ? (
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
         </div>
       ) : (
         <div className="space-y-4">
-          {requests.map((request) => (
+          {filteredRequests.map((request) => (
             <Card key={request.id}>
               <CardHeader>
                 <div className="flex justify-between items-start">
@@ -216,9 +287,22 @@ export default function RequestsPage() {
                       <Package className="mr-2 h-5 w-5 text-primary-500" />
                       {request.item.name}
                     </CardTitle>
-                    <CardDescription>
-                      Requested by {request.user.name} ({request.user.email})
-                    </CardDescription>
+                    <div className="flex items-center space-x-2">
+                      <p className="text-sm text-gray-600">Requested by {request.user.name} ({request.user.email})</p>
+                      <span className={cn(
+                        "px-2 py-1 rounded-full text-xs font-medium flex items-center",
+                        getRoleColor(request.user.role)
+                      )}>
+                        <Shield className="h-3 w-3 mr-1" />
+                        {request.user.role}
+                      </span>
+                    </div>
+                    {request.user.department && (
+                      <div className="flex items-center mt-1">
+                        <Building className="h-3 w-3 mr-1 text-gray-400" />
+                        <p className="text-sm text-gray-600">{request.user.department.name}</p>
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center space-x-2">
                     {getStatusIcon(request.status)}
@@ -281,16 +365,29 @@ export default function RequestsPage() {
                 {request.status === 'pending' && (
                   <div className="flex items-center space-x-4 text-sm text-gray-500">
                     <div>
-                      Manager Approval: {request.managerApproved ? 
-                        <span className="text-green-600">Approved by {request.managerApprovedBy?.name}</span> : 
-                        <span className="text-amber-600">Pending</span>
-                      }
-                    </div>
-                    <div>
-                      Admin Approval: {request.adminApproved ? 
-                        <span className="text-green-600">Approved by {request.adminApprovedBy?.name}</span> : 
-                        <span className="text-amber-600">Pending</span>
-                      }
+                      {request.user.role === 'manager' ? (
+                        <span>
+                          Admin Approval: {isApproved(request.adminApproved) ? 
+                            <span className="text-green-600">Approved by {request.adminApprovedBy?.name}</span> : 
+                            <span className="text-amber-600">Pending</span>
+                          }
+                        </span>
+                      ) : (
+                        <>
+                          <div>
+                            Manager Approval: {isApproved(request.managerApproved) ? 
+                              <span className="text-green-600">Approved by {request.managerApprovedBy?.name}</span> : 
+                              <span className="text-amber-600">Pending</span>
+                            }
+                          </div>
+                          <div>
+                            Admin Approval: {isApproved(request.adminApproved) ? 
+                              <span className="text-green-600">Approved by {request.adminApprovedBy?.name}</span> : 
+                              <span className="text-amber-600">Pending</span>
+                            }
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 )}
@@ -388,12 +485,14 @@ export default function RequestsPage() {
         </div>
       )}
 
-      {!isLoading && requests.length === 0 && (
+      {!isLoading && filteredRequests.length === 0 && (
         <div className="text-center py-12">
           <FileText className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">No borrow requests found</h3>
           <p className="mt-1 text-sm text-gray-500">
-            {isUser ? 'Get started by creating a new borrow request' : 'No requests have been made yet'}
+            {isUser ? 'Get started by creating a new borrow request' : 
+             isManager ? 'No requests from your department yet' : 
+             'No requests have been made yet'}
           </p>
         </div>
       )}

@@ -1,3 +1,5 @@
+// components/dashboard/sidebar.tsx
+
 'use client';
 
 import Link from 'next/link';
@@ -9,6 +11,7 @@ import {
   Users, 
   FileText, 
   Settings,
+  Building,
   LogOut
 } from 'lucide-react';
 import { signOut, useSession } from 'next-auth/react';
@@ -21,6 +24,7 @@ const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home, roles: ['admin', 'manager', 'user'] },
   { name: 'Items', href: '/dashboard/items', icon: Package, roles: ['admin', 'manager', 'user'] },
   { name: 'Borrow Requests', href: '/dashboard/requests', icon: FileText, roles: ['admin', 'manager', 'user'] },
+  { name: 'Departments', href: '/dashboard/departments', icon: Building, roles: ['admin'] },
   { name: 'Users', href: '/dashboard/users', icon: Users, roles: ['admin'] },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings, roles: ['admin', 'manager'] },
 ];

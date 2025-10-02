@@ -29,3 +29,10 @@ declare module 'next-auth/jwt' {
     role: string;
   }
 }
+
+// Add this to fix the Drizzle ORM types
+declare module 'drizzle-orm' {
+  interface SqliteTable {
+    // Empty interface to avoid conflicts
+  }
+}

@@ -70,6 +70,7 @@ export default function SignIn() {
                 id="password"
                 type="password"
                 value={password}
+                placeholder='password'
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />

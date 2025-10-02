@@ -1,25 +1,14 @@
-// components/requests/add-request-modal.tsx
+'use client';
 
 import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Modal } from '@/components/ui/modal';
+import { X, Calendar, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-interface AddRequestModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSuccess: () => void;
-}
-
-interface RequestForm {
-  itemId: string;
-  startDate: string;
-  endDate: string;
-  reason: string;
-}
-
-interface AvailableItem {
+interface Item {
   id: string;
   name: string;
   category: string;
@@ -27,52 +16,44 @@ interface AvailableItem {
   available: number;
 }
 
+interface AddRequestModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
 export function AddRequestModal({ isOpen, onClose, onSuccess }: AddRequestModalProps) {
+  const { data: session } = useSession();
+  const [items, setItems] = useState<Item[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [items, setItems] = useState<AvailableItem[]>([]);
-  const [isLoadingItems, setIsLoadingItems] = useState(false);
-  const [formData, setFormData] = useState<RequestForm>({
+  const [formData, setFormData] = useState({
     itemId: '',
     startDate: '',
     endDate: '',
-    reason: ''
+    reason: '',
   });
 
-  // Calculate min and max dates
-  const today = new Date().toISOString().split('T')[0];
-  const maxDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const isManager = session?.user?.role === 'manager';
+  const isUser = session?.user?.role === 'user';
 
-  // Fetch available items when modal opens
   useEffect(() => {
     if (isOpen) {
       fetchItems();
     }
   }, [isOpen]);
 
-  // Reset form when modal closes
-  useEffect(() => {
-    if (!isOpen) {
-      setFormData({
-        itemId: '',
-        startDate: '',
-        endDate: '',
-        reason: ''
-      });
-    }
-  }, [isOpen]);
-
   const fetchItems = async () => {
-    setIsLoadingItems(true);
     try {
       const response = await fetch('/api/items');
       if (response.ok) {
         const data = await response.json();
-        setItems(data.filter((item: any) => item.available > 0));
+        setItems(data.filter((item: Item) => item.available > 0));
       }
     } catch (error) {
       console.error('Failed to fetch items:', error);
     } finally {
-      setIsLoadingItems(false);
+      setIsLoading(false);
     }
   };
 
@@ -92,6 +73,7 @@ export function AddRequestModal({ isOpen, onClose, onSuccess }: AddRequestModalP
       if (response.ok) {
         onSuccess();
         onClose();
+        setFormData({ itemId: '', startDate: '', endDate: '', reason: '' });
       } else {
         const error = await response.json();
         alert(error.error || 'Failed to submit request');
@@ -104,130 +86,136 @@ export function AddRequestModal({ isOpen, onClose, onSuccess }: AddRequestModalP
     }
   };
 
-  const handleInputChange = (field: keyof RequestForm, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
+  const today = new Date().toISOString().split('T')[0];
+  const maxDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-  const handleStartDateChange = (startDate: string) => {
-    setFormData(prev => ({
-      ...prev,
-      startDate,
-      endDate: prev.endDate < startDate ? startDate : prev.endDate
-    }));
-  };
+  if (!isOpen) return null;
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title="New Borrow Request"
-      description="Request to borrow an item for a maximum of 14 days"
-      size="lg"
-    >
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label htmlFor="item" className="block text-sm font-medium text-gray-700 mb-1">
-            Select Item *
-          </label>
-          {isLoadingItems ? (
-            <div className="w-full p-2 border border-gray-300 rounded-md bg-gray-50">
-              <span className="text-gray-500">Loading available items...</span>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle>New Borrow Request</CardTitle>
+              <CardDescription>
+                Request to borrow an item for a maximum of 14 days
+              </CardDescription>
             </div>
-          ) : (
-            <select
-              id="item"
-              value={formData.itemId}
-              onChange={(e) => handleInputChange('itemId', e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              required
-              disabled={isSubmitting}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
             >
-              <option value="">Select an item</option>
-              {items.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name} ({item.category}, Size: {item.size}) - {item.available} available
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">
-              Start Date *
-            </label>
-            <Input
-              id="startDate"
-              type="date"
-              value={formData.startDate}
-              onChange={(e) => handleStartDateChange(e.target.value)}
-              min={today}
-              required
-              disabled={isSubmitting}
-            />
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {/* Approval Process Information */}
+          <div className="mb-6 p-4 bg-blue-50 rounded-md">
+            <div className="flex items-start">
+              <Info className="h-5 w-5 text-blue-600 mt-0.5 mr-2" />
+              <div>
+                <p className="text-sm font-medium text-blue-800">Approval Process:</p>
+                <p className="text-sm text-blue-700 mt-1">
+                  {isManager ? (
+                    " Your request will require admin approval only."
+                  ) : (
+                    " Your request will require approval from both your manager and an admin."
+                  )}
+                </p>
+              </div>
+            </div>
           </div>
 
-          <div>
-            <label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-1">
-              End Date *
-            </label>
-            <Input
-              id="endDate"
-              type="date"
-              value={formData.endDate}
-              onChange={(e) => handleInputChange('endDate', e.target.value)}
-              min={formData.startDate || today}
-              max={maxDate}
-              required
-              disabled={isSubmitting}
-            />
-          </div>
-        </div>
-
-        <div>
-          <label htmlFor="reason" className="block text-sm font-medium text-gray-700 mb-1">
-            Reason for Borrowing *
-          </label>
-          <textarea
-            id="reason"
-            value={formData.reason}
-            onChange={(e) => handleInputChange('reason', e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            rows={4}
-            required
-            disabled={isSubmitting}
-            placeholder="Explain why you need to borrow this item..."
-          />
-        </div>
-
-        <div className="bg-gray-50 p-3 rounded-md">
-          <p className="text-sm text-gray-600">
-            <strong>Note:</strong> Maximum borrowing period is 14 days. Your request will require approval from both a manager and an admin.
-          </p>
-        </div>
-
-        <div className="flex justify-end space-x-3 pt-4">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onClose}
-            disabled={isSubmitting}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            className="bg-primary-500 hover:bg-primary-600"
-            disabled={isSubmitting || isLoadingItems}
-          >
-            {isSubmitting ? 'Submitting...' : 'Submit Request'}
-          </Button>
-        </div>
-      </form>
-    </Modal>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="item" className="block text-sm font-medium text-gray-700 mb-1">
+                Select Item *
+              </label>
+              <select
+                id="item"
+                value={formData.itemId}
+                onChange={(e) => setFormData({ ...formData, itemId: e.target.value })}
+                className="w-full p-2 border border-gray-300 rounded-md"
+                required
+                disabled={isSubmitting}
+              >
+                <option value="">Select an item</option>
+                {items.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name} ({item.category}, Size: {item.size}) - {item.available} available
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">
+                  Start Date *
+                </label>
+                <Input
+                  id="startDate"
+                  type="date"
+                  value={formData.startDate}
+                  onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                  min={today}
+                  required
+                  disabled={isSubmitting}
+                />
+              </div>
+              <div>
+                <label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-1">
+                  End Date *
+                </label>
+                <Input
+                  id="endDate"
+                  type="date"
+                  value={formData.endDate}
+                  onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                  min={formData.startDate || today}
+                  max={maxDate}
+                  required
+                  disabled={isSubmitting}
+                />
+              </div>
+            </div>
+            <div>
+              <label htmlFor="reason" className="block text-sm font-medium text-gray-700 mb-1">
+                Reason for Borrowing *
+              </label>
+              <textarea
+                id="reason"
+                rows={3}
+                value={formData.reason}
+                onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
+                className="w-full p-2 border border-gray-300 rounded-md"
+                placeholder="Explain why you need to borrow this item..."
+                required
+                disabled={isSubmitting}
+              />
+            </div>
+            <div className="flex space-x-2">
+              <Button 
+                type="submit" 
+                className="bg-primary-500 hover:bg-primary-600"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? 'Submitting...' : 'Submit Request'}
+              </Button>
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={onClose}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

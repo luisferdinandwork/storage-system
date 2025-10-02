@@ -1,8 +1,8 @@
 // scripts/seed.ts
 
-import 'dotenv/config'; // Add this line at the very top
+import 'dotenv/config';
 import { db } from '../lib/db';
-import { users, items } from '../lib/db/schema';
+import { users, items, departments } from '../lib/db/schema';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 
@@ -13,10 +13,34 @@ async function seed() {
     await db.delete(items);
     console.log('All items removed successfully');
 
+    // Create departments
+    console.log('Creating departments...');
+    const [hrDept] = await db.insert(departments).values({
+      name: 'Human Resources',
+      description: 'Responsible for employee management and relations',
+    }).returning();
+
+    const [itDept] = await db.insert(departments).values({
+      name: 'Information Technology',
+      description: 'Manages technology infrastructure and support',
+    }).returning();
+
+    const [financeDept] = await db.insert(departments).values({
+      name: 'Finance',
+      description: 'Handles financial planning and management',
+    }).returning();
+
+    const [marketingDept] = await db.insert(departments).values({
+      name: 'Marketing',
+      description: 'Responsible for marketing and communications',
+    }).returning();
+
+    console.log('Departments created successfully');
+
     // Check if admin user already exists
     const existingAdmin = await db.select().from(users).where(eq(users.email, 'admin@example.com')).limit(1);
     
-    let adminUser, managerUser, regularUser;
+    let adminUser, hrManager, itManager, financeManager, marketingManager, regularUser;
 
     if (existingAdmin.length === 0) {
       // Create admin user
@@ -26,6 +50,7 @@ async function seed() {
         email: 'admin@example.com',
         password: adminPassword,
         role: 'admin',
+        // Admin doesn't belong to any specific department
       }).returning();
       console.log('Admin user created');
     } else {
@@ -33,44 +58,115 @@ async function seed() {
       console.log('Admin user already exists');
     }
 
-    // Check if manager user already exists
-    const existingManager = await db.select().from(users).where(eq(users.email, 'manager@example.com')).limit(1);
-    
-    if (existingManager.length === 0) {
-      // Create manager user
-      const managerPassword = await bcrypt.hash('manager123', 10);
-      [managerUser] = await db.insert(users).values({
-        name: 'Manager User',
-        email: 'manager@example.com',
-        password: managerPassword,
-        role: 'manager',
-      }).returning();
-      console.log('Manager user created');
-    } else {
-      managerUser = existingManager[0];
-      console.log('Manager user already exists');
-    }
+    // Create department managers
+    const hrManagerPassword = await bcrypt.hash('manager123', 10);
+    [hrManager] = await db.insert(users).values({
+      name: 'HR Manager',
+      email: 'hr.manager@example.com',
+      password: hrManagerPassword,
+      role: 'manager',
+      departmentId: hrDept.id,
+    }).returning();
 
-    // Check if regular user already exists
-    const existingUser = await db.select().from(users).where(eq(users.email, 'user@example.com')).limit(1);
+    const itManagerPassword = await bcrypt.hash('manager123', 10);
+    [itManager] = await db.insert(users).values({
+      name: 'IT Manager',
+      email: 'it.manager@example.com',
+      password: itManagerPassword,
+      role: 'manager',
+      departmentId: itDept.id,
+    }).returning();
+
+    const financeManagerPassword = await bcrypt.hash('manager123', 10);
+    [financeManager] = await db.insert(users).values({
+      name: 'Finance Manager',
+      email: 'finance.manager@example.com',
+      password: financeManagerPassword,
+      role: 'manager',
+      departmentId: financeDept.id,
+    }).returning();
+
+    const marketingManagerPassword = await bcrypt.hash('manager123', 10);
+    [marketingManager] = await db.insert(users).values({
+      name: 'Marketing Manager',
+      email: 'marketing.manager@example.com',
+      password: marketingManagerPassword,
+      role: 'manager',
+      departmentId: marketingDept.id,
+    }).returning();
+
+    console.log('Department managers created');
+
+    // Create regular users for each department
+    const userPassword = await bcrypt.hash('user123', 10);
     
-    if (existingUser.length === 0) {
-      // Create regular user
-      const userPassword = await bcrypt.hash('user123', 10);
-      [regularUser] = await db.insert(users).values({
-        name: 'Regular User',
-        email: 'user@example.com',
-        password: userPassword,
-        role: 'user',
-      }).returning();
-      console.log('Regular user created');
-    } else {
-      regularUser = existingUser[0];
-      console.log('Regular user already exists');
-    }
+    const [hrUser1] = await db.insert(users).values({
+      name: 'HR Specialist',
+      email: 'hr.specialist@example.com',
+      password: userPassword,
+      role: 'user',
+      departmentId: hrDept.id,
+    }).returning();
+
+    const [hrUser2] = await db.insert(users).values({
+      name: 'HR Assistant',
+      email: 'hr.assistant@example.com',
+      password: userPassword,
+      role: 'user',
+      departmentId: hrDept.id,
+    }).returning();
+
+    const [itUser1] = await db.insert(users).values({
+      name: 'IT Specialist',
+      email: 'it.specialist@example.com',
+      password: userPassword,
+      role: 'user',
+      departmentId: itDept.id,
+    }).returning();
+
+    const [itUser2] = await db.insert(users).values({
+      name: 'IT Support',
+      email: 'it.support@example.com',
+      password: userPassword,
+      role: 'user',
+      departmentId: itDept.id,
+    }).returning();
+
+    const [financeUser1] = await db.insert(users).values({
+      name: 'Finance Analyst',
+      email: 'finance.analyst@example.com',
+      password: userPassword,
+      role: 'user',
+      departmentId: financeDept.id,
+    }).returning();
+
+    const [financeUser2] = await db.insert(users).values({
+      name: 'Accountant',
+      email: 'accountant@example.com',
+      password: userPassword,
+      role: 'user',
+      departmentId: financeDept.id,
+    }).returning();
+
+    const [marketingUser1] = await db.insert(users).values({
+      name: 'Marketing Specialist',
+      email: 'marketing.specialist@example.com',
+      password: userPassword,
+      role: 'user',
+      departmentId: marketingDept.id,
+    }).returning();
+
+    const [marketingUser2] = await db.insert(users).values({
+      name: 'Content Creator',
+      email: 'content.creator@example.com',
+      password: userPassword,
+      role: 'user',
+      departmentId: marketingDept.id,
+    }).returning();
+
+    console.log('Regular users created');
 
     // Create items with categories and sizes
-    // Explicitly type the itemsData array to fix the TypeScript error
     const itemsData: Array<{
       name: string;
       description: string;
