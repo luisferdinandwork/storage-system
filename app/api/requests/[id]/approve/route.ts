@@ -7,7 +7,7 @@ import { eq, and } from 'drizzle-orm';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> } // Changed to Promise
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -16,7 +16,7 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id: requestId } = await params;
+    const { id: requestId } = await params; // Await params
     
     // Get the request with user and department information
     const requestData = await db.select({
@@ -53,8 +53,6 @@ export async function POST(
     const isRequestFromManager = borrowRequest.user?.role === 'manager';
     
     // For managers approving requests:
-    // - If the request is from a regular user, they can approve (same department check)
-    // - If the request is from another manager, they cannot approve
     if (session.user.role === 'manager') {
       // Managers cannot approve requests from other managers
       if (isRequestFromManager) {
@@ -91,13 +89,9 @@ export async function POST(
       };
       
       // For admin approval:
-      // - If request is from manager: fully approve (only admin approval needed)
-      // - If request is from user: check if manager already approved
       if (isRequestFromManager) {
         shouldFullyApprove = true;
       } else {
-        // For regular users, check if manager already approved
-        // Fix: Handle the nullable boolean properly
         shouldFullyApprove = borrowRequest.managerApproved === true;
       }
     } else if (session.user.role === 'manager') {
@@ -107,7 +101,6 @@ export async function POST(
         managerApprovedAt: new Date(),
       };
       
-      // Manager approval for regular users - don't fully approve yet, need admin approval
       shouldFullyApprove = false;
     }
 
@@ -118,12 +111,10 @@ export async function POST(
 
     // Check if request should be fully approved
     if (shouldFullyApprove) {
-      // Fully approved, update status and decrease available quantity
       await db.update(borrowRequests)
         .set({ status: 'approved' })
         .where(eq(borrowRequests.id, requestId));
       
-      // Get the current item to check available quantity
       const currentItem = await db.select().from(items).where(eq(items.id, borrowRequest.itemId)).limit(1);
       
       if (currentItem.length && currentItem[0].available > 0) {
