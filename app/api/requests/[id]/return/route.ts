@@ -1,10 +1,8 @@
-// app/api/requests/[id]/return/route.ts
-
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { borrowRequests, items } from '@/lib/db/schema';
+import { borrowRequests, itemSizes } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
 export async function POST(
@@ -19,73 +17,54 @@ export async function POST(
     }
 
     const { id } = await params;
-
-    // Get the request
-    const [existingRequest] = await db
-      .select()
+    
+    // Check if request exists
+    const requestData = await db.select()
       .from(borrowRequests)
       .where(eq(borrowRequests.id, id))
       .limit(1);
-
-    if (!existingRequest) {
+    
+    if (!requestData.length) {
       return NextResponse.json({ error: 'Request not found' }, { status: 404 });
     }
-
-    // Check if the user owns this request
-    if (existingRequest.userId !== session.user.id) {
-      return NextResponse.json(
-        { error: 'You can only return your own borrowed items' },
-        { status: 403 }
-      );
+    
+    const request = requestData[0];
+    
+    if (request.status !== 'approved') {
+      return NextResponse.json({ error: 'Request is not in approved status' }, { status: 400 });
     }
-
-    // Check if request is approved
-    if (existingRequest.status !== 'approved') {
-      return NextResponse.json(
-        { error: 'Only approved requests can be returned' },
-        { status: 400 }
-      );
+    
+    if (request.userId !== session.user.id && session.user.role !== 'admin') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    // Check if already returned
-    if (existingRequest.returnedAt) {
-      return NextResponse.json(
-        { error: 'Item has already been returned' },
-        { status: 400 }
-      );
-    }
-
-    // Update the request to mark as returned
-    const [updatedRequest] = await db
-      .update(borrowRequests)
+    
+    // Update request status to returned
+    await db.update(borrowRequests)
       .set({
+        status: 'returned',
         returnedAt: new Date(),
       })
-      .where(eq(borrowRequests.id, id))
-      .returning();
-
-    // Increase the available count for the item
-    const [item] = await db
-      .select()
-      .from(items)
-      .where(eq(items.id, existingRequest.itemId))
+      .where(eq(borrowRequests.id, id));
+    
+    // Return the items to available stock
+    const itemSizeData = await db.select()
+      .from(itemSizes)
+      .where(eq(itemSizes.id, request.itemSizeId))
       .limit(1);
-
-    if (item) {
-      await db
-        .update(items)
-        .set({ 
-          available: item.available + 1 
+    
+    if (itemSizeData.length > 0) {
+      const itemSize = itemSizeData[0];
+      
+      await db.update(itemSizes)
+        .set({
+          available: itemSize.available + request.quantity,
         })
-        .where(eq(items.id, existingRequest.itemId));
+        .where(eq(itemSizes.id, itemSize.id));
     }
-
-    return NextResponse.json(updatedRequest);
+    
+    return NextResponse.json({ message: 'Item returned successfully' });
   } catch (error) {
     console.error('Error returning item:', error);
-    return NextResponse.json(
-      { error: 'Failed to return item' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to return item' }, { status: 500 });
   }
 }

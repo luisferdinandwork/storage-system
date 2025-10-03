@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { X, Calendar, Info, Package, Search } from 'lucide-react';
+import { X, Calendar, Info, Package } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMessages } from '@/hooks/use-messages';
 
@@ -14,38 +14,48 @@ interface Item {
   name: string;
   category: string;
   sizes: {
-    id: string;
     size: string;
     available: number;
   }[];
 }
 
-interface AddRequestModalProps {
+interface BorrowRequest {
+  id: string;
+  item: Item;
+  itemSize: {
+    id: string;
+    size: string;
+    quantity: number;
+    available: number;
+  };
+  quantity: number;
+  startDate: string;
+  endDate: string;
+  reason: string;
+}
+
+interface EditRequestModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  request: BorrowRequest | null;
 }
 
-export function AddRequestModal({ isOpen, onClose, onSuccess }: AddRequestModalProps) {
+export function EditRequestModal({ isOpen, onClose, onSuccess, request }: EditRequestModalProps) {
   const { data: session } = useSession();
   const { addMessage } = useMessages();
   const [items, setItems] = useState<Item[]>([]);
-  const [filteredItems, setFilteredItems] = useState<Item[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     itemId: '',
-    itemSizeId: '',
+    size: '',
     quantity: 1,
     startDate: '',
     endDate: '',
     reason: '',
   });
-  const [availableSizes, setAvailableSizes] = useState<{ id: string; size: string; available: number }[]>([]);
-
-  const isManager = session?.user?.role === 'manager';
-  const isUser = session?.user?.role === 'user';
+  const [availableSizes, setAvailableSizes] = useState<{ size: string; available: number }[]>([]);
 
   useEffect(() => {
     if (isOpen) {
@@ -54,17 +64,23 @@ export function AddRequestModal({ isOpen, onClose, onSuccess }: AddRequestModalP
   }, [isOpen]);
 
   useEffect(() => {
-    // Filter items based on search term
-    if (searchTerm.trim() === '') {
-      setFilteredItems(items);
-    } else {
-      const filtered = items.filter(item => 
-        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.category.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setFilteredItems(filtered);
+    if (isOpen && request) {
+      setFormData({
+        itemId: request.item.id,
+        size: request.itemSize.size,
+        quantity: request.quantity,
+        startDate: request.startDate,
+        endDate: request.endDate,
+        reason: request.reason,
+      });
+      
+      // Load available sizes for the current item
+      const selectedItem = items.find(item => item.id === request.item.id);
+      if (selectedItem) {
+        setAvailableSizes(selectedItem.sizes);
+      }
     }
-  }, [searchTerm, items]);
+  }, [isOpen, request, items]);
 
   const fetchItems = async () => {
     setIsLoading(true);
@@ -76,7 +92,6 @@ export function AddRequestModal({ isOpen, onClose, onSuccess }: AddRequestModalP
           item.sizes.some(size => size.available > 0)
         );
         setItems(availableItems);
-        setFilteredItems(availableItems);
       } else {
         addMessage('error', 'Failed to fetch items', 'Error');
       }
@@ -89,7 +104,7 @@ export function AddRequestModal({ isOpen, onClose, onSuccess }: AddRequestModalP
   };
 
   const handleItemChange = (itemId: string) => {
-    setFormData({ ...formData, itemId, itemSizeId: '', quantity: 1 });
+    setFormData({ ...formData, itemId, size: '', quantity: 1 });
     
     const selectedItem = items.find(item => item.id === itemId);
     if (selectedItem) {
@@ -99,70 +114,52 @@ export function AddRequestModal({ isOpen, onClose, onSuccess }: AddRequestModalP
     }
   };
 
-  const handleSizeChange = (sizeId: string) => {
-    const selectedSize = availableSizes.find(s => s.id === sizeId);
+  const handleSizeChange = (size: string) => {
+    setFormData({ ...formData, size, quantity: 1 });
     
-    setFormData({ 
-      ...formData, 
-      itemSizeId: sizeId,
-      quantity: 1 
-    });
-    
+    const selectedSize = availableSizes.find(s => s.size === size);
     if (selectedSize) {
       // Set max quantity to the available amount for this size
-      setFormData(prev => ({ 
-        ...prev, 
-        itemSizeId: sizeId,
-        quantity: Math.min(prev.quantity, selectedSize.available) 
-      }));
+      setFormData(prev => ({ ...prev, quantity: Math.min(prev.quantity, selectedSize.available) }));
     }
   };
 
   const handleQuantityChange = (quantity: number) => {
-    const selectedSize = availableSizes.find(s => s.id === formData.itemSizeId);
+    const selectedSize = availableSizes.find(s => s.size === formData.size);
     if (selectedSize) {
       // Ensure quantity doesn't exceed available amount
       const maxQuantity = selectedSize.available;
       setFormData({ ...formData, quantity: Math.min(quantity, maxQuantity) });
-    } else {
-      setFormData({ ...formData, quantity });
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!request) return;
+    
     setIsSubmitting(true);
 
     try {
-      const response = await fetch('/api/requests', {
-        method: 'POST',
+      const response = await fetch(`/api/requests/${request.id}`, {
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          itemId: formData.itemId,
-          itemSizeId: formData.itemSizeId,
-          quantity: formData.quantity,
-          startDate: formData.startDate,
-          endDate: formData.endDate,
-          reason: formData.reason,
-        }),
+        body: JSON.stringify(formData),
       });
 
       if (response.ok) {
         onSuccess();
         onClose();
-        setFormData({ itemId: '', itemSizeId: '', quantity: 1, startDate: '', endDate: '', reason: '' });
-        setSearchTerm('');
-        setAvailableSizes([]);
-        addMessage('success', 'Request submitted successfully', 'Success');
+        addMessage('success', 'Request updated successfully', 'Success');
       } else {
         const error = await response.json();
-        addMessage('error', error.error || 'Failed to submit request', 'Error');
+        addMessage('error', error.error || 'Failed to update request', 'Error');
       }
     } catch (error) {
-      console.error('Failed to submit request:', error);
-      addMessage('error', 'Failed to submit request', 'Error');
+      console.error('Failed to update request:', error);
+      addMessage('error', 'Failed to update request', 'Error');
     } finally {
       setIsSubmitting(false);
     }
@@ -171,7 +168,7 @@ export function AddRequestModal({ isOpen, onClose, onSuccess }: AddRequestModalP
   const today = new Date().toISOString().split('T')[0];
   const maxDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-  if (!isOpen) return null;
+  if (!isOpen || !request) return null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -179,9 +176,9 @@ export function AddRequestModal({ isOpen, onClose, onSuccess }: AddRequestModalP
         <CardHeader>
           <div className="flex justify-between items-center">
             <div>
-              <CardTitle>New Borrow Request</CardTitle>
+              <CardTitle>Edit Borrow Request</CardTitle>
               <CardDescription>
-                Request to borrow an item for a maximum of 14 days
+                Update the details of this borrow request
               </CardDescription>
             </div>
             <Button
@@ -194,42 +191,7 @@ export function AddRequestModal({ isOpen, onClose, onSuccess }: AddRequestModalP
           </div>
         </CardHeader>
         <CardContent>
-          {/* Approval Process Information */}
-          <div className="mb-6 p-4 bg-blue-50 rounded-md">
-            <div className="flex items-start">
-              <Info className="h-5 w-5 text-blue-600 mt-0.5 mr-2" />
-              <div>
-                <p className="text-sm font-medium text-blue-800">Approval Process:</p>
-                <p className="text-sm text-blue-700 mt-1">
-                  {isManager ? (
-                    " Your request will require admin approval only."
-                  ) : (
-                    " Your request will require approval from both your manager and an admin."
-                  )}
-                </p>
-              </div>
-            </div>
-          </div>
-
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-1">
-                Search Items
-              </label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                <Input
-                  id="search"
-                  type="text"
-                  placeholder="Search by name or category..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                  disabled={isSubmitting}
-                />
-              </div>
-            </div>
-
             <div>
               <label htmlFor="item" className="block text-sm font-medium text-gray-700 mb-1">
                 Select Item *
@@ -243,15 +205,12 @@ export function AddRequestModal({ isOpen, onClose, onSuccess }: AddRequestModalP
                 disabled={isSubmitting || isLoading}
               >
                 <option value="">Select an item</option>
-                {filteredItems.map((item) => (
+                {items.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name} ({item.category})
                   </option>
                 ))}
               </select>
-              {filteredItems.length === 0 && !isLoading && searchTerm.trim() !== '' && (
-                <p className="text-sm text-gray-500 mt-1">No items found matching your search.</p>
-              )}
             </div>
             
             {formData.itemId && (
@@ -262,7 +221,7 @@ export function AddRequestModal({ isOpen, onClose, onSuccess }: AddRequestModalP
                   </label>
                   <select
                     id="size"
-                    value={formData.itemSizeId}
+                    value={formData.size}
                     onChange={(e) => handleSizeChange(e.target.value)}
                     className="w-full p-2 border border-gray-300 rounded-md"
                     required
@@ -270,7 +229,7 @@ export function AddRequestModal({ isOpen, onClose, onSuccess }: AddRequestModalP
                   >
                     <option value="">Select a size</option>
                     {availableSizes.map((size) => (
-                      <option key={size.id} value={size.id}>
+                      <option key={size.size} value={size.size}>
                         {size.size} ({size.available} available)
                       </option>
                     ))}
@@ -284,11 +243,10 @@ export function AddRequestModal({ isOpen, onClose, onSuccess }: AddRequestModalP
                     id="quantity"
                     type="number"
                     min="1"
-                    max={availableSizes.find(s => s.id === formData.itemSizeId)?.available || 1}
                     value={formData.quantity}
                     onChange={(e) => handleQuantityChange(parseInt(e.target.value) || 1)}
                     required
-                    disabled={isSubmitting || !formData.itemSizeId}
+                    disabled={isSubmitting}
                   />
                 </div>
               </div>
@@ -346,7 +304,7 @@ export function AddRequestModal({ isOpen, onClose, onSuccess }: AddRequestModalP
                 className="bg-primary-500 hover:bg-primary-600"
                 disabled={isSubmitting}
               >
-                {isSubmitting ? 'Submitting...' : 'Submit Request'}
+                {isSubmitting ? 'Updating...' : 'Update Request'}
               </Button>
               <Button 
                 type="button" 

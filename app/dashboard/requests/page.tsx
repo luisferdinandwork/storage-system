@@ -1,22 +1,54 @@
+// app/requests/page.tsx
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { FileText, Calendar, Clock, CheckCircle, XCircle, Plus, Package, Building, Filter, Shield } from 'lucide-react';
+import { FileText, Calendar, Clock, CheckCircle, XCircle, Plus, Package, Building, Filter, Shield, MoreHorizontal, Edit, Trash2, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDate, calculateDaysLeft } from '@/lib/utils';
 import { AddRequestModal } from '@/components/requests/add-request-modal';
+import { EditRequestModal } from '@/components/requests/edit-request-modal';
+import { MessageContainer } from '@/components/ui/message';
+import { useMessages } from '@/hooks/use-messages';
+import { 
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+
+interface Item {
+  id: string;
+  name: string;
+  category: string;
+}
+
+interface ItemSize {
+  id: string;
+  size: string;
+  quantity: number;
+  available: number;
+}
 
 interface BorrowRequest {
   id: string;
-  item: {
-    id: string;
-    name: string;
-    category: string;
-    size: string;
-  };
+  item: Item;
+  itemSize: ItemSize;
   user: {
     id: string;
     name: string;
@@ -27,10 +59,11 @@ interface BorrowRequest {
       name: string;
     };
   };
+  quantity: number;
   startDate: string;
   endDate: string;
   reason: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'active' | 'returned';
   managerApproved: boolean | null;
   adminApproved: boolean | null;
   managerApprovedBy?: {
@@ -49,13 +82,17 @@ interface BorrowRequest {
 
 export default function RequestsPage() {
   const { data: session } = useSession();
+  const { messages, addMessage, dismissMessage } = useMessages();
   const [requests, setRequests] = useState<BorrowRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showRequestModal, setShowRequestModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingRequest, setEditingRequest] = useState<BorrowRequest | null>(null);
   const [approvingRequestId, setApprovingRequestId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [rejectionRequestId, setRejectionRequestId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState('');
 
   const isAdmin = session?.user?.role === 'admin';
   const isManager = session?.user?.role === 'manager';
@@ -74,9 +111,12 @@ export default function RequestsPage() {
       if (response.ok) {
         const data = await response.json();
         setRequests(data);
+      } else {
+        addMessage('error', 'Failed to fetch requests', 'Error');
       }
     } catch (error) {
       console.error('Failed to fetch requests:', error);
+      addMessage('error', 'Failed to fetch requests', 'Error');
     } finally {
       setIsLoading(false);
     }
@@ -90,22 +130,22 @@ export default function RequestsPage() {
 
       if (response.ok) {
         const result = await response.json();
-        alert(result.message);
+        addMessage('success', result.message, 'Success');
         setApprovingRequestId(null);
         fetchRequests();
       } else {
         const error = await response.json();
-        alert(error.error || 'Failed to approve request');
+        addMessage('error', error.error || 'Failed to approve request', 'Error');
       }
     } catch (error) {
       console.error('Failed to approve request:', error);
-      alert('Failed to approve request');
+      addMessage('error', 'Failed to approve request', 'Error');
     }
   };
 
   const handleRejectRequest = async (requestId: string) => {
     if (!rejectionReason.trim()) {
-      alert('Please provide a reason for rejection');
+      addMessage('warning', 'Please provide a reason for rejection', 'Validation Error');
       return;
     }
     
@@ -122,13 +162,14 @@ export default function RequestsPage() {
         setRejectionRequestId(null);
         setRejectionReason('');
         fetchRequests();
+        addMessage('success', 'Request rejected successfully', 'Success');
       } else {
         const error = await response.json();
-        alert(error.error || 'Failed to reject request');
+        addMessage('error', error.error || 'Failed to reject request', 'Error');
       }
     } catch (error) {
       console.error('Failed to reject request:', error);
-      alert('Failed to reject request');
+      addMessage('error', 'Failed to reject request', 'Error');
     }
   };
 
@@ -140,15 +181,46 @@ export default function RequestsPage() {
 
       if (!response.ok) {
         const error = await response.json();
-        alert(error.error || 'Failed to return item');
+        addMessage('error', error.error || 'Failed to return item', 'Error');
         return;
       }
 
       fetchRequests();
+      addMessage('success', 'Item returned successfully', 'Success');
     } catch (error) {
       console.error('Failed to return item:', error);
-      alert('Failed to return item');
+      addMessage('error', 'Failed to return item', 'Error');
     }
+  };
+
+  const handleDeleteRequest = async (requestId: string) => {
+    try {
+      const response = await fetch(`/api/requests/${requestId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        fetchRequests();
+        addMessage('success', 'Request deleted successfully', 'Success');
+      } else {
+        const error = await response.json();
+        addMessage('error', error.error || 'Failed to delete request', 'Error');
+      }
+    } catch (error) {
+      console.error('Failed to delete request:', error);
+      addMessage('error', 'Failed to delete request', 'Error');
+    }
+  };
+
+  const handleEditRequest = (request: BorrowRequest) => {
+    setEditingRequest(request);
+    setShowEditModal(true);
+  };
+
+  const handleEditSuccess = () => {
+    setShowEditModal(false);
+    fetchRequests();
+    addMessage('success', 'Request updated successfully', 'Success');
   };
 
   const getStatusIcon = (status: string) => {
@@ -156,52 +228,59 @@ export default function RequestsPage() {
       case 'pending':
         return <Clock className="h-4 w-4 text-amber-500" />;
       case 'approved':
+      case 'active':
         return <CheckCircle className="h-4 w-4 text-green-500" />;
       case 'rejected':
         return <XCircle className="h-4 w-4 text-red-500" />;
+      case 'returned':
+        return <CheckCircle className="h-4 w-4 text-blue-500" />;
       default:
         return null;
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending':
-        return 'bg-amber-100 text-amber-800';
+        return <Badge variant="secondary" className="bg-amber-100 text-amber-800">Pending</Badge>;
       case 'approved':
-        return 'bg-green-100 text-green-800';
+        return <Badge variant="secondary" className="bg-green-100 text-green-800">Approved</Badge>;
+      case 'active':
+        return <Badge variant="secondary" className="bg-blue-100 text-blue-800">Active</Badge>;
       case 'rejected':
-        return 'bg-red-100 text-red-800';
+        return <Badge variant="destructive">Rejected</Badge>;
+      case 'returned':
+        return <Badge variant="outline" className="bg-gray-100 text-gray-800">Returned</Badge>;
       default:
-        return '';
+        return <Badge variant="outline">{status}</Badge>;
     }
   };
 
-  const getCategoryColor = (category: string) => {
+  const getCategoryBadge = (category: string) => {
     switch (category) {
       case 'shoes':
-        return 'bg-blue-100 text-blue-800';
+        return <Badge variant="outline" className="bg-blue-100 text-blue-800">Shoes</Badge>;
       case 'apparel':
-        return 'bg-green-100 text-green-800';
+        return <Badge variant="outline" className="bg-green-100 text-green-800">Apparel</Badge>;
       case 'accessories':
-        return 'bg-purple-100 text-purple-800';
+        return <Badge variant="outline" className="bg-purple-100 text-purple-800">Accessories</Badge>;
       case 'equipment':
-        return 'bg-amber-100 text-amber-800';
+        return <Badge variant="outline" className="bg-amber-100 text-amber-800">Equipment</Badge>;
       default:
-        return 'bg-gray-100 text-gray-800';
+        return <Badge variant="outline">{category}</Badge>;
     }
   };
 
-  const getRoleColor = (role: string) => {
+  const getRoleBadge = (role: string) => {
     switch (role) {
       case 'admin':
-        return 'bg-red-100 text-red-800';
+        return <Badge variant="destructive" className="bg-red-100 text-red-800">Admin</Badge>;
       case 'manager':
-        return 'bg-blue-100 text-blue-800';
+        return <Badge variant="outline" className="bg-blue-100 text-blue-800">Manager</Badge>;
       case 'user':
-        return 'bg-gray-100 text-gray-800';
+        return <Badge variant="outline" className="bg-gray-100 text-gray-800">User</Badge>;
       default:
-        return '';
+        return <Badge variant="outline">{role}</Badge>;
     }
   };
 
@@ -223,15 +302,23 @@ export default function RequestsPage() {
     return false;
   };
 
-  // Filter requests based on status
+  // Filter requests based on status and search term
   const filteredRequests = requests.filter(request => {
-    if (statusFilter === 'all') return true;
-    return request.status === statusFilter;
+    const matchesStatus = statusFilter === 'all' || request.status === statusFilter;
+    const matchesSearch = searchTerm === '' || 
+      request.item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      request.user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      request.itemSize.size.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    return matchesStatus && matchesSearch;
   });
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
+    <div className="space-y-4">
+      {/* Message Container */}
+      <MessageContainer messages={messages} onDismiss={dismissMessage} />
+      
+      <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Borrow Requests</h1>
           {isManager && (
@@ -240,7 +327,6 @@ export default function RequestsPage() {
             </p>
           )}
         </div>
-        {/* FIXED: Updated condition to include managers */}
         {(isUser || isManager) && (
           <Button 
             onClick={() => setShowRequestModal(true)} 
@@ -252,8 +338,17 @@ export default function RequestsPage() {
         )}
       </div>
 
-      {/* Status Filter */}
-      <div className="mb-6 flex items-center space-x-4">
+      {/* Status Filter and Search */}
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+          <Input
+            placeholder="Search requests..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
         <div className="relative">
           <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
           <select
@@ -264,10 +359,12 @@ export default function RequestsPage() {
             <option value="all">All Status</option>
             <option value="pending">Pending</option>
             <option value="approved">Approved</option>
+            <option value="active">Active</option>
+            <option value="returned">Returned</option>
             <option value="rejected">Rejected</option>
           </select>
         </div>
-        <div className="text-sm text-gray-500">
+        <div className="text-sm text-gray-500 flex items-center">
           {filteredRequests.length} {filteredRequests.length === 1 ? 'request' : 'requests'} found
         </div>
       </div>
@@ -277,211 +374,199 @@ export default function RequestsPage() {
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
         </div>
       ) : (
-        <div className="space-y-4">
-          {filteredRequests.map((request) => (
-            <Card key={request.id}>
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <CardTitle className="flex items-center">
-                      <Package className="mr-2 h-5 w-5 text-primary-500" />
-                      {request.item.name}
-                    </CardTitle>
-                    <div className="flex items-center space-x-2">
-                      <p className="text-sm text-gray-600">Requested by {request.user.name} ({request.user.email})</p>
-                      <span className={cn(
-                        "px-2 py-1 rounded-full text-xs font-medium flex items-center",
-                        getRoleColor(request.user.role)
-                      )}>
-                        <Shield className="h-3 w-3 mr-1" />
-                        {request.user.role}
-                      </span>
-                    </div>
-                    {request.user.department && (
-                      <div className="flex items-center mt-1">
-                        <Building className="h-3 w-3 mr-1 text-gray-400" />
-                        <p className="text-sm text-gray-600">{request.user.department.name}</p>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    {getStatusIcon(request.status)}
-                    <span className={cn(
-                      "px-2 py-1 rounded-full text-xs font-medium",
-                      getStatusColor(request.status)
-                    )}>
-                      {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
-                    </span>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex gap-2 mb-4">
-                  <span className={cn(
-                    "px-2 py-1 rounded-full text-xs font-medium",
-                    getCategoryColor(request.item.category)
-                  )}>
-                    {request.item.category.charAt(0).toUpperCase() + request.item.category.slice(1)}
-                  </span>
-                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                    Size: {request.item.size}
-                  </span>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  <div className="flex items-center">
-                    <Calendar className="mr-2 h-4 w-4 text-gray-500" />
-                    <div>
-                      <p className="text-sm text-gray-500">Borrow Period</p>
-                      <p className="font-medium">
-                        {formatDate(new Date(request.startDate))} - {formatDate(new Date(request.endDate))}
-                      </p>
-                    </div>
-                  </div>
-                  {request.status === 'approved' && !request.returnedAt && (
-                    <div className="flex items-center">
-                      <Clock className="mr-2 h-4 w-4 text-gray-500" />
-                      <div>
-                        <p className="text-sm text-gray-500">Days Left</p>
-                        <p className="font-medium">{calculateDaysLeft(new Date(request.endDate))} days</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                
-                <div className="mb-4">
-                  <p className="text-sm text-gray-500 mb-1">Reason</p>
-                  <p>{request.reason}</p>
-                </div>
-
-                {request.status === 'rejected' && request.rejectionReason && (
-                  <div className="mb-4 p-3 bg-red-50 rounded-md">
-                    <p className="text-sm text-red-800">
-                      <strong>Rejection Reason:</strong> {request.rejectionReason}
-                    </p>
-                  </div>
-                )}
-
-                {request.status === 'pending' && (
-                  <div className="flex items-center space-x-4 text-sm text-gray-500">
-                    <div>
-                      {request.user.role === 'manager' ? (
-                        <span>
-                          Admin Approval: {isApproved(request.adminApproved) ? 
-                            <span className="text-green-600">Approved by {request.adminApprovedBy?.name}</span> : 
-                            <span className="text-amber-600">Pending</span>
-                          }
-                        </span>
-                      ) : (
-                        <>
+        <div className="border rounded-md">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Item</TableHead>
+                <TableHead>User</TableHead>
+                <TableHead>Period</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Reason</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredRequests.map((request) => (
+                <TableRow key={request.id}>
+                  <TableCell>
+                    <Card className="border-0 shadow-none p-0">
+                      <CardContent className="p-0">
+                        <div className="flex items-center space-x-2">
+                          <Package className="h-5 w-5 text-gray-500" />
                           <div>
-                            Manager Approval: {isApproved(request.managerApproved) ? 
-                              <span className="text-green-600">Approved by {request.managerApprovedBy?.name}</span> : 
-                              <span className="text-amber-600">Pending</span>
-                            }
+                            <div className="font-medium">{request.item.name}</div>
+                            <div className="flex items-center space-x-2 mt-1">
+                              {getCategoryBadge(request.item.category)}
+                              <Badge variant="outline" className="bg-gray-100 text-gray-800">
+                                Size: {request.itemSize.size}
+                              </Badge>
+                              {request.quantity > 1 && (
+                                <Badge variant="outline" className="bg-blue-100 text-blue-800">
+                                  Qty: {request.quantity}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TableCell>
+                  <TableCell>
+                    <Card className="border-0 shadow-none p-0">
+                      <CardContent className="p-0">
+                        <div className="flex items-center space-x-2">
+                          <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
+                            <span className="text-xs font-medium">
+                              {request.user.name.split(' ').map(n => n[0]).join('')}
+                            </span>
                           </div>
                           <div>
-                            Admin Approval: {isApproved(request.adminApproved) ? 
-                              <span className="text-green-600">Approved by {request.adminApprovedBy?.name}</span> : 
-                              <span className="text-amber-600">Pending</span>
-                            }
+                            <div className="font-medium">{request.user.name}</div>
+                            <div className="text-sm text-gray-500">{request.user.email}</div>
+                            <div className="flex items-center space-x-2 mt-1">
+                              {getRoleBadge(request.user.role)}
+                              {request.user.department && (
+                                <div className="flex items-center text-sm text-gray-500">
+                                  <Building className="h-3 w-3 mr-1" />
+                                  {request.user.department.name}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TableCell>
+                  <TableCell>
+                    <Card className="border-0 shadow-none p-0">
+                      <CardContent className="p-0">
+                        <div className="flex items-center space-x-2">
+                          <Calendar className="h-4 w-4 text-gray-500" />
+                          <div>
+                            <div className="text-sm">
+                              {formatDate(new Date(request.startDate))} - {formatDate(new Date(request.endDate))}
+                            </div>
+                            {request.status === 'approved' && !request.returnedAt && (
+                              <div className="text-sm text-gray-500">
+                                {calculateDaysLeft(new Date(request.endDate))} days left
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col space-y-2">
+                      <div className="flex items-center space-x-2">
+                        {getStatusIcon(request.status)}
+                        {getStatusBadge(request.status)}
+                      </div>
+                      {request.status === 'pending' && (
+                        <div className="text-xs text-gray-500">
+                          {request.user.role === 'manager' ? (
+                            <span>
+                              Admin: {isApproved(request.adminApproved) ? 
+                                <span className="text-green-600">Approved</span> : 
+                                <span className="text-amber-600">Pending</span>
+                              }
+                            </span>
+                          ) : (
+                            <div>
+                              <div>
+                                Manager: {isApproved(request.managerApproved) ? 
+                                  <span className="text-green-600">Approved</span> : 
+                                  <span className="text-amber-600">Pending</span>
+                                }
+                              </div>
+                              <div>
+                                Admin: {isApproved(request.adminApproved) ? 
+                                  <span className="text-green-600">Approved</span> : 
+                                  <span className="text-amber-600">Pending</span>
+                                }
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
-                  </div>
-                )}
-
-                <div className="flex justify-end space-x-2 mt-4">
-                  {request.status === 'pending' && canApprove(request) && (
-                    <Button
-                      onClick={() => setApprovingRequestId(request.id)}
-                      className="bg-green-500 hover:bg-green-600"
-                    >
-                      Approve
-                    </Button>
-                  )}
-                  
-                  {request.status === 'pending' && (isAdmin || isManager) && (
-                    <Button
-                      variant="outline"
-                      onClick={() => setRejectionRequestId(request.id)}
-                      className="text-red-500 border-red-500 hover:bg-red-50"
-                    >
-                      Reject
-                    </Button>
-                  )}
-                  
-                  {request.status === 'approved' && !request.returnedAt && 
-                   (isUser && request.user.id === session?.user?.id) && (
-                    <Button
-                      onClick={() => handleReturnItem(request.id)}
-                      className="bg-primary-500 hover:bg-primary-600"
-                    >
-                      Return Item
-                    </Button>
-                  )}
-                </div>
-
-                {approvingRequestId === request.id && (
-                  <div className="mt-4 p-3 bg-green-50 rounded-md">
-                    <p className="text-sm text-green-800 mb-2">
-                      Are you sure you want to approve this request?
-                    </p>
-                    <div className="flex space-x-2">
-                      <Button
-                        size="sm"
-                        onClick={() => handleApproveRequest(request.id)}
-                        className="bg-green-500 hover:bg-green-600"
-                      >
-                        Confirm
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setApprovingRequestId(null)}
-                      >
-                        Cancel
-                      </Button>
+                  </TableCell>
+                  <TableCell>
+                    <div className="max-w-xs truncate" title={request.reason}>
+                      {request.reason}
                     </div>
-                  </div>
-                )}
-
-                {rejectionRequestId === request.id && (
-                  <div className="mt-4 p-3 bg-red-50 rounded-md">
-                    <p className="text-sm text-red-800 mb-2">Reason for rejection:</p>
-                    <textarea
-                      className="w-full p-2 border border-gray-300 rounded mb-2"
-                      rows={2}
-                      value={rejectionReason}
-                      onChange={(e) => setRejectionReason(e.target.value)}
-                      placeholder="Enter reason for rejection..."
-                    />
-                    <div className="flex space-x-2">
-                      <Button
-                        size="sm"
-                        onClick={() => handleRejectRequest(request.id)}
-                        disabled={!rejectionReason.trim()}
-                        className="bg-red-500 hover:bg-red-600"
-                      >
-                        Confirm
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setRejectionRequestId(null);
-                          setRejectionReason('');
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                    {request.status === 'rejected' && request.rejectionReason && (
+                      <div className="text-xs text-red-600 mt-1">
+                        Rejected: {request.rejectionReason}
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-8 w-8 p-0">
+                          <span className="sr-only">Open menu</span>
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                        
+                        {request.status === 'pending' && canApprove(request) && (
+                          <DropdownMenuItem
+                            onClick={() => setApprovingRequestId(request.id)}
+                            className="text-green-600"
+                          >
+                            Approve
+                          </DropdownMenuItem>
+                        )}
+                        
+                        {request.status === 'pending' && (isAdmin || isManager) && (
+                          <DropdownMenuItem
+                            onClick={() => setRejectionRequestId(request.id)}
+                            className="text-red-600"
+                          >
+                            Reject
+                          </DropdownMenuItem>
+                        )}
+                        
+                        {request.status === 'approved' && !request.returnedAt && 
+                         (isUser && request.user.id === session?.user?.id) && (
+                          <DropdownMenuItem
+                            onClick={() => handleReturnItem(request.id)}
+                          >
+                            Return Item
+                          </DropdownMenuItem>
+                        )}
+                        
+                        {request.status === 'pending' && ( isUser ) && (
+                          <>
+                            <DropdownMenuItem
+                              onClick={() => handleEditRequest(request)}
+                            >
+                              <Edit className="mr-2 h-4 w-4" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleDeleteRequest(request.id)}
+                              className="text-red-600"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                        
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem>View Details</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       )}
 
@@ -497,11 +582,80 @@ export default function RequestsPage() {
         </div>
       )}
 
+      {/* Approval Confirmation Modal */}
+      {approvingRequestId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-medium mb-4">Approve Request</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Are you sure you want to approve this request?
+            </p>
+            <div className="flex justify-end space-x-2">
+              <Button
+                variant="outline"
+                onClick={() => setApprovingRequestId(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => handleApproveRequest(approvingRequestId)}
+                className="bg-green-500 hover:bg-green-600"
+              >
+                Approve
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rejection Modal */}
+      {rejectionRequestId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-medium mb-4">Reject Request</h3>
+            <p className="text-sm text-gray-600 mb-4">Reason for rejection:</p>
+            <textarea
+              className="w-full p-2 border border-gray-300 rounded mb-4"
+              rows={3}
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+              placeholder="Enter reason for rejection..."
+            />
+            <div className="flex justify-end space-x-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setRejectionRequestId(null);
+                  setRejectionReason('');
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => handleRejectRequest(rejectionRequestId)}
+                disabled={!rejectionReason.trim()}
+                className="bg-red-500 hover:bg-red-600"
+              >
+                Reject
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add Request Modal */}
       <AddRequestModal
         isOpen={showRequestModal}
         onClose={() => setShowRequestModal(false)}
         onSuccess={fetchRequests}
+      />
+
+      {/* Edit Request Modal */}
+      <EditRequestModal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        onSuccess={handleEditSuccess}
+        request={editingRequest}
       />
     </div>
   );
