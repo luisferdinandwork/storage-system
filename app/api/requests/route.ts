@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { borrowRequests, items, users, departments } from '@/lib/db/schema';
+import { borrowRequests, items, users, departments, itemSizes } from '@/lib/db/schema';
 import { eq, and, isNull } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
@@ -29,7 +29,12 @@ export async function GET() {
           id: items.id,
           name: items.name,
           category: items.category,
-          size: items.size,
+        },
+        itemSize: {
+          id: itemSizes.id,
+          size: itemSizes.size,
+          quantity: itemSizes.quantity,
+          available: itemSizes.available,
         },
         user: {
           id: requestUser.id,
@@ -38,6 +43,7 @@ export async function GET() {
           role: requestUser.role,
           departmentId: requestUser.departmentId,
         },
+        quantity: borrowRequests.quantity,
         startDate: borrowRequests.startDate,
         endDate: borrowRequests.endDate,
         reason: borrowRequests.reason,
@@ -59,6 +65,7 @@ export async function GET() {
       })
       .from(borrowRequests)
       .leftJoin(items, eq(borrowRequests.itemId, items.id))
+      .leftJoin(itemSizes, eq(borrowRequests.itemSizeId, itemSizes.id))
       .leftJoin(requestUser, eq(borrowRequests.userId, requestUser.id))
       .leftJoin(managerUser, eq(borrowRequests.managerApprovedBy, managerUser.id))
       .leftJoin(adminUser, eq(borrowRequests.adminApprovedBy, adminUser.id))
@@ -86,7 +93,12 @@ export async function GET() {
           id: items.id,
           name: items.name,
           category: items.category,
-          size: items.size,
+        },
+        itemSize: {
+          id: itemSizes.id,
+          size: itemSizes.size,
+          quantity: itemSizes.quantity,
+          available: itemSizes.available,
         },
         user: {
           id: requestUser.id,
@@ -95,6 +107,7 @@ export async function GET() {
           role: requestUser.role,
           departmentId: requestUser.departmentId,
         },
+        quantity: borrowRequests.quantity,
         startDate: borrowRequests.startDate,
         endDate: borrowRequests.endDate,
         reason: borrowRequests.reason,
@@ -116,6 +129,7 @@ export async function GET() {
       })
       .from(borrowRequests)
       .leftJoin(items, eq(borrowRequests.itemId, items.id))
+      .leftJoin(itemSizes, eq(borrowRequests.itemSizeId, itemSizes.id))
       .leftJoin(requestUser, eq(borrowRequests.userId, requestUser.id))
       .leftJoin(managerUser, eq(borrowRequests.managerApprovedBy, managerUser.id))
       .leftJoin(adminUser, eq(borrowRequests.adminApprovedBy, adminUser.id))
@@ -128,7 +142,12 @@ export async function GET() {
           id: items.id,
           name: items.name,
           category: items.category,
-          size: items.size,
+        },
+        itemSize: {
+          id: itemSizes.id,
+          size: itemSizes.size,
+          quantity: itemSizes.quantity,
+          available: itemSizes.available,
         },
         user: {
           id: requestUser.id,
@@ -137,6 +156,7 @@ export async function GET() {
           role: requestUser.role,
           departmentId: requestUser.departmentId,
         },
+        quantity: borrowRequests.quantity,
         startDate: borrowRequests.startDate,
         endDate: borrowRequests.endDate,
         reason: borrowRequests.reason,
@@ -158,6 +178,7 @@ export async function GET() {
       })
       .from(borrowRequests)
       .leftJoin(items, eq(borrowRequests.itemId, items.id))
+      .leftJoin(itemSizes, eq(borrowRequests.itemSizeId, itemSizes.id))
       .leftJoin(requestUser, eq(borrowRequests.userId, requestUser.id))
       .leftJoin(managerUser, eq(borrowRequests.managerApprovedBy, managerUser.id))
       .leftJoin(adminUser, eq(borrowRequests.adminApprovedBy, adminUser.id));
@@ -208,57 +229,48 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { itemId, startDate, endDate, reason } = await request.json();
+    const { itemId, itemSizeId, quantity, startDate, endDate, reason } = await request.json();
     
-    if (!itemId || !startDate || !endDate || !reason) {
+    if (!itemId || !itemSizeId || !quantity || !startDate || !endDate || !reason) {
       return NextResponse.json({ error: 'All fields are required' }, { status: 400 });
     }
 
-    // Check if the item is available
+    // Check if the item exists
     const item = await db.select().from(items).where(eq(items.id, itemId)).limit(1);
     
     if (!item.length) {
       return NextResponse.json({ error: 'Item not found' }, { status: 404 });
     }
 
-    if (item[0].available <= 0) {
-      return NextResponse.json({ error: 'Item is not available' }, { status: 400 });
+    // Check if the item size exists and has enough available quantity
+    const itemSize = await db.select().from(itemSizes).where(eq(itemSizes.id, itemSizeId)).limit(1);
+    
+    if (!itemSize.length) {
+      return NextResponse.json({ error: 'Item size not found' }, { status: 404 });
     }
 
-    // Validate dates
+    if (itemSize[0].available < quantity) {
+      return NextResponse.json({ error: 'Not enough items available' }, { status: 400 });
+    }
+
+    // Check if the requested period is within 14 days
     const start = new Date(startDate);
     const end = new Date(endDate);
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // Reset time to start of day for comparison
+    const maxEndDate = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000);
     
-    // Check if start date is not in the past
-    const startDateOnly = new Date(start);
-    startDateOnly.setHours(0, 0, 0, 0);
-    
-    if (startDateOnly < today) {
-      return NextResponse.json({ error: 'Start date cannot be in the past' }, { status: 400 });
-    }
-
-    // Check if end date is after start date
-    if (end < start) {
-      return NextResponse.json({ error: 'End date must be after start date' }, { status: 400 });
-    }
-
-    // Check if the borrowing period is within 14 days from the start date
-    const daysDifference = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-    
-    if (daysDifference > 14) {
-      return NextResponse.json({ 
-        error: 'Invalid date range. Maximum borrowing period is 14 days from start date.' 
-      }, { status: 400 });
+    if (start < today || end > maxEndDate) {
+      return NextResponse.json({ error: 'Invalid date range. Maximum borrowing period is 14 days.' }, { status: 400 });
     }
 
     // Create the borrow request
     const newRequest = await db.insert(borrowRequests).values({
       itemId,
+      itemSizeId,
       userId: session.user.id,
-      startDate: start,
-      endDate: end,
+      quantity,
+      startDate: new Date(startDate),
+      endDate: new Date(endDate),
       reason,
     }).returning();
 

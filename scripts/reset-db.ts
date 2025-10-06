@@ -11,6 +11,7 @@ async function resetDatabase() {
     
     // Drop all tables
     await sql`DROP TABLE IF EXISTS item_removals CASCADE`;
+    await sql`DROP TABLE IF EXISTS item_sizes CASCADE`;
     await sql`DROP TABLE IF EXISTS borrow_requests CASCADE`;
     await sql`DROP TABLE IF EXISTS items CASCADE`;
     await sql`DROP TABLE IF EXISTS users CASCADE`;

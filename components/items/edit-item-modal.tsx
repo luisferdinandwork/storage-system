@@ -8,23 +8,36 @@ import { Plus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMessages } from '@/hooks/use-messages';
 
-interface AddItemModalProps {
+interface ItemSize {
+  id?: string;
+  size: string;
+  quantity: number;
+  available?: number;
+}
+
+interface Item {
+  id: string;
+  name: string;
+  description: string | null;
+  category: 'shoes' | 'apparel' | 'accessories' | 'equipment';
+  sizes: ItemSize[];
+}
+
+interface EditItemModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  item: Item | null;
 }
 
 interface ItemForm {
   name: string;
   description: string;
   category: 'shoes' | 'apparel' | 'accessories' | 'equipment';
-  sizes: Array<{
-    size: string;
-    quantity: number;
-  }>;
+  sizes: ItemSize[];
 }
 
-export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) {
+export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { addMessage } = useMessages();
   const [formData, setFormData] = useState<ItemForm>({
@@ -34,17 +47,22 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
     sizes: [{ size: '', quantity: 1 }]
   });
 
-  // Reset form when modal opens/closes
+  // Load item data when modal opens
   useEffect(() => {
-    if (!isOpen) {
+    if (isOpen && item) {
       setFormData({
-        name: '',
-        description: '',
-        category: 'shoes',
-        sizes: [{ size: '', quantity: 1 }]
+        name: item.name,
+        description: item.description || '',
+        category: item.category,
+        sizes: item.sizes.map(s => ({
+          id: s.id,
+          size: s.size,
+          quantity: s.quantity,
+          available: s.available
+        }))
       });
     }
-  }, [isOpen]);
+  }, [isOpen, item]);
 
   const getSizeOptions = (category: string) => {
     switch (category) {
@@ -64,6 +82,8 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!item) return;
+    
     // Validate form
     if (!formData.name.trim()) {
       addMessage('warning', 'Please enter an item name', 'Validation Error');
@@ -78,8 +98,8 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
     setIsSubmitting(true);
 
     try {
-      const response = await fetch('/api/items', {
-        method: 'POST',
+      const response = await fetch(`/api/items/${item.id}`, {
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -89,14 +109,14 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
       if (response.ok) {
         onSuccess();
         onClose();
-        addMessage('success', 'Item added successfully', 'Success');
+        addMessage('success', 'Item updated successfully', 'Success');
       } else {
         const error = await response.json();
-        addMessage('error', error.error || 'Failed to add item', 'Error');
+        addMessage('error', error.error || 'Failed to update item', 'Error');
       }
     } catch (error) {
-      console.error('Failed to add item:', error);
-      addMessage('error', 'Failed to add item', 'Error');
+      console.error('Failed to update item:', error);
+      addMessage('error', 'Failed to update item', 'Error');
     } finally {
       setIsSubmitting(false);
     }
@@ -147,12 +167,14 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
     }
   };
 
+  if (!isOpen || !item) return null;
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Add New Item"
-      description="Fill in the details to add a new item to the inventory"
+      title="Edit Item"
+      description="Update the item details"
       size="lg"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -258,6 +280,12 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
               </div>
             ))}
           </div>
+          
+          {formData.sizes.some(s => s.available !== undefined && s.available < s.quantity) && (
+            <p className="text-xs text-amber-600 mt-2">
+              Note: Some sizes have items currently borrowed. Reducing quantity will only affect available stock.
+            </p>
+          )}
         </div>
 
         <div className="flex justify-end space-x-3 pt-4">
@@ -274,7 +302,7 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
             className="bg-primary-500 hover:bg-primary-600"
             disabled={isSubmitting}
           >
-            {isSubmitting ? 'Adding...' : 'Add Item'}
+            {isSubmitting ? 'Updating...' : 'Update Item'}
           </Button>
         </div>
       </form>

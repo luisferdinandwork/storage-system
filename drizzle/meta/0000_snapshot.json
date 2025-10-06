@@ -1,5 +1,5 @@
 {
-  "id": "26ceea92-3612-40a3-98a4-8c01193b0027",
+  "id": "69477df5-48ae-473f-a227-d0c7c1a0803d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -21,11 +21,24 @@
           "primaryKey": false,
           "notNull": true
         },
+        "item_size_id": {
+          "name": "item_size_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
         "user_id": {
           "name": "user_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
         },
         "requested_at": {
           "name": "requested_at",
@@ -118,6 +131,19 @@
           "tableTo": "items",
           "columnsFrom": [
             "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "borrow_requests_item_size_id_item_sizes_id_fk": {
+          "name": "borrow_requests_item_size_id_item_sizes_id_fk",
+          "tableFrom": "borrow_requests",
+          "tableTo": "item_sizes",
+          "columnsFrom": [
+            "item_size_id"
           ],
           "columnsTo": [
             "id"
@@ -228,8 +254,8 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "item_id": {
-          "name": "item_id",
+        "item_size_id": {
+          "name": "item_size_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -237,6 +263,12 @@
         "removed_by": {
           "name": "removed_by",
           "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quantity_removed": {
+          "name": "quantity_removed",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true
         },
@@ -256,12 +288,12 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "item_removals_item_id_items_id_fk": {
-          "name": "item_removals_item_id_items_id_fk",
+        "item_removals_item_size_id_item_sizes_id_fk": {
+          "name": "item_removals_item_size_id_item_sizes_id_fk",
           "tableFrom": "item_removals",
-          "tableTo": "items",
+          "tableTo": "item_sizes",
           "columnsFrom": [
-            "item_id"
+            "item_size_id"
           ],
           "columnsTo": [
             "id"
@@ -280,6 +312,80 @@
             "id"
           ],
           "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.item_sizes": {
+      "name": "item_sizes",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "size": {
+          "name": "size",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "available": {
+          "name": "available",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "item_sizes_item_id_items_id_fk": {
+          "name": "item_sizes_item_id_items_id_fk",
+          "tableFrom": "item_sizes",
+          "tableTo": "items",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
@@ -317,26 +423,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
-        },
-        "size": {
-          "name": "size",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "quantity": {
-          "name": "quantity",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
-        },
-        "available": {
-          "name": "available",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
         },
         "added_by": {
           "name": "added_by",
