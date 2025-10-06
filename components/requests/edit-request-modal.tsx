@@ -1,3 +1,5 @@
+// components/requests/edit-request-modal.tsx
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -8,31 +10,7 @@ import { Input } from '@/components/ui/input';
 import { X, Calendar, Info, Package } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMessages } from '@/hooks/use-messages';
-
-interface Item {
-  id: string;
-  name: string;
-  category: string;
-  sizes: {
-    size: string;
-    available: number;
-  }[];
-}
-
-interface BorrowRequest {
-  id: string;
-  item: Item;
-  itemSize: {
-    id: string;
-    size: string;
-    quantity: number;
-    available: number;
-  };
-  quantity: number;
-  startDate: string;
-  endDate: string;
-  reason: string;
-}
+import { BorrowRequest, Item } from '@/types/general-types';
 
 interface EditRequestModalProps {
   isOpen: boolean;

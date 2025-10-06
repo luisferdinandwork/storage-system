@@ -1,5 +1,3 @@
-// app/requests/page.tsx
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -31,54 +29,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-
-interface Item {
-  id: string;
-  name: string;
-  category: string;
-}
-
-interface ItemSize {
-  id: string;
-  size: string;
-  quantity: number;
-  available: number;
-}
-
-interface BorrowRequest {
-  id: string;
-  item: Item;
-  itemSize: ItemSize;
-  user: {
-    id: string;
-    name: string;
-    email: string;
-    role: 'admin' | 'manager' | 'user';
-    department?: {
-      id: string;
-      name: string;
-    };
-  };
-  quantity: number;
-  startDate: string;
-  endDate: string;
-  reason: string;
-  status: 'pending' | 'approved' | 'rejected' | 'active' | 'returned';
-  managerApproved: boolean | null;
-  adminApproved: boolean | null;
-  managerApprovedBy?: {
-    id: string;
-    name: string;
-  };
-  adminApprovedBy?: {
-    id: string;
-    name: string;
-  };
-  managerApprovedAt?: string;
-  adminApprovedAt?: string;
-  rejectionReason?: string;
-  returnedAt?: string;
-}
+import { BorrowRequest, Item } from '@/types/general-types';
 
 export default function RequestsPage() {
   const { data: session } = useSession();
