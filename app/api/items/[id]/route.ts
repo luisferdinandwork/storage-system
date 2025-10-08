@@ -203,34 +203,6 @@ export async function DELETE(
       .from(itemImagesTable)
       .where(eq(itemImagesTable.itemId, itemId));
 
-    // Move images to deleted directory
-    for (const image of imagesToDelete) {
-      try {
-        const sourcePath = join(process.cwd(), 'public', 'uploads', image.fileName);
-        const deletedDir = join(process.cwd(), 'public', 'deleted');
-        
-        // Ensure deleted directory exists
-        await mkdir(deletedDir, { recursive: true });
-        
-        const destPath = join(deletedDir, image.fileName);
-        
-        // Check if source file exists before trying to move it
-        try {
-          await writeFile(sourcePath, Buffer.from(''), { flag: 'r' });
-          console.log(`Source file exists: ${sourcePath}`);
-          
-          // Move the file
-          await rename(sourcePath, destPath);
-          console.log(`Moved deleted image: ${image.fileName}`);
-        } catch (checkError) {
-          console.log(`Source file does not exist: ${sourcePath}`);
-          console.log(`Error checking file:`, checkError);
-        }
-      } catch (error) {
-        console.error(`Failed to move deleted image: ${image.fileName}`, error);
-      }
-    }
-
     // Delete the item images from database
     await db.delete(itemImagesTable).where(eq(itemImagesTable.itemId, itemId));
 

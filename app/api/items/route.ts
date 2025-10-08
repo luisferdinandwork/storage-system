@@ -3,9 +3,9 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { items, users, itemImages } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 
-// GET /api/items - List all items with their images
+// GET /api/items - List items with their images
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -15,10 +15,10 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status');
+    const status = searchParams.get('status') || 'active'; // Default to 'active'
 
     // Build the base query
-    let query = db
+    const baseQuery = db
       .select({
         id: items.id,
         productCode: items.productCode,
@@ -51,10 +51,10 @@ export async function GET(request: NextRequest) {
       .from(items)
       .leftJoin(users, eq(items.createdBy, users.id));
 
-    // Execute the query with or without status filter
-    const itemsData = status && (status === 'active' || status === 'archived')
-      ? await query.where(eq(items.status, status))
-      : await query;
+    // Apply status filter if specified and valid
+    const itemsData = status === 'active' || status === 'archived'
+      ? await baseQuery.where(eq(items.status, status))
+      : await baseQuery;
 
     // Fetch all images for all items
     const allImages = await db
