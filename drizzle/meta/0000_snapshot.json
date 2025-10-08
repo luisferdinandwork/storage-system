@@ -1,5 +1,5 @@
 {
-  "id": "69477df5-48ae-473f-a227-d0c7c1a0803d",
+  "id": "a42aa1d7-8ae7-4e33-8d41-33a0ef39cce6",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -17,12 +17,6 @@
         },
         "item_id": {
           "name": "item_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "item_size_id": {
-          "name": "item_size_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -135,20 +129,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "borrow_requests_item_size_id_item_sizes_id_fk": {
-          "name": "borrow_requests_item_size_id_item_sizes_id_fk",
-          "tableFrom": "borrow_requests",
-          "tableTo": "item_sizes",
-          "columnsFrom": [
-            "item_size_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
+          "onDelete": "cascade",
           "onUpdate": "no action"
         },
         "borrow_requests_user_id_users_id_fk": {
@@ -243,86 +224,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.item_removals": {
-      "name": "item_removals",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "item_size_id": {
-          "name": "item_size_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "removed_by": {
-          "name": "removed_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "quantity_removed": {
-          "name": "quantity_removed",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "removed_at": {
-          "name": "removed_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "item_removals_item_size_id_item_sizes_id_fk": {
-          "name": "item_removals_item_size_id_item_sizes_id_fk",
-          "tableFrom": "item_removals",
-          "tableTo": "item_sizes",
-          "columnsFrom": [
-            "item_size_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "item_removals_removed_by_users_id_fk": {
-          "name": "item_removals_removed_by_users_id_fk",
-          "tableFrom": "item_removals",
-          "tableTo": "users",
-          "columnsFrom": [
-            "removed_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.item_sizes": {
-      "name": "item_sizes",
+    "public.item_archives": {
+      "name": "item_archives",
       "schema": "",
       "columns": {
         "id": {
@@ -338,35 +241,147 @@
           "primaryKey": false,
           "notNull": true
         },
-        "size": {
-          "name": "size",
-          "type": "text",
+        "archived_by": {
+          "name": "archived_by",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "quantity": {
-          "name": "quantity",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "available": {
-          "name": "available",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "created_at": {
-          "name": "created_at",
+        "archived_at": {
+          "name": "archived_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
-        "updated_at": {
-          "name": "updated_at",
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "archived_inventory": {
+          "name": "archived_inventory",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "archived_condition": {
+          "name": "archived_condition",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "archived_condition_notes": {
+          "name": "archived_condition_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "archived_images": {
+          "name": "archived_images",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "item_archives_item_id_items_id_fk": {
+          "name": "item_archives_item_id_items_id_fk",
+          "tableFrom": "item_archives",
+          "tableTo": "items",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "item_archives_archived_by_users_id_fk": {
+          "name": "item_archives_archived_by_users_id_fk",
+          "tableFrom": "item_archives",
+          "tableTo": "users",
+          "columnsFrom": [
+            "archived_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.item_images": {
+      "name": "item_images",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "file_name": {
+          "name": "file_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "original_name": {
+          "name": "original_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mime_type": {
+          "name": "mime_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "size": {
+          "name": "size",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "alt_text": {
+          "name": "alt_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_primary": {
+          "name": "is_primary",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
@@ -375,9 +390,9 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "item_sizes_item_id_items_id_fk": {
-          "name": "item_sizes_item_id_items_id_fk",
-          "tableFrom": "item_sizes",
+        "item_images_item_id_items_id_fk": {
+          "name": "item_images_item_id_items_id_fk",
+          "tableFrom": "item_images",
           "tableTo": "items",
           "columnsFrom": [
             "item_id"
@@ -406,8 +421,8 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "name": {
-          "name": "name",
+        "product_code": {
+          "name": "product_code",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -416,16 +431,117 @@
           "name": "description",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
-        "category": {
-          "name": "category",
+        "brand_code": {
+          "name": "brand_code",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "added_by": {
-          "name": "added_by",
+        "product_group": {
+          "name": "product_group",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "product_division": {
+          "name": "product_division",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "product_category": {
+          "name": "product_category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "inventory": {
+          "name": "inventory",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "vendor": {
+          "name": "vendor",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "period": {
+          "name": "period",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "season": {
+          "name": "season",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "gender": {
+          "name": "gender",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mould": {
+          "name": "mould",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tier": {
+          "name": "tier",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "silo": {
+          "name": "silo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "location": {
+          "name": "location",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'Storage 1'"
+        },
+        "unit_of_measure": {
+          "name": "unit_of_measure",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'PCS'"
+        },
+        "condition": {
+          "name": "condition",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'good'"
+        },
+        "condition_notes": {
+          "name": "condition_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "created_by": {
+          "name": "created_by",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -447,12 +563,12 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "items_added_by_users_id_fk": {
-          "name": "items_added_by_users_id_fk",
+        "items_created_by_users_id_fk": {
+          "name": "items_created_by_users_id_fk",
           "tableFrom": "items",
           "tableTo": "users",
           "columnsFrom": [
-            "added_by"
+            "created_by"
           ],
           "columnsTo": [
             "id"
@@ -462,7 +578,15 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "items_product_code_unique": {
+          "name": "items_product_code_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "product_code"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

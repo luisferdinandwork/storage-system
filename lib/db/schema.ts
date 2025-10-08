@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, uuid, integer } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, boolean, uuid, integer, jsonb } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 // Departments table
@@ -22,33 +22,64 @@ export const users = pgTable('users', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// Items table (master item definition)
+// Items table
 export const items = pgTable('items', {
   id: uuid('id').defaultRandom().primaryKey(),
-  name: text('name').notNull(),
-  description: text('description'),
-  category: text('category', { enum: ['shoes', 'apparel', 'accessories', 'equipment'] }).notNull(),
-  addedBy: uuid('added_by').references(() => users.id).notNull(),
+  productCode: text('product_code').notNull().unique(),
+  description: text('description').notNull(),
+  brandCode: text('brand_code').notNull(),
+  productGroup: text('product_group').notNull(),
+  productDivision: text('product_division').notNull(),
+  productCategory: text('product_category').notNull(),
+  inventory: integer('inventory').notNull().default(0),
+  vendor: text('vendor').notNull(),
+  period: text('period').notNull(),
+  season: text('season').notNull(),
+  gender: text('gender').notNull(),
+  mould: text('mould').notNull(),
+  tier: text('tier').notNull(),
+  silo: text('silo').notNull(),
+  location: text('location', { enum: ['Storage 1', 'Storage 2', 'Storage 3'] }).notNull().default('Storage 1'),
+  unitOfMeasure: text('unit_of_measure', { enum: ['PCS', 'PRS'] }).notNull().default('PCS'),
+  condition: text('condition', { enum: ['excellent', 'good', 'fair', 'poor'] }).notNull().default('good'),
+  conditionNotes: text('condition_notes'),
+  status: text('status', { enum: ['active', 'archived'] }).notNull().default('active'),
+  createdBy: uuid('created_by').references(() => users.id).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// Item sizes table (each size has its own inventory)
-export const itemSizes = pgTable('item_sizes', {
+// Item images table
+export const itemImages = pgTable('item_images', {
   id: uuid('id').defaultRandom().primaryKey(),
   itemId: uuid('item_id').references(() => items.id, { onDelete: 'cascade' }).notNull(),
-  size: text('size').notNull(), // e.g., "S", "M", "L", "XL", "40", "41", "42"
-  quantity: integer('quantity').notNull().default(0), // Total quantity for this size
-  available: integer('available').notNull().default(0), // Available quantity for this size
+  fileName: text('file_name').notNull(),
+  originalName: text('original_name').notNull(),
+  mimeType: text('mime_type').notNull(),
+  size: integer('size').notNull(),
+  altText: text('alt_text'),
+  isPrimary: boolean('is_primary').default(false).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Item archives table
+export const itemArchives = pgTable('item_archives', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  itemId: uuid('item_id').references(() => items.id).notNull(),
+  archivedBy: uuid('archived_by').references(() => users.id).notNull(),
+  archivedAt: timestamp('archived_at').defaultNow().notNull(),
+  reason: text('reason').notNull(),
+  archivedInventory: integer('archived_inventory').notNull(),
+  archivedCondition: text('archived_condition').notNull(),
+  archivedConditionNotes: text('archived_condition_notes'),
+  archivedImages: jsonb('archived_images').notNull(), // Store image data as JSON
+  metadata: jsonb('metadata').notNull(), // Store all item data at time of archiving
 });
 
 // Borrow requests table
 export const borrowRequests = pgTable('borrow_requests', {
   id: uuid('id').defaultRandom().primaryKey(),
-  itemId: uuid('item_id').references(() => items.id).notNull(),
-  itemSizeId: uuid('item_size_id').references(() => itemSizes.id).notNull(),
+  itemId: uuid('item_id').references(() => items.id, { onDelete: 'cascade' }).notNull(),
   userId: uuid('user_id').references(() => users.id).notNull(),
   quantity: integer('quantity').notNull().default(1),
   requestedAt: timestamp('requested_at').defaultNow().notNull(),
@@ -66,16 +97,6 @@ export const borrowRequests = pgTable('borrow_requests', {
   returnedAt: timestamp('returned_at'),
 });
 
-// Item removal history table
-export const itemRemovals = pgTable('item_removals', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  itemSizeId: uuid('item_size_id').references(() => itemSizes.id).notNull(),
-  removedBy: uuid('removed_by').references(() => users.id).notNull(),
-  quantityRemoved: integer('quantity_removed').notNull(),
-  reason: text('reason').notNull(),
-  removedAt: timestamp('removed_at').defaultNow().notNull(),
-});
-
 // Relations
 export const departmentsRelations = relations(departments, ({ many }) => ({
   users: many(users),
@@ -86,39 +107,45 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     fields: [users.departmentId],
     references: [departments.id],
   }),
-  itemsAdded: many(items),
+  itemsCreated: many(items),
   borrowRequests: many(borrowRequests),
   managerApprovals: many(borrowRequests, { relationName: 'managerApproval' }),
   adminApprovals: many(borrowRequests, { relationName: 'adminApproval' }),
-  itemRemovals: many(itemRemovals),
+  itemArchives: many(itemArchives),
 }));
 
 export const itemsRelations = relations(items, ({ one, many }) => ({
-  addedBy: one(users, {
-    fields: [items.addedBy],
+  createdBy: one(users, {
+    fields: [items.createdBy],
     references: [users.id],
   }),
-  sizes: many(itemSizes),
+  images: many(itemImages),
   borrowRequests: many(borrowRequests),
+  archives: many(itemArchives),
 }));
 
-export const itemSizesRelations = relations(itemSizes, ({ one, many }) => ({
+export const itemImagesRelations = relations(itemImages, ({ one }) => ({
   item: one(items, {
-    fields: [itemSizes.itemId],
+    fields: [itemImages.itemId],
     references: [items.id],
   }),
-  borrowRequests: many(borrowRequests),
-  removals: many(itemRemovals),
+}));
+
+export const itemArchivesRelations = relations(itemArchives, ({ one }) => ({
+  item: one(items, {
+    fields: [itemArchives.itemId],
+    references: [items.id],
+  }),
+  archivedBy: one(users, {
+    fields: [itemArchives.archivedBy],
+    references: [users.id],
+  }),
 }));
 
 export const borrowRequestsRelations = relations(borrowRequests, ({ one }) => ({
   item: one(items, {
     fields: [borrowRequests.itemId],
     references: [items.id],
-  }),
-  itemSize: one(itemSizes, {
-    fields: [borrowRequests.itemSizeId],
-    references: [itemSizes.id],
   }),
   user: one(users, {
     fields: [borrowRequests.userId],
@@ -136,21 +163,10 @@ export const borrowRequestsRelations = relations(borrowRequests, ({ one }) => ({
   }),
 }));
 
-export const itemRemovalsRelations = relations(itemRemovals, ({ one }) => ({
-  itemSize: one(itemSizes, {
-    fields: [itemRemovals.itemSizeId],
-    references: [itemSizes.id],
-  }),
-  removedBy: one(users, {
-    fields: [itemRemovals.removedBy],
-    references: [users.id],
-  }),
-}));
-
 // Type exports for use in your application
 export type Department = typeof departments.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type Item = typeof items.$inferSelect;
-export type ItemSize = typeof itemSizes.$inferSelect;
+export type ItemImage = typeof itemImages.$inferSelect;
+export type ItemArchive = typeof itemArchives.$inferSelect;
 export type BorrowRequest = typeof borrowRequests.$inferSelect;
-export type ItemRemoval = typeof itemRemovals.$inferSelect;

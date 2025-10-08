@@ -2,60 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { items, itemSizes, users, borrowRequests, itemRemovals } from '@/lib/db/schema';
-import { eq, and, inArray } from 'drizzle-orm';
+import { items, itemImages as itemImagesTable, users } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
+import { writeFile, mkdir, rename } from 'fs/promises';
+import { join } from 'path';
 
-// GET handler to fetch a single item
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params;
-    
-    // Get the item with its sizes
-    const itemData = await db.select({
-      id: items.id,
-      name: items.name,
-      description: items.description,
-      category: items.category,
-      addedBy: items.addedBy,
-      createdAt: items.createdAt,
-      updatedAt: items.updatedAt,
-      addedByUser: {
-        id: users.id,
-        name: users.name,
-      },
-    })
-    .from(items)
-    .leftJoin(users, eq(items.addedBy, users.id))
-    .where(eq(items.id, id))
-    .limit(1);
-    
-    if (!itemData.length) {
-      return NextResponse.json({ error: 'Item not found' }, { status: 404 });
-    }
-
-    // Get the sizes for this item
-    const itemSizesData = await db.select().from(itemSizes).where(eq(itemSizes.itemId, id));
-
-    // Return the complete item with sizes
-    return NextResponse.json({
-      ...itemData[0],
-      sizes: itemSizesData.map(size => ({
-        id: size.id,
-        size: size.size,
-        quantity: size.quantity,
-        available: size.available,
-      })),
-    });
-  } catch (error) {
-    console.error('Error fetching item:', error);
-    return NextResponse.json({ error: 'Failed to fetch item' }, { status: 500 });
-  }
-}
-
-// PUT handler to update an item
+// PUT /api/items/[id] - Update a specific item
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -63,125 +15,152 @@ export async function PUT(
   try {
     const session = await getServerSession(authOptions);
     
-    if (!session || session.user.role !== 'admin') {
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = await params;
-    const { name, description, category, sizes } = await request.json();
-    
-    if (!name || !category || !sizes || !Array.isArray(sizes) || sizes.length === 0) {
-      return NextResponse.json({ error: 'Name, category, and at least one size are required' }, { status: 400 });
+    // Only admins can update items
+    if (session.user.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // Validate each size entry
-    for (const sizeEntry of sizes) {
-      if (!sizeEntry.size || !sizeEntry.quantity || parseInt(sizeEntry.quantity) <= 0) {
-        return NextResponse.json({ error: 'Each size must have a size name and a positive quantity' }, { status: 400 });
-      }
-    }
+    const { id: itemId } = await params;
+    const body = await request.json();
+    const { 
+      productCode, 
+      description, 
+      brandCode, 
+      productGroup, 
+      productDivision, 
+      productCategory, 
+      inventory, 
+      vendor, 
+      period, 
+      season, 
+      gender, 
+      mould, 
+      tier, 
+      silo,
+      location,
+      unitOfMeasure,
+      condition,
+      conditionNotes,
+      status, // Added status field
+      images 
+    } = body;
 
-    // Check if item exists
-    const existingItem = await db.select().from(items).where(eq(items.id, id)).limit(1);
-    if (!existingItem.length) {
-      return NextResponse.json({ error: 'Item not found' }, { status: 404 });
-    }
-
-    // Update the item
-    await db.update(items)
-      .set({
-        name,
-        description: description || null,
-        category,
-        updatedAt: new Date(),
-      })
-      .where(eq(items.id, id));
-
-    // Get existing sizes
-    const existingSizes = await db.select().from(itemSizes).where(eq(itemSizes.itemId, id));
-    
-    // Get IDs of sizes to keep
-    const newSizeIds = sizes.filter((s: any) => s.id).map((s: any) => s.id);
-    
-    // Find sizes to delete (those that exist in DB but not in the new list)
-    const sizesToDelete = existingSizes.filter(size => !newSizeIds.includes(size.id));
-    
-    if (sizesToDelete.length > 0) {
-      const sizeIdsToDelete = sizesToDelete.map(s => s.id);
-      await db.delete(itemSizes).where(
-        and(
-          eq(itemSizes.itemId, id),
-          inArray(itemSizes.id, sizeIdsToDelete)
-        )
+    // Validate required fields
+    if (!productCode || !description || !brandCode || !productGroup || !productDivision || 
+        !productCategory || !vendor || !period || !season || !gender || !mould || !tier || !silo || 
+        !location || !unitOfMeasure || !condition) {
+      return NextResponse.json(
+        { error: 'Missing required fields' },
+        { status: 400 }
       );
     }
 
-    // Update or create sizes
-    for (const sizeEntry of sizes) {
-      if (sizeEntry.id) {
-        // Update existing size
-        const existingSize = existingSizes.find(s => s.id === sizeEntry.id);
-        if (existingSize) {
-          const newQuantity = parseInt(sizeEntry.quantity);
-          const quantityDiff = newQuantity - existingSize.quantity;
+    // Update the item
+    const [updatedItem] = await db
+      .update(items)
+      .set({
+        productCode,
+        description,
+        brandCode,
+        productGroup,
+        productDivision,
+        productCategory,
+        inventory: inventory || 0,
+        vendor,
+        period,
+        season,
+        gender,
+        mould,
+        tier,
+        silo,
+        location,
+        unitOfMeasure,
+        condition,
+        conditionNotes: conditionNotes || null,
+        status: status || 'active', // Added status field with default
+        updatedAt: new Date(),
+      })
+      .where(eq(items.id, itemId))
+      .returning();
+
+    if (!updatedItem) {
+      return NextResponse.json({ error: 'Item not found' }, { status: 404 });
+    }
+
+    // Get existing images before deletion
+    const existingImages = await db
+      .select()
+      .from(itemImagesTable)
+      .where(eq(itemImagesTable.itemId, itemId));
+
+    // Move existing images to deleted directory
+    for (const image of existingImages) {
+      try {
+        const sourcePath = join(process.cwd(), 'public', 'uploads', image.fileName);
+        const deletedDir = join(process.cwd(), 'public', 'deleted');
+        
+        // Ensure deleted directory exists
+        await mkdir(deletedDir, { recursive: true });
+        
+        const destPath = join(deletedDir, image.fileName);
+        
+        // Check if source file exists before trying to move it
+        try {
+          await writeFile(sourcePath, Buffer.from(''), { flag: 'r' });
+          console.log(`Source file exists: ${sourcePath}`);
           
-          await db.update(itemSizes)
-            .set({
-              size: sizeEntry.size,
-              quantity: newQuantity,
-              // Adjust available quantity based on the difference, but not below zero
-              available: Math.max(0, existingSize.available + quantityDiff),
-            })
-            .where(eq(itemSizes.id, sizeEntry.id));
+          // Move the file
+          await rename(sourcePath, destPath);
+          console.log(`Moved deleted image: ${image.fileName}`);
+        } catch (checkError) {
+          console.log(`Source file does not exist: ${sourcePath}`);
+          console.log(`Error checking file:`, checkError);
         }
-      } else {
-        // Create new size
-        await db.insert(itemSizes).values({
-          itemId: id,
-          size: sizeEntry.size,
-          quantity: parseInt(sizeEntry.quantity),
-          available: parseInt(sizeEntry.quantity),
-        });
+      } catch (error) {
+        console.error(`Failed to move deleted image: ${image.fileName}`, error);
       }
     }
 
-    // Get the updated item with sizes to return
-    const updatedItem = await db.select({
-      id: items.id,
-      name: items.name,
-      description: items.description,
-      category: items.category,
-      addedBy: items.addedBy,
-      createdAt: items.createdAt,
-      updatedAt: items.updatedAt,
-      addedByUser: {
-        id: users.id,
-        name: users.name,
-      },
-    })
-    .from(items)
-    .leftJoin(users, eq(items.addedBy, users.id))
-    .where(eq(items.id, id))
-    .limit(1);
+    // Delete existing images from database
+    await db.delete(itemImagesTable).where(eq(itemImagesTable.itemId, itemId));
 
-    const updatedSizes = await db.select().from(itemSizes).where(eq(itemSizes.itemId, id));
+    // Create new images if provided
+    let newImages: { id: string; createdAt: Date; itemId: string; fileName: string; originalName: string; mimeType: string; size: number; altText: string | null; isPrimary: boolean; }[] = [];
+    if (images && images.length > 0) {
+      const imagesToInsert = images.map((image: { fileName: string; originalName: string; mimeType: string; size: number; altText?: string; isPrimary?: boolean }, index: number) => ({
+        itemId: updatedItem.id,
+        fileName: image.fileName,
+        originalName: image.originalName,
+        mimeType: image.mimeType,
+        size: image.size,
+        altText: image.altText || `${description} - Image ${index + 1}`,
+        isPrimary: image.isPrimary || index === 0, // First image is primary by default
+      }));
+
+      newImages = await db
+        .insert(itemImagesTable)
+        .values(imagesToInsert)
+        .returning();
+    }
 
     return NextResponse.json({
-      ...updatedItem[0],
-      sizes: updatedSizes.map(size => ({
-        id: size.id,
-        size: size.size,
-        quantity: size.quantity,
-        available: size.available,
-      })),
+      ...updatedItem,
+      images: newImages,
     });
   } catch (error) {
-    console.error('Error updating item:', error);
-    return NextResponse.json({ error: 'Failed to update item' }, { status: 500 });
+    console.error('Failed to update item:', error);
+    return NextResponse.json(
+      { error: 'Failed to update item' },
+      { status: 500 }
+    );
   }
 }
 
-// DELETE handler 
+// DELETE /api/items/[id] - Delete a specific item
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -189,67 +168,84 @@ export async function DELETE(
   try {
     const session = await getServerSession(authOptions);
     
-    if (!session || session.user.role !== 'admin') {
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = await params;
-    const { reason } = await request.json();
-    
-    if (!reason || !reason.trim()) {
-      return NextResponse.json({ error: 'Reason is required for item removal' }, { status: 400 });
+    // Only admins can delete items
+    if (session.user.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // Check if item exists
-    const existingItem = await db.select().from(items).where(eq(items.id, id)).limit(1);
-    if (!existingItem.length) {
+    const { id: itemId } = await params;
+    const { reason } = await request.json();
+
+    if (!reason || !reason.trim()) {
+      return NextResponse.json(
+        { error: 'Reason is required for deletion' },
+        { status: 400 }
+      );
+    }
+
+    // Get the item to delete
+    const [itemToDelete] = await db
+      .select()
+      .from(items)
+      .where(eq(items.id, itemId));
+
+    if (!itemToDelete) {
       return NextResponse.json({ error: 'Item not found' }, { status: 404 });
     }
 
-    // Get all sizes for this item
-    const itemSizesData = await db.select().from(itemSizes).where(eq(itemSizes.itemId, id));
-    
-    if (itemSizesData.length === 0) {
-      return NextResponse.json({ error: 'No sizes found for this item' }, { status: 404 });
+    // Get item images before deletion
+    const imagesToDelete = await db
+      .select()
+      .from(itemImagesTable)
+      .where(eq(itemImagesTable.itemId, itemId));
+
+    // Move images to deleted directory
+    for (const image of imagesToDelete) {
+      try {
+        const sourcePath = join(process.cwd(), 'public', 'uploads', image.fileName);
+        const deletedDir = join(process.cwd(), 'public', 'deleted');
+        
+        // Ensure deleted directory exists
+        await mkdir(deletedDir, { recursive: true });
+        
+        const destPath = join(deletedDir, image.fileName);
+        
+        // Check if source file exists before trying to move it
+        try {
+          await writeFile(sourcePath, Buffer.from(''), { flag: 'r' });
+          console.log(`Source file exists: ${sourcePath}`);
+          
+          // Move the file
+          await rename(sourcePath, destPath);
+          console.log(`Moved deleted image: ${image.fileName}`);
+        } catch (checkError) {
+          console.log(`Source file does not exist: ${sourcePath}`);
+          console.log(`Error checking file:`, checkError);
+        }
+      } catch (error) {
+        console.error(`Failed to move deleted image: ${image.fileName}`, error);
+      }
     }
 
-    // Check if any sizes have active borrow requests
-    const sizeIds = itemSizesData.map(s => s.id);
-    const activeRequests = await db.select()
-      .from(borrowRequests)
-      .where(and(
-        inArray(borrowRequests.itemSizeId, sizeIds),
-        eq(borrowRequests.status, 'approved')
-      ))
-      .limit(1);
+    // Delete the item images from database
+    await db.delete(itemImagesTable).where(eq(itemImagesTable.itemId, itemId));
 
-    if (activeRequests.length > 0) {
-      return NextResponse.json({ error: 'Cannot delete item with active borrow requests' }, { status: 400 });
-    }
+    // Delete the item
+    await db.delete(items).where(eq(items.id, itemId));
 
-    // Record the removal for each size
-    for (const size of itemSizesData) {
-      await db.insert(itemRemovals).values({
-        itemSizeId: size.id,
-        removedBy: session.user.id,
-        quantityRemoved: size.quantity,
-        reason: reason.trim(),
-      });
-    }
-
-    // Delete in correct order: item_removals -> item_sizes -> items
-    // 1. Delete item_removals records first (we just created them)
-    await db.delete(itemRemovals).where(inArray(itemRemovals.itemSizeId, sizeIds));
-    
-    // 2. Delete item_sizes
-    await db.delete(itemSizes).where(eq(itemSizes.itemId, id));
-    
-    // 3. Delete the item
-    await db.delete(items).where(eq(items.id, id));
-
-    return NextResponse.json({ message: 'Item deleted successfully' });
+    return NextResponse.json({ 
+      message: 'Item deleted successfully',
+      deletedItem: itemToDelete
+    });
   } catch (error) {
-    console.error('Error deleting item:', error);
-    return NextResponse.json({ error: 'Failed to delete item' }, { status: 500 });
+    console.error('Failed to delete item:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete item' },
+      { status: 500 }
+    );
   }
 }

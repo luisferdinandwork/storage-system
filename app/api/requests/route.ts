@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { borrowRequests, items, users, departments, itemSizes } from '@/lib/db/schema';
+import { borrowRequests, items, users, departments } from '@/lib/db/schema';
 import { eq, and, isNull } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 

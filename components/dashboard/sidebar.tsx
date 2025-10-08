@@ -12,7 +12,8 @@ import {
   FileText, 
   Settings,
   Building,
-  LogOut
+  LogOut,
+  Archive
 } from 'lucide-react';
 import { signOut, useSession } from 'next-auth/react';
 
@@ -23,6 +24,7 @@ interface SidebarProps {
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home, roles: ['admin', 'manager', 'user'] },
   { name: 'Items', href: '/dashboard/items', icon: Package, roles: ['admin', 'manager', 'user'] },
+  { name: 'Archived', href: '/dashboard/archived-items', icon: Archive, roles: ['admin', 'manager', 'user'] },
   { name: 'Borrow Requests', href: '/dashboard/requests', icon: FileText, roles: ['admin', 'manager', 'user'] },
   { name: 'Departments', href: '/dashboard/departments', icon: Building, roles: ['admin'] },
   { name: 'Users', href: '/dashboard/users', icon: Users, roles: ['admin'] },

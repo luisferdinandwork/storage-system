@@ -1,10 +1,11 @@
+// app/dashboard/archived-items/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Package, Plus, Search, Trash2, Filter, MoreHorizontal, Edit, Hand, Image, MapPin, Eye, EyeOff, Columns, Archive, ArchiveIcon } from 'lucide-react';
+import { Package, Plus, Search, Trash2, Filter, MoreHorizontal, Edit, Hand, Image, MapPin, Eye, EyeOff, Columns, Archive, ArchiveIcon, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AddItemModal } from '@/components/items/add-item-modal';
 import { BorrowItemModal } from '@/components/items/borrow-item-modal';
@@ -99,7 +100,7 @@ const ALL_COLUMNS = [
   { id: 'actions', label: 'Actions', defaultVisible: true },
 ];
 
-export default function ItemsPage() {
+export default function ArchivedItemsPage() {
   const { data: session } = useSession();
   const { messages, addMessage, dismissMessage } = useMessages();
   const [items, setItems] = useState<Item[]>([]);
@@ -108,10 +109,7 @@ export default function ItemsPage() {
   const [locationFilter, setLocationFilter] = useState<string>('all');
   const [unitFilter, setUnitFilter] = useState<string>('all');
   const [conditionFilter, setConditionFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(true);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showBorrowModal, setShowBorrowModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [removingItemId, setRemovingItemId] = useState<string | null>(null);
   const [removalReason, setRemovalReason] = useState('');
@@ -124,13 +122,10 @@ export default function ItemsPage() {
     ALL_COLUMNS.filter(col => col.defaultVisible).map(col => col.id)
   );
   const [showFilterPanel, setShowFilterPanel] = useState(false);
-  const [showInlineAdd, setShowInlineAdd] = useState(false);
-  const [inlineAddRowIndex, setInlineAddRowIndex] = useState<number>(-1);
-  const [showArchiveModal, setShowArchiveModal] = useState(false);
-  const [archivingItemId, setArchivingItemId] = useState<string | null>(null);
-  const [archiveReason, setArchiveReason] = useState('');
-  const [isArchiving, setIsArchiving] = useState(false);
-  const [showBulkArchiveModal, setShowBulkArchiveModal] = useState(false);
+  const [showUnarchiveModal, setShowUnarchiveModal] = useState(false);
+  const [unarchivingItemId, setUnarchivingItemId] = useState<string | null>(null);
+  const [unarchiveReason, setUnarchiveReason] = useState('');
+  const [isUnarchiving, setIsUnarchiving] = useState(false);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
 
   useEffect(() => {
@@ -139,16 +134,16 @@ export default function ItemsPage() {
 
   const fetchItems = async () => {
     try {
-      const response = await fetch('/api/items');
+      const response = await fetch('/api/items?status=archived');
       if (response.ok) {
         const data = await response.json();
         setItems(data);
       } else {
-        addMessage('error', 'Failed to fetch items', 'Error');
+        addMessage('error', 'Failed to fetch archived items', 'Error');
       }
     } catch (error) {
-      console.error('Failed to fetch items:', error);
-      addMessage('error', 'Failed to fetch items', 'Error');
+      console.error('Failed to fetch archived items:', error);
+      addMessage('error', 'Failed to fetch archived items', 'Error');
     } finally {
       setIsLoading(false);
     }
@@ -184,29 +179,10 @@ export default function ItemsPage() {
     }
   };
 
-  const handleBorrowItem = (item: Item) => {
-    setSelectedItem(item);
-    setShowBorrowModal(true);
-  };
-
-  const handleAddItemSuccess = () => {
-    setShowAddModal(false);
-    setShowInlineAdd(false);
-    setInlineAddRowIndex(-1);
-    fetchItems();
-    addMessage('success', 'Item added successfully', 'Success');
-  };
-
   const handleEditItemSuccess = () => {
     setShowEditModal(false);
     fetchItems();
     addMessage('success', 'Item updated successfully', 'Success');
-  };
-
-  const handleBorrowSuccess = () => {
-    setShowBorrowModal(false);
-    fetchItems();
-    addMessage('success', 'Borrow request submitted successfully', 'Success');
   };
 
   const handleViewImage = (image: ItemImage) => {
@@ -224,103 +200,84 @@ export default function ItemsPage() {
     });
   };
 
-  const handleInlineAdd = (index: number) => {
-    setInlineAddRowIndex(index);
-    setShowInlineAdd(true);
+  const handleUnarchiveItem = (item: Item) => {
+    setUnarchivingItemId(item.id);
+    setShowUnarchiveModal(true);
   };
 
-  const handleArchiveItem = (item: Item) => {
-    setArchivingItemId(item.id);
-    setShowArchiveModal(true);
-  };
-
-  const handleBulkArchive = () => {
-    if (selectedItems.length === 0) {
-      addMessage('warning', 'Please select at least one item to archive', 'No Items Selected');
-      return;
-    }
-    setShowBulkArchiveModal(true);
-  };
-
-  const handleArchiveSuccess = () => {
-    setShowArchiveModal(false);
-    setArchivingItemId(null);
-    setArchiveReason('');
+  const handleUnarchiveSuccess = () => {
+    setShowUnarchiveModal(false);
+    setUnarchivingItemId(null);
+    setUnarchiveReason('');
     fetchItems();
-    addMessage('success', 'Item archived successfully', 'Success');
+    addMessage('success', 'Item unarchived successfully', 'Success');
   };
 
-  const handleBulkArchiveSuccess = () => {
-    setShowBulkArchiveModal(false);
-    setSelectedItems([]);
-    fetchItems();
-    addMessage('success', 'Items archived successfully', 'Success');
-  };
-
-  const handleArchive = async () => {
-    if (!archivingItemId || !archiveReason.trim()) {
-      addMessage('warning', 'Please provide a reason for archiving', 'Missing Information');
+  const handleUnarchive = async () => {
+    if (!unarchivingItemId || !unarchiveReason.trim()) {
+      addMessage('warning', 'Please provide a reason for unarchiving', 'Missing Information');
       return;
     }
     
-    setIsArchiving(true);
+    setIsUnarchiving(true);
     
     try {
-      const response = await fetch(`/api/items/${archivingItemId}/archive`, {
+      const response = await fetch(`/api/items/${unarchivingItemId}/unarchive`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ reason: archiveReason }),
+        body: JSON.stringify({ reason: unarchiveReason }),
       });
 
       if (response.ok) {
-        handleArchiveSuccess();
+        handleUnarchiveSuccess();
       } else {
         const error = await response.json();
-        addMessage('error', error.error || 'Failed to archive item', 'Error');
+        addMessage('error', error.error || 'Failed to unarchive item', 'Error');
       }
     } catch (error) {
-      console.error('Failed to archive item:', error);
-      addMessage('error', 'Failed to archive item', 'Error');
+      console.error('Failed to unarchive item:', error);
+      addMessage('error', 'Failed to unarchive item', 'Error');
     } finally {
-      setIsArchiving(false);
+      setIsUnarchiving(false);
     }
   };
 
-  const handleBulkArchiveItems = async () => {
-    if (selectedItems.length === 0 || !archiveReason.trim()) {
-      addMessage('warning', 'Please select items and provide a reason for archiving', 'Missing Information');
+  const handleBulkUnarchive = async () => {
+    if (selectedItems.length === 0) {
+      addMessage('warning', 'Please select at least one item to unarchive', 'No Items Selected');
       return;
     }
     
-    setIsArchiving(true);
+    setIsUnarchiving(true);
     
     try {
-      const response = await fetch('/api/items/bulk-archive', {
+      const response = await fetch('/api/items/bulk-unarchive', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ 
           itemIds: selectedItems,
-          reason: archiveReason 
+          reason: 'Bulk unarchive operation'
         }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        handleBulkArchiveSuccess();
-        addMessage('success', `${data.message}: ${data.archivedItems.length} items archived`, 'Success');
+        setSelectedItems([]);
+        fetchItems();
+        addMessage('success', `${data.message}: ${data.unarchivedItems.length} items unarchived`, 'Success');
       } else {
         const error = await response.json();
-        addMessage('error', error.error || 'Failed to archive items', 'Error');
+        addMessage('error', error.error || 'Failed to unarchive items', 'Error');
       }
     } catch (error) {
-      console.error('Failed to bulk archive items:', error);
-      addMessage('error', 'Failed to archive items', 'Error');
+      console.error('Failed to bulk unarchive items:', error);
+      addMessage('error', 'Failed to unarchive items', 'Error');
     } finally {
-      setIsArchiving(false);
+      setIsUnarchiving(false);
     }
   };
 
@@ -331,12 +288,10 @@ export default function ItemsPage() {
     const matchesLocation = locationFilter === 'all' || item.location === locationFilter;
     const matchesUnit = unitFilter === 'all' || item.unitOfMeasure === unitFilter;
     const matchesCondition = conditionFilter === 'all' || item.condition === conditionFilter;
-    const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
-    return matchesSearch && matchesCategory && matchesLocation && matchesUnit && matchesCondition && matchesStatus;
+    return matchesSearch && matchesCategory && matchesLocation && matchesUnit && matchesCondition;
   });
 
   const isAdmin = session?.user?.role === 'admin';
-  const isUser = session?.user?.role === 'user' || session?.user?.role === 'manager';
 
   const getCategoryBadge = (category: string) => {
     switch (category) {
@@ -409,10 +364,6 @@ export default function ItemsPage() {
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
-  };
-
-  const hasAvailableStock = (inventory: number) => {
-    return inventory > 0;
   };
 
   const handleEditItem = (item: Item) => {
@@ -549,16 +500,6 @@ export default function ItemsPage() {
                   </DropdownMenuItem>
                 )}
                 
-                {isUser && hasAvailableStock(item.inventory) && (
-                  <DropdownMenuItem
-                    onClick={() => handleBorrowItem(item)}
-                    className="text-blue-600"
-                  >
-                    <Hand className="mr-2 h-4 w-4" />
-                    Borrow
-                  </DropdownMenuItem>
-                )}
-                
                 {isAdmin && (
                   <>
                     <DropdownMenuItem
@@ -568,11 +509,11 @@ export default function ItemsPage() {
                       Edit
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      onClick={() => handleArchiveItem(item)}
-                      className="text-orange-600"
+                      onClick={() => handleUnarchiveItem(item)}
+                      className="text-green-600"
                     >
-                      <ArchiveIcon className="mr-2 h-4 w-4" />
-                      Archive
+                      <RotateCcw className="mr-2 h-4 w-4" />
+                      Unarchive
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
@@ -599,7 +540,7 @@ export default function ItemsPage() {
       <MessageContainer messages={messages} onDismiss={dismissMessage} />
       
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-gray-900">Items</h1>
+        <h1 className="text-3xl font-bold text-gray-900">Archived Items</h1>
         <div className="flex space-x-2">
           <Button 
             variant="outline"
@@ -610,26 +551,17 @@ export default function ItemsPage() {
           </Button>
           <Button 
             variant="outline"
-            onClick={() => window.open('/api/items/export?type=active')}
+            onClick={() => window.open('/api/items/export?type=archived')}
           >
-            Export Active
+            Export Archived
           </Button>
           <Button 
             variant="outline"
-            onClick={handleBulkArchive}
+            onClick={handleBulkUnarchive}
             disabled={selectedItems.length === 0}
           >
-            Bulk Archive
+            Bulk Unarchive
           </Button>
-          {isAdmin && (
-            <Button 
-              onClick={() => setShowAddModal(true)} 
-              className="bg-primary-500 hover:bg-primary-600"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add Item
-            </Button>
-          )}
         </div>
       </div>
 
@@ -637,7 +569,7 @@ export default function ItemsPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
           <Input
-            placeholder="Search items..."
+            placeholder="Search archived items..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
@@ -656,7 +588,7 @@ export default function ItemsPage() {
       {/* Filter Panel */}
       {showFilterPanel && (
         <div className="bg-gray-50 p-4 rounded-md space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
               <select
@@ -709,18 +641,6 @@ export default function ItemsPage() {
                 <option value="poor">Poor</option>
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="all">All Status</option>
-                <option value="active">Active</option>
-                <option value="archived">Archived</option>
-              </select>
-            </div>
           </div>
         </div>
       )}
@@ -768,20 +688,6 @@ export default function ItemsPage() {
                   {visibleColumns.map(columnId => renderTableCell(item, columnId))}
                 </TableRow>
               ))}
-              {isAdmin && !showInlineAdd && (
-                <TableRow>
-                  <TableCell colSpan={visibleColumns.length} className="text-center py-2">
-                    <Button 
-                      variant="ghost" 
-                      onClick={() => handleInlineAdd(0)}
-                      className="text-primary-600"
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Item
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              )}
             </TableBody>
           </Table>
         </div>
@@ -789,28 +695,13 @@ export default function ItemsPage() {
 
       {!isLoading && filteredItems.length === 0 && (
         <div className="text-center py-12">
-          <Package className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No items found</h3>
+          <Archive className="mx-auto h-12 w-12 text-gray-400" />
+          <h3 className="mt-2 text-sm font-medium text-gray-900">No archived items found</h3>
           <p className="mt-1 text-sm text-gray-500">
-            {searchTerm || categoryFilter !== 'all' || locationFilter !== 'all' || unitFilter !== 'all' || conditionFilter !== 'all' || statusFilter !== 'all' ? 'Try adjusting your search or filters' : 'Get started by adding a new item'}
+            {searchTerm || categoryFilter !== 'all' || locationFilter !== 'all' || unitFilter !== 'all' || conditionFilter !== 'all' ? 'Try adjusting your search or filters' : 'There are no archived items at the moment'}
           </p>
         </div>
       )}
-
-      {/* Add Item Modal */}
-      <AddItemModal
-        isOpen={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        onSuccess={handleAddItemSuccess}
-      />
-
-      {/* Borrow Item Modal */}
-      <BorrowItemModal
-        isOpen={showBorrowModal}
-        onClose={() => setShowBorrowModal(false)}
-        onSuccess={handleBorrowSuccess}
-        item={selectedItem}
-      />
 
       {/* Edit Item Modal */}
       <EditItemModal
@@ -841,21 +732,49 @@ export default function ItemsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Archive Item Modal */}
-      <ArchiveItemModal
-        isOpen={showArchiveModal}
-        onClose={() => setShowArchiveModal(false)}
-        onSuccess={handleArchiveSuccess}
-        item={items.find(item => item.id === archivingItemId) ?? null}
-      />
+      {/* Unarchive Item Modal */}
+      <Dialog open={showUnarchiveModal} onOpenChange={setShowUnarchiveModal}>
+        <DialogContent className="max-w-md w-full">
+          <DialogHeader>
+            <DialogTitle>Unarchive Item</DialogTitle>
+            <DialogDescription>
+              This will restore the item to active status. The item will be available for borrowing again.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="mb-4 p-3 bg-gray-50 rounded-md">
+            <div className="font-medium">{items.find(item => item.id === unarchivingItemId)?.description}</div>
+            <div className="text-sm text-gray-600">Product Code: {items.find(item => item.id === unarchivingItemId)?.productCode}</div>
+            <div className="text-sm text-gray-600">Inventory: {items.find(item => item.id === unarchivingItemId)?.inventory}</div>
+          </div>
 
-      {/* Bulk Archive Modal */}
-      <BulkArchiveModal
-        isOpen={showBulkArchiveModal}
-        onClose={() => setShowBulkArchiveModal(false)}
-        onSuccess={handleBulkArchiveSuccess}
-        selectedItems={selectedItems}
-      />
+          <form onSubmit={handleUnarchive} className="space-y-4">
+            <div>
+              <label htmlFor="reason" className="block text-sm font-medium text-gray-700 mb-1">
+                Reason for unarchiving
+              </label>
+              <textarea
+                id="reason"
+                value={unarchiveReason}
+                onChange={(e) => setUnarchiveReason(e.target.value)}
+                placeholder="Enter reason for unarchiving this item..."
+                rows={3}
+                className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                required
+              />
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowUnarchiveModal(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isUnarchiving}>
+                {isUnarchiving ? 'Unarchiving...' : 'Unarchive'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,12 +1,11 @@
-// File: app/api/items/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { items, itemSizes, users } from '@/lib/db/schema';
+import { items, users, itemImages } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
-// GET /api/items - List all items with their sizes
+// GET /api/items - List all items with their images
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -15,45 +14,69 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Fetch all items with their sizes and the user who added them
-    const itemsData = await db
+    const { searchParams } = new URL(request.url);
+    const status = searchParams.get('status');
+
+    // Build the base query
+    let query = db
       .select({
         id: items.id,
-        name: items.name,
+        productCode: items.productCode,
         description: items.description,
-        category: items.category,
-        addedBy: items.addedBy,
+        brandCode: items.brandCode,
+        productGroup: items.productGroup,
+        productDivision: items.productDivision,
+        productCategory: items.productCategory,
+        inventory: items.inventory,
+        vendor: items.vendor,
+        period: items.period,
+        season: items.season,
+        gender: items.gender,
+        mould: items.mould,
+        tier: items.tier,
+        silo: items.silo,
+        location: items.location,
+        unitOfMeasure: items.unitOfMeasure,
+        condition: items.condition,
+        conditionNotes: items.conditionNotes,
+        status: items.status,
+        createdBy: items.createdBy,
         createdAt: items.createdAt,
         updatedAt: items.updatedAt,
-        addedByUser: {
+        createdByUser: {
           id: users.id,
           name: users.name,
         },
       })
       .from(items)
-      .leftJoin(users, eq(items.addedBy, users.id));
+      .leftJoin(users, eq(items.createdBy, users.id));
 
-    // Fetch all sizes for all items
-    const allSizes = await db
+    // Execute the query with or without status filter
+    const itemsData = status && (status === 'active' || status === 'archived')
+      ? await query.where(eq(items.status, status))
+      : await query;
+
+    // Fetch all images for all items
+    const allImages = await db
       .select()
-      .from(itemSizes);
+      .from(itemImages);
 
-    // Group sizes by itemId
-    const sizesByItemId = allSizes.reduce((acc, size) => {
-      if (!acc[size.itemId]) {
-        acc[size.itemId] = [];
+    // Group images by itemId
+    const imagesByItemId = allImages.reduce((acc, image) => {
+      if (!acc[image.itemId]) {
+        acc[image.itemId] = [];
       }
-      acc[size.itemId].push(size);
+      acc[image.itemId].push(image);
       return acc;
-    }, {} as Record<string, typeof allSizes>);
+    }, {} as Record<string, typeof allImages>);
 
-    // Combine items with their sizes
-    const itemsWithSizes = itemsData.map(item => ({
+    // Combine items with their images
+    const itemsWithImages = itemsData.map(item => ({
       ...item,
-      sizes: sizesByItemId[item.id] || [],
+      images: imagesByItemId[item.id] || [],
     }));
 
-    return NextResponse.json(itemsWithSizes);
+    return NextResponse.json(itemsWithImages);
   } catch (error) {
     console.error('Failed to fetch items:', error);
     return NextResponse.json(
@@ -78,10 +101,53 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, description, category, sizes } = body;
+    console.log('Received request body:', body); // Add this line for debugging
+    
+    const { 
+      productCode, 
+      description, 
+      brandCode, 
+      productGroup, 
+      productDivision, 
+      productCategory, 
+      inventory, 
+      vendor, 
+      period, 
+      season, 
+      gender, 
+      mould, 
+      tier, 
+      silo,
+      location,
+      unitOfMeasure,
+      condition,
+      conditionNotes,
+      status,
+      images 
+    } = body;
 
     // Validate required fields
-    if (!name || !category || !sizes || sizes.length === 0) {
+    if (!productCode || !description || !brandCode || !productGroup || !productDivision || 
+        !productCategory || !vendor || !period || !season || !gender || !mould || !tier || !silo || 
+        !location || !unitOfMeasure || !condition) {
+      console.log('Missing required fields:', {
+        productCode: !!productCode,
+        description: !!description,
+        brandCode: !!brandCode,
+        productGroup: !!productGroup,
+        productDivision: !!productDivision,
+        productCategory: !!productCategory,
+        vendor: !!vendor,
+        period: !!period,
+        season: !!season,
+        gender: !!gender,
+        mould: !!mould,
+        tier: !!tier,
+        silo: !!silo,
+        location: !!location,
+        unitOfMeasure: !!unitOfMeasure,
+        condition: !!condition,
+      });
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
@@ -92,28 +158,53 @@ export async function POST(request: NextRequest) {
     const [newItem] = await db
       .insert(items)
       .values({
-        name,
-        description: description || null,
-        category,
-        addedBy: session.user.id,
+        productCode,
+        description,
+        brandCode,
+        productGroup,
+        productDivision,
+        productCategory,
+        inventory: inventory || 0,
+        vendor,
+        period,
+        season,
+        gender,
+        mould,
+        tier,
+        silo,
+        location,
+        unitOfMeasure,
+        condition,
+        conditionNotes: conditionNotes || null,
+        status: status || 'active', // Use provided status or default to 'active'
+        createdBy: session.user.id,
       })
       .returning();
 
-    // Create the item sizes
-    const sizesToInsert = sizes.map((size: { size: string; quantity: number }) => ({
-      itemId: newItem.id,
-      size: size.size,
-      quantity: size.quantity,
-      available: size.quantity, // Initially, all items are available
-    }));
+    // Create item images if provided
+    let newImages: { id: string; createdAt: Date; itemId: string; fileName: string; originalName: string; mimeType: string; size: number; altText: string | null; isPrimary: boolean; }[] = [];
+    if (images && images.length > 0) {
+      const imagesToInsert = images.map((image: { fileName: string; originalName: string; mimeType: string; size: number; altText?: string; isPrimary?: boolean }, index: number) => ({
+        itemId: newItem.id,
+        fileName: image.fileName,
+        originalName: image.originalName,
+        mimeType: image.mimeType,
+        size: image.size,
+        altText: image.altText || `${description} - Image ${index + 1}`,
+        isPrimary: image.isPrimary || index === 0, // First image is primary by default
+      }));
 
-    const newSizes = await db
-      .insert(itemSizes)
-      .values(sizesToInsert)
-      .returning();
+      newImages = await db
+        .insert(itemImages)
+        .values(imagesToInsert)
+        .returning();
+    }
 
     return NextResponse.json(
-      { ...newItem, sizes: newSizes },
+      { 
+        ...newItem, 
+        images: newImages,
+      },
       { status: 201 }
     );
   } catch (error) {
