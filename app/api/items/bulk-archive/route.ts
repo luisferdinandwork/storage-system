@@ -1,4 +1,4 @@
-// app/api/items/bulk-unarchive/route.ts
+// app/api/items/bulk-archive/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Only admins can unarchive items
+    // Only admins can archive items
     if (session.user.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
@@ -34,58 +34,50 @@ export async function POST(request: NextRequest) {
 
     if (!reason || !reason.trim()) {
       return NextResponse.json(
-        { error: 'Reason is required for unarchiving' },
+        { error: 'Reason is required for archiving' },
         { status: 400 }
       );
     }
 
-    // Get items to unarchive
-    const itemsToUnarchive = await db
+    // Get items to archive
+    const itemsToArchive = await db
       .select()
       .from(items)
       .where(inArray(items.id, itemIds));
 
-    if (itemsToUnarchive.length === 0) {
+    if (itemsToArchive.length === 0) {
       return NextResponse.json({ error: 'No valid items found' }, { status: 404 });
     }
 
-    // Filter out items that are not archived
-    const archivedItems = itemsToUnarchive.filter(item => item.status === 'archived');
+    // Filter out items that are already archived
+    const activeItems = itemsToArchive.filter(item => item.status === 'active');
     
-    if (archivedItems.length === 0) {
-      return NextResponse.json({ error: 'No archived items found' }, { status: 404 });
+    if (activeItems.length === 0) {
+      return NextResponse.json({ error: 'No active items found' }, { status: 404 });
     }
 
-    // Get archive records for these items
-    const archiveRecords = await db
-      .select()
-      .from(itemArchives)
-      .where(inArray(itemArchives.itemId, archivedItems.map(item => item.id)));
-
-    // Unarchive each item
-    const unarchivedItems = [];
-    for (const item of archivedItems) {
+    // Archive each item
+    const archivedItems = [];
+    for (const item of activeItems) {
       try {
-        // Find the archive record for this item
-        const archiveRecord = archiveRecords.find(record => record.itemId === item.id);
-        
-        if (!archiveRecord) {
-          console.error(`Archive record not found for item ${item.id}`);
-          continue;
-        }
+        // Get images for this item
+        const images = await db
+          .select()
+          .from(itemImagesTable)
+          .where(eq(itemImagesTable.itemId, item.id));
 
-        // Restore images from archived directory
-        const restoredImages = [];
-        if (archiveRecord.archivedImages && Array.isArray(archiveRecord.archivedImages)) {
-          for (const image of archiveRecord.archivedImages) {
+        // Archive images
+        const archivedImages = [];
+        if (images.length > 0) {
+          for (const image of images) {
             try {
-              const sourcePath = join(process.cwd(), 'public', 'archived', image.fileName);
-              const uploadsDir = join(process.cwd(), 'public', 'uploads');
+              const sourcePath = join(process.cwd(), 'public', 'uploads', image.fileName);
+              const archivedDir = join(process.cwd(), 'public', 'archived');
               
-              // Ensure uploads directory exists
-              await mkdir(uploadsDir, { recursive: true });
+              // Ensure archived directory exists
+              await mkdir(archivedDir, { recursive: true });
               
-              const destPath = join(uploadsDir, image.fileName);
+              const destPath = join(archivedDir, image.fileName);
               
               // Check if source file exists before trying to move it
               try {
@@ -94,59 +86,68 @@ export async function POST(request: NextRequest) {
                 
                 // Move the file
                 await rename(sourcePath, destPath);
-                console.log(`Restored archived image: ${image.fileName}`);
+                console.log(`Archived image: ${image.fileName}`);
                 
-                // Insert the image record back to the database
-                const [insertedImage] = await db.insert(itemImagesTable).values({
-                  itemId: item.id,
+                archivedImages.push({
                   fileName: image.fileName,
                   originalName: image.originalName,
                   mimeType: image.mimeType,
                   size: image.size,
                   altText: image.altText,
                   isPrimary: image.isPrimary,
-                  createdAt: new Date(image.createdAt),
-                }).returning();
-                
-                restoredImages.push(insertedImage);
+                  createdAt: image.createdAt,
+                });
               } catch (checkError) {
                 console.log(`Source file does not exist: ${sourcePath}`);
                 console.log(`Error checking file:`, checkError);
               }
             } catch (error) {
-              console.error(`Failed to restore archived image: ${image.fileName}`, error);
+              console.error(`Failed to archive image: ${image.fileName}`, error);
             }
           }
         }
 
-        // Update item status to active
+        // Create archive record with all required fields
+        await db.insert(itemArchives).values({
+          metadata: {}, // Empty metadata object
+          reason: reason.trim(),
+          itemId: item.id,
+          archivedBy: session.user.id,
+          archivedAt: new Date(),
+          archivedImages: archivedImages,
+          archivedInventory: item.inventory,
+          archivedCondition: item.condition,
+          archivedConditionNotes: item.conditionNotes,
+        });
+
+        // Delete image records
+        await db.delete(itemImagesTable).where(eq(itemImagesTable.itemId, item.id));
+
+        // Update item status to archived
         await db.update(items)
           .set({ 
-            status: 'active',
+            status: 'archived',
             updatedAt: new Date()
           })
           .where(eq(items.id, item.id));
 
-        // Delete the archive record
-        await db.delete(itemArchives).where(eq(itemArchives.itemId, item.id));
-
-        unarchivedItems.push({
+        archivedItems.push({
           id: item.id,
-          restoredImages: restoredImages.length,
+          archivedImages: archivedImages.length,
         });
       } catch (error) {
-        console.error(`Failed to unarchive item ${item.id}:`, error);
+        console.error(`Failed to archive item ${item.id}:`, error);
       }
     }
 
     return NextResponse.json({ 
-      message: `${unarchivedItems.length} items unarchived successfully`,
-      unarchivedItems
+      message: `${archivedItems.length} items archived successfully`,
+      archivedItems
     });
   } catch (error) {
-    console.error('Failed to bulk unarchive items:', error);
+    console.error('Failed to bulk archive items:', error);
     return NextResponse.json(
-      { error: 'Failed to bulk unarchive items' },
+      { error: 'Failed to bulk archive items' },
       { status: 500 }
     );
   }

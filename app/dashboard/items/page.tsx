@@ -39,6 +39,8 @@ import {
 import { InlineAddItem } from '@/components/items/inline-add-item';
 import { ArchiveItemModal } from '@/components/items/archive-item-modal';
 import { BulkArchiveModal } from '@/components/items/bulk-archive-modal';
+import React from 'react';
+import ColumnSelectorModal from '@/components/items/ColumnSelectorModal';
 
 interface ItemImage {
   id: string;
@@ -95,7 +97,7 @@ const ALL_COLUMNS = [
   { id: 'inventory', label: 'Inventory', defaultVisible: true },
   { id: 'vendor', label: 'Vendor', defaultVisible: false },
   { id: 'createdBy', label: 'Created By', defaultVisible: false },
-  { id: 'status', label: 'Status', defaultVisible: true },
+  { id: 'status', label: 'Status', defaultVisible: false },
   { id: 'actions', label: 'Actions', defaultVisible: true },
 ];
 
@@ -139,7 +141,7 @@ export default function ItemsPage() {
 
   const fetchItems = async () => {
     try {
-      const response = await fetch('/api/items');
+      const response = await fetch('/api/items?status=active');
       if (response.ok) {
         const data = await response.json();
         setItems(data);
@@ -164,7 +166,7 @@ export default function ItemsPage() {
       const response = await fetch(`/api/items/${itemId}`, {
         method: 'DELETE',
         headers: {
-          'content-type': 'application/json',
+          'Content-Type': 'application/json',  // Fixed: was 'content-type'
         },
         body: JSON.stringify({ reason: removalReason }),
       });
@@ -183,7 +185,6 @@ export default function ItemsPage() {
       addMessage('error', 'Failed to remove item', 'Error');
     }
   };
-
   const handleBorrowItem = (item: Item) => {
     setSelectedItem(item);
     setShowBorrowModal(true);
@@ -332,7 +333,9 @@ export default function ItemsPage() {
     const matchesUnit = unitFilter === 'all' || item.unitOfMeasure === unitFilter;
     const matchesCondition = conditionFilter === 'all' || item.condition === conditionFilter;
     const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
-    return matchesSearch && matchesCategory && matchesLocation && matchesUnit && matchesCondition && matchesStatus;
+    const isActive = item.status === 'active';
+
+    return matchesSearch && matchesCategory && matchesLocation && matchesUnit && matchesCondition && matchesStatus && isActive;
   });
 
   const isAdmin = session?.user?.role === 'admin';
@@ -418,6 +421,12 @@ export default function ItemsPage() {
   const handleEditItem = (item: Item) => {
     setEditingItem(item);
     setShowEditModal(true);
+  };
+
+  const handleResetColumns = () => {
+    setVisibleColumns(
+      ALL_COLUMNS.filter(col => col.defaultVisible).map(col => col.id)
+    );
   };
 
   const getPrimaryImage = (images: ItemImage[]) => {
@@ -619,7 +628,8 @@ export default function ItemsPage() {
             onClick={handleBulkArchive}
             disabled={selectedItems.length === 0}
           >
-            Bulk Archive
+            <Archive className="mr-2 h-4 w-4" />
+            Bulk Archive ({selectedItems.length})
           </Button>
           {isAdmin && (
             <Button 
@@ -734,46 +744,38 @@ export default function ItemsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                {visibleColumns.includes('checkbox') && (
-                  <TableHead className="w-12">
-                    <input
-                      type="checkbox"
-                      className="rounded border-gray-300"
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedItems(filteredItems.map(item => item.id));
-                        } else {
-                          setSelectedItems([]);
-                        }
-                      }}
-                    />
-                  </TableHead>
+                {visibleColumns
+                  .filter(col => col !== 'actions')
+                  .map(columnId => {
+                    const column = ALL_COLUMNS.find(col => col.id === columnId);
+                    return column ? <TableHead key={columnId}>{column.label}</TableHead> : null;
+                  })}
+                {visibleColumns.includes('actions') && (
+                  <TableHead key="actions" className="text-right">Actions</TableHead>
                 )}
-                {visibleColumns.includes('item') && <TableHead>Item</TableHead>}
-                {visibleColumns.includes('productCode') && <TableHead>Product Code</TableHead>}
-                {visibleColumns.includes('category') && <TableHead>Category</TableHead>}
-                {visibleColumns.includes('unit') && <TableHead>Unit</TableHead>}
-                {visibleColumns.includes('condition') && <TableHead>Condition</TableHead>}
-                {visibleColumns.includes('location') && <TableHead>Location</TableHead>}
-                {visibleColumns.includes('inventory') && <TableHead>Inventory</TableHead>}
-                {visibleColumns.includes('vendor') && <TableHead>Vendor</TableHead>}
-                {visibleColumns.includes('createdBy') && <TableHead>Created By</TableHead>}
-                {visibleColumns.includes('status') && <TableHead>Status</TableHead>}
-                {visibleColumns.includes('actions') && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredItems.map((item, index) => (
-                <TableRow key={item.id}>
-                  {visibleColumns.map(columnId => renderTableCell(item, columnId))}
+              {showInlineAdd && inlineAddRowIndex === filteredItems.length && (
+                <TableRow>
+                  <TableCell colSpan={visibleColumns.length} className="p-0">
+                    <InlineAddItem
+                      onSuccess={handleAddItemSuccess}
+                      onCancel={() => {
+                        setShowInlineAdd(false);
+                        setInlineAddRowIndex(-1);
+                      }}
+                    />
+                  </TableCell>
                 </TableRow>
-              ))}
+              )}
+              
               {isAdmin && !showInlineAdd && (
                 <TableRow>
                   <TableCell colSpan={visibleColumns.length} className="text-center py-2">
                     <Button 
                       variant="ghost" 
-                      onClick={() => handleInlineAdd(0)}
+                      onClick={() => handleInlineAdd(filteredItems.length)}
                       className="text-primary-600"
                     >
                       <Plus className="mr-2 h-4 w-4" />
@@ -782,6 +784,38 @@ export default function ItemsPage() {
                   </TableCell>
                 </TableRow>
               )}
+              
+              {filteredItems.map((item, index) => (
+                <React.Fragment key={item.id}>
+                  <TableRow>
+                    {visibleColumns
+                      .filter(col => col !== 'actions')
+                      .map(columnId => (
+                        <React.Fragment key={`${item.id}-${columnId}`}>
+                          {renderTableCell(item, columnId)}
+                        </React.Fragment>
+                      ))}
+                    {visibleColumns.includes('actions') && (
+                      <React.Fragment key={`${item.id}-actions`}>
+                        {renderTableCell(item, 'actions')}
+                      </React.Fragment>
+                    )}
+                  </TableRow>
+                  {showInlineAdd && inlineAddRowIndex === index && (
+                    <TableRow>
+                      <TableCell colSpan={visibleColumns.length} className="p-0">
+                        <InlineAddItem
+                          onSuccess={handleAddItemSuccess}
+                          onCancel={() => {
+                            setShowInlineAdd(false);
+                            setInlineAddRowIndex(-1);
+                          }}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </React.Fragment>
+              ))}
             </TableBody>
           </Table>
         </div>
@@ -852,9 +886,68 @@ export default function ItemsPage() {
       {/* Bulk Archive Modal */}
       <BulkArchiveModal
         isOpen={showBulkArchiveModal}
-        onClose={() => setShowBulkArchiveModal(false)}
+        onClose={() => {
+          setShowBulkArchiveModal(false);
+          setArchiveReason('');
+        }}
         onSuccess={handleBulkArchiveSuccess}
         selectedItems={selectedItems}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={removingItemId !== null} onOpenChange={() => {
+        setRemovingItemId(null);
+        setRemovalReason('');
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Item</DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. Please provide a reason for deleting this item.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Reason for deletion *
+              </label>
+              <textarea
+                value={removalReason}
+                onChange={(e) => setRemovalReason(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                rows={3}
+                placeholder="Enter reason for deletion..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRemovingItemId(null);
+                setRemovalReason('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => removingItemId && handleRemoveItem(removingItemId)}
+              disabled={!removalReason.trim()}
+            >
+              Delete Item
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ColumnSelectorModal
+        isOpen={showColumnSelector}
+        onClose={() => setShowColumnSelector(false)}
+        columns={ALL_COLUMNS}
+        visibleColumns={visibleColumns}
+        onToggleColumn={toggleColumnVisibility}
+        onResetColumns={handleResetColumns}
       />
     </div>
   );
