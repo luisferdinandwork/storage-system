@@ -25,7 +25,27 @@ export async function POST(
     }
 
     const { id: itemId } = await params;
-    const { reason } = await request.json();
+    
+    // Parse the request body with error handling
+    let requestBody;
+    try {
+      const text = await request.text();
+      if (!text) {
+        return NextResponse.json(
+          { error: 'Request body is empty' },
+          { status: 400 }
+        );
+      }
+      requestBody = JSON.parse(text);
+    } catch (parseError) {
+      console.error('Failed to parse request body:', parseError);
+      return NextResponse.json(
+        { error: 'Invalid JSON in request body' },
+        { status: 400 }
+      );
+    }
+
+    const { reason } = requestBody;
 
     if (!reason || !reason.trim()) {
       return NextResponse.json(

@@ -40,6 +40,8 @@ import {
 import { InlineAddItem } from '@/components/items/inline-add-item';
 import { ArchiveItemModal } from '@/components/items/archive-item-modal';
 import { BulkArchiveModal } from '@/components/items/bulk-archive-modal';
+import React from 'react';
+import ColumnSelectorModal from '@/components/items/ColumnSelectorModal';
 
 interface ItemImage {
   id: string;
@@ -96,7 +98,7 @@ const ALL_COLUMNS = [
   { id: 'inventory', label: 'Inventory', defaultVisible: true },
   { id: 'vendor', label: 'Vendor', defaultVisible: false },
   { id: 'createdBy', label: 'Created By', defaultVisible: false },
-  { id: 'status', label: 'Status', defaultVisible: true },
+  { id: 'status', label: 'Status', defaultVisible: false },
   { id: 'actions', label: 'Actions', defaultVisible: true },
 ];
 
@@ -127,6 +129,8 @@ export default function ArchivedItemsPage() {
   const [unarchiveReason, setUnarchiveReason] = useState('');
   const [isUnarchiving, setIsUnarchiving] = useState(false);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [showBulkUnarchiveModal, setShowBulkUnarchiveModal] = useState(false);
+  const [bulkUnarchiveReason, setBulkUnarchiveReason] = useState('');
 
   useEffect(() => {
     fetchItems();
@@ -159,7 +163,7 @@ export default function ArchivedItemsPage() {
       const response = await fetch(`/api/items/${itemId}`, {
         method: 'DELETE',
         headers: {
-          'content-type': 'application/json',
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({ reason: removalReason }),
       });
@@ -213,7 +217,9 @@ export default function ArchivedItemsPage() {
     addMessage('success', 'Item unarchived successfully', 'Success');
   };
 
-  const handleUnarchive = async () => {
+  const handleUnarchive = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
     if (!unarchivingItemId || !unarchiveReason.trim()) {
       addMessage('warning', 'Please provide a reason for unarchiving', 'Missing Information');
       return;
@@ -227,11 +233,13 @@ export default function ArchivedItemsPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ reason: unarchiveReason }),
+        body: JSON.stringify({ reason: unarchiveReason.trim() }),
       });
 
       if (response.ok) {
+        const data = await response.json();
         handleUnarchiveSuccess();
+        addMessage('success', data.message || 'Item unarchived successfully', 'Success');
       } else {
         const error = await response.json();
         addMessage('error', error.error || 'Failed to unarchive item', 'Error');
@@ -244,9 +252,27 @@ export default function ArchivedItemsPage() {
     }
   };
 
-  const handleBulkUnarchive = async () => {
+  const handleBulkUnarchive = () => {
     if (selectedItems.length === 0) {
       addMessage('warning', 'Please select at least one item to unarchive', 'No Items Selected');
+      return;
+    }
+    setShowBulkUnarchiveModal(true);
+  };
+
+  const handleBulkUnarchiveSuccess = () => {
+    setShowBulkUnarchiveModal(false);
+    setBulkUnarchiveReason('');
+    setSelectedItems([]);
+    fetchItems();
+    addMessage('success', 'Items unarchived successfully', 'Success');
+  };
+
+  const handleBulkUnarchiveSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (selectedItems.length === 0 || !bulkUnarchiveReason.trim()) {
+      addMessage('warning', 'Please select items and provide a reason for unarchiving', 'Missing Information');
       return;
     }
     
@@ -260,22 +286,21 @@ export default function ArchivedItemsPage() {
         },
         body: JSON.stringify({ 
           itemIds: selectedItems,
-          reason: 'Bulk unarchive operation'
+          reason: bulkUnarchiveReason.trim() 
         }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        setSelectedItems([]);
-        fetchItems();
-        addMessage('success', `${data.message}: ${data.unarchivedItems.length} items unarchived`, 'Success');
+        handleBulkUnarchiveSuccess();
+        addMessage('success', data.message || 'Items unarchived successfully', 'Success');
       } else {
         const error = await response.json();
         addMessage('error', error.error || 'Failed to unarchive items', 'Error');
       }
     } catch (error) {
       console.error('Failed to bulk unarchive items:', error);
-      addMessage('error', 'Failed to unarchive items', 'Error');
+      addMessage('error', 'Failed to bulk unarchive items', 'Error');
     } finally {
       setIsUnarchiving(false);
     }
@@ -283,7 +308,7 @@ export default function ArchivedItemsPage() {
 
   const filteredItems = items.filter(item => {
     const matchesSearch = item.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                       item.productCode.toLowerCase().includes(searchTerm.toLowerCase());
+    item.productCode.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilter === 'all' || item.productCategory === categoryFilter;
     const matchesLocation = locationFilter === 'all' || item.location === locationFilter;
     const matchesUnit = unitFilter === 'all' || item.unitOfMeasure === unitFilter;
@@ -405,7 +430,7 @@ export default function ArchivedItemsPage() {
                   onClick={() => handleViewImage(getPrimaryImage(item.images))}
                 >
                   <img 
-                    src={getPrimaryImage(item.images).fileName ? `/uploads/${getPrimaryImage(item.images).fileName}` : '/placeholder.jpg'} 
+                    src={getPrimaryImage(item.images).fileName ? `/archived/${getPrimaryImage(item.images).fileName}` : '/placeholder.jpg'} 
                     alt={getPrimaryImage(item.images).altText || item.description}
                     className="w-full h-full object-cover"
                   />
@@ -560,7 +585,8 @@ export default function ArchivedItemsPage() {
             onClick={handleBulkUnarchive}
             disabled={selectedItems.length === 0}
           >
-            Bulk Unarchive
+            <RotateCcw className="mr-2 h-4 w-4" />
+            Bulk Unarchive ({selectedItems.length})
           </Button>
         </div>
       </div>
@@ -654,36 +680,19 @@ export default function ArchivedItemsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                {visibleColumns.includes('checkbox') && (
-                  <TableHead className="w-12">
-                    <input
-                      type="checkbox"
-                      className="rounded border-gray-300"
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedItems(filteredItems.map(item => item.id));
-                        } else {
-                          setSelectedItems([]);
-                        }
-                      }}
-                    />
-                  </TableHead>
+                {visibleColumns
+                  .filter(col => col !== 'actions')
+                  .map(columnId => {
+                    const column = ALL_COLUMNS.find(col => col.id === columnId);
+                    return column ? <TableHead key={columnId}>{column.label}</TableHead> : null;
+                  })}
+                {visibleColumns.includes('actions') && (
+                  <TableHead key="actions" className="text-right">Actions</TableHead>
                 )}
-                {visibleColumns.includes('item') && <TableHead>Item</TableHead>}
-                {visibleColumns.includes('productCode') && <TableHead>Product Code</TableHead>}
-                {visibleColumns.includes('category') && <TableHead>Category</TableHead>}
-                {visibleColumns.includes('unit') && <TableHead>Unit</TableHead>}
-                {visibleColumns.includes('condition') && <TableHead>Condition</TableHead>}
-                {visibleColumns.includes('location') && <TableHead>Location</TableHead>}
-                {visibleColumns.includes('inventory') && <TableHead>Inventory</TableHead>}
-                {visibleColumns.includes('vendor') && <TableHead>Vendor</TableHead>}
-                {visibleColumns.includes('createdBy') && <TableHead>Created By</TableHead>}
-                {visibleColumns.includes('status') && <TableHead>Status</TableHead>}
-                {visibleColumns.includes('actions') && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredItems.map((item, index) => (
+              {filteredItems.map((item) => (
                 <TableRow key={item.id}>
                   {visibleColumns.map(columnId => renderTableCell(item, columnId))}
                 </TableRow>
@@ -723,7 +732,7 @@ export default function ArchivedItemsPage() {
           {selectedImage && (
             <div className="flex justify-center">
               <img 
-                src={selectedImage.fileName ? `/uploads/${selectedImage.fileName}` : '/placeholder.jpg'} 
+                src={selectedImage.fileName ? `/archived/${selectedImage.fileName}` : '/placeholder.jpg'} 
                 alt={selectedImage.altText || 'Item image'}
                 className="max-w-full max-h-96 object-contain"
               />
@@ -775,6 +784,108 @@ export default function ArchivedItemsPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Bulk Unarchive Modal */}
+      <Dialog open={showBulkUnarchiveModal} onOpenChange={setShowBulkUnarchiveModal}>
+        <DialogContent className="max-w-md w-full">
+          <DialogHeader>
+            <DialogTitle>Bulk Unarchive Items</DialogTitle>
+            <DialogDescription>
+              This will restore {selectedItems.length} items to active status. The items will be available for borrowing again.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="mb-4 p-3 bg-gray-50 rounded-md">
+            <p className="text-sm font-medium">Items to unarchive: {selectedItems.length}</p>
+          </div>
+
+          <form onSubmit={handleBulkUnarchiveSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="reason" className="block text-sm font-medium text-gray-700 mb-1">
+                Reason for unarchiving
+              </label>
+              <textarea
+                id="reason"
+                value={bulkUnarchiveReason}
+                onChange={(e) => setBulkUnarchiveReason(e.target.value)}
+                placeholder="Enter reason for unarchiving these items..."
+                rows={3}
+                className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                required
+              />
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setShowBulkUnarchiveModal(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isUnarchiving}>
+                {isUnarchiving ? 'Unarchiving...' : 'Unarchive Items'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={removingItemId !== null} onOpenChange={() => {
+        setRemovingItemId(null);
+        setRemovalReason('');
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Item</DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. Please provide a reason for deleting this item.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Reason for deletion *
+              </label>
+              <textarea
+                value={removalReason}
+                onChange={(e) => setRemovalReason(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                rows={3}
+                placeholder="Enter reason for deletion..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRemovingItemId(null);
+                setRemovalReason('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => removingItemId && handleRemoveItem(removingItemId)}
+              disabled={!removalReason.trim()}
+            >
+              Delete Item
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ColumnSelectorModal
+        isOpen={showColumnSelector}
+        onClose={() => setShowColumnSelector(false)}
+        columns={ALL_COLUMNS}
+        visibleColumns={visibleColumns}
+        onToggleColumn={toggleColumnVisibility}
+        onResetColumns={() => {
+          setVisibleColumns(
+            ALL_COLUMNS.filter(col => col.defaultVisible).map(col => col.id)
+          );
+        }}
+      />
     </div>
   );
 }

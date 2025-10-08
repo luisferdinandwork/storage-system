@@ -97,7 +97,7 @@ const ALL_COLUMNS = [
   { id: 'inventory', label: 'Inventory', defaultVisible: true },
   { id: 'vendor', label: 'Vendor', defaultVisible: false },
   { id: 'createdBy', label: 'Created By', defaultVisible: false },
-  { id: 'status', label: 'Status', defaultVisible: true },
+  { id: 'status', label: 'Status', defaultVisible: false },
   { id: 'actions', label: 'Actions', defaultVisible: true },
 ];
 
@@ -628,7 +628,8 @@ export default function ItemsPage() {
             onClick={handleBulkArchive}
             disabled={selectedItems.length === 0}
           >
-            Bulk Archive
+            <Archive className="mr-2 h-4 w-4" />
+            Bulk Archive ({selectedItems.length})
           </Button>
           {isAdmin && (
             <Button 
@@ -885,7 +886,10 @@ export default function ItemsPage() {
       {/* Bulk Archive Modal */}
       <BulkArchiveModal
         isOpen={showBulkArchiveModal}
-        onClose={() => setShowBulkArchiveModal(false)}
+        onClose={() => {
+          setShowBulkArchiveModal(false);
+          setArchiveReason('');
+        }}
         onSuccess={handleBulkArchiveSuccess}
         selectedItems={selectedItems}
       />
