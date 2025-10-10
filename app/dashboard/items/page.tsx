@@ -4,10 +4,9 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Package, Plus, Search, Trash2, Filter, MoreHorizontal, Edit, Hand, Image, MapPin, Eye, EyeOff, Columns, Archive, ArchiveIcon } from 'lucide-react';
+import { Package, Plus, Search, Filter, MoreHorizontal, Edit, Image, Columns, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AddItemModal } from '@/components/items/add-item-modal';
-import { BorrowItemModal } from '@/components/items/borrow-item-modal';
 import {
   Table,
   TableBody,
@@ -37,8 +36,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { InlineAddItem } from '@/components/items/inline-add-item';
-import { ArchiveItemModal } from '@/components/items/archive-item-modal';
-import { BulkArchiveModal } from '@/components/items/bulk-archive-modal';
 import React from 'react';
 import ColumnSelectorModal from '@/components/items/ColumnSelectorModal';
 
@@ -70,14 +67,16 @@ interface Item {
   mould: string;
   tier: string;
   silo: string;
-  location: string;
+  location: string | null;
   unitOfMeasure: string;
   condition: string;
   conditionNotes: string | null;
-  status: 'active' | 'archived';
+  status: 'pending_approval' | 'approved' | 'available' | 'borrowed' | 'in_clearance';
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  approvedBy: string | null;
+  approvedAt: string | null;
   createdByUser?: {
     id: string;
     name: string;
@@ -87,7 +86,6 @@ interface Item {
 
 // Define all possible columns
 const ALL_COLUMNS = [
-  { id: 'checkbox', label: '', defaultVisible: true },
   { id: 'item', label: 'Item', defaultVisible: true },
   { id: 'productCode', label: 'Product Code', defaultVisible: true },
   { id: 'category', label: 'Category', defaultVisible: true },
@@ -97,7 +95,7 @@ const ALL_COLUMNS = [
   { id: 'inventory', label: 'Inventory', defaultVisible: true },
   { id: 'vendor', label: 'Vendor', defaultVisible: false },
   { id: 'createdBy', label: 'Created By', defaultVisible: false },
-  { id: 'status', label: 'Status', defaultVisible: false },
+  { id: 'status', label: 'Status', defaultVisible: true },
   { id: 'actions', label: 'Actions', defaultVisible: true },
 ];
 
@@ -113,10 +111,7 @@ export default function ItemsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showBorrowModal, setShowBorrowModal] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [removingItemId, setRemovingItemId] = useState<string | null>(null);
-  const [removalReason, setRemovalReason] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [selectedImage, setSelectedImage] = useState<ItemImage | null>(null);
@@ -128,12 +123,6 @@ export default function ItemsPage() {
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [showInlineAdd, setShowInlineAdd] = useState(false);
   const [inlineAddRowIndex, setInlineAddRowIndex] = useState<number>(-1);
-  const [showArchiveModal, setShowArchiveModal] = useState(false);
-  const [archivingItemId, setArchivingItemId] = useState<string | null>(null);
-  const [archiveReason, setArchiveReason] = useState('');
-  const [isArchiving, setIsArchiving] = useState(false);
-  const [showBulkArchiveModal, setShowBulkArchiveModal] = useState(false);
-  const [selectedItems, setSelectedItems] = useState<string[]>([]);
 
   useEffect(() => {
     fetchItems();
@@ -141,7 +130,7 @@ export default function ItemsPage() {
 
   const fetchItems = async () => {
     try {
-      const response = await fetch('/api/items?status=active');
+      const response = await fetch('/api/items');
       if (response.ok) {
         const data = await response.json();
         setItems(data);
@@ -157,23 +146,13 @@ export default function ItemsPage() {
   };
 
   const handleRemoveItem = async (itemId: string) => {
-    if (!removalReason.trim()) {
-      addMessage('warning', 'Please provide a reason for removal', 'Missing Information');
-      return;
-    }
-    
     try {
       const response = await fetch(`/api/items/${itemId}`, {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',  // Fixed: was 'content-type'
-        },
-        body: JSON.stringify({ reason: removalReason }),
       });
 
       if (response.ok) {
         setRemovingItemId(null);
-        setRemovalReason('');
         fetchItems();
         addMessage('success', 'Item deleted successfully', 'Success');
       } else {
@@ -184,10 +163,6 @@ export default function ItemsPage() {
       console.error('Failed to remove item:', error);
       addMessage('error', 'Failed to remove item', 'Error');
     }
-  };
-  const handleBorrowItem = (item: Item) => {
-    setSelectedItem(item);
-    setShowBorrowModal(true);
   };
 
   const handleAddItemSuccess = () => {
@@ -202,12 +177,6 @@ export default function ItemsPage() {
     setShowEditModal(false);
     fetchItems();
     addMessage('success', 'Item updated successfully', 'Success');
-  };
-
-  const handleBorrowSuccess = () => {
-    setShowBorrowModal(false);
-    fetchItems();
-    addMessage('success', 'Borrow request submitted successfully', 'Success');
   };
 
   const handleViewImage = (image: ItemImage) => {
@@ -230,101 +199,6 @@ export default function ItemsPage() {
     setShowInlineAdd(true);
   };
 
-  const handleArchiveItem = (item: Item) => {
-    setArchivingItemId(item.id);
-    setShowArchiveModal(true);
-  };
-
-  const handleBulkArchive = () => {
-    if (selectedItems.length === 0) {
-      addMessage('warning', 'Please select at least one item to archive', 'No Items Selected');
-      return;
-    }
-    setShowBulkArchiveModal(true);
-  };
-
-  const handleArchiveSuccess = () => {
-    setShowArchiveModal(false);
-    setArchivingItemId(null);
-    setArchiveReason('');
-    fetchItems();
-    addMessage('success', 'Item archived successfully', 'Success');
-  };
-
-  const handleBulkArchiveSuccess = () => {
-    setShowBulkArchiveModal(false);
-    setSelectedItems([]);
-    fetchItems();
-    addMessage('success', 'Items archived successfully', 'Success');
-  };
-
-  const handleArchive = async () => {
-    if (!archivingItemId || !archiveReason.trim()) {
-      addMessage('warning', 'Please provide a reason for archiving', 'Missing Information');
-      return;
-    }
-    
-    setIsArchiving(true);
-    
-    try {
-      const response = await fetch(`/api/items/${archivingItemId}/archive`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ reason: archiveReason }),
-      });
-
-      if (response.ok) {
-        handleArchiveSuccess();
-      } else {
-        const error = await response.json();
-        addMessage('error', error.error || 'Failed to archive item', 'Error');
-      }
-    } catch (error) {
-      console.error('Failed to archive item:', error);
-      addMessage('error', 'Failed to archive item', 'Error');
-    } finally {
-      setIsArchiving(false);
-    }
-  };
-
-  const handleBulkArchiveItems = async () => {
-    if (selectedItems.length === 0 || !archiveReason.trim()) {
-      addMessage('warning', 'Please select items and provide a reason for archiving', 'Missing Information');
-      return;
-    }
-    
-    setIsArchiving(true);
-    
-    try {
-      const response = await fetch('/api/items/bulk-archive', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          itemIds: selectedItems,
-          reason: archiveReason 
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        handleBulkArchiveSuccess();
-        addMessage('success', `${data.message}: ${data.archivedItems.length} items archived`, 'Success');
-      } else {
-        const error = await response.json();
-        addMessage('error', error.error || 'Failed to archive items', 'Error');
-      }
-    } catch (error) {
-      console.error('Failed to bulk archive items:', error);
-      addMessage('error', 'Failed to archive items', 'Error');
-    } finally {
-      setIsArchiving(false);
-    }
-  };
-
   const filteredItems = items.filter(item => {
     const matchesSearch = item.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
                        item.productCode.toLowerCase().includes(searchTerm.toLowerCase());
@@ -333,13 +207,22 @@ export default function ItemsPage() {
     const matchesUnit = unitFilter === 'all' || item.unitOfMeasure === unitFilter;
     const matchesCondition = conditionFilter === 'all' || item.condition === conditionFilter;
     const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
-    const isActive = item.status === 'active';
 
-    return matchesSearch && matchesCategory && matchesLocation && matchesUnit && matchesCondition && matchesStatus && isActive;
+    return matchesSearch && matchesCategory && matchesLocation && matchesUnit && matchesCondition && matchesStatus;
   });
 
-  const isAdmin = session?.user?.role === 'admin';
-  const isUser = session?.user?.role === 'user' || session?.user?.role === 'manager';
+  const userRole = session?.user?.role;
+  const isSuperAdmin = userRole === 'superadmin';
+  const isItemMaster = userRole === 'item-master';
+  const isStorageMaster = userRole === 'storage-master';
+  const isStorageManager = userRole === 'storage-master-manager';
+  const isManager = userRole === 'manager';
+  const isUser = userRole === 'user';
+  
+  const canAddItem = isSuperAdmin || isItemMaster;
+  const canEditItem = isSuperAdmin || isItemMaster;
+  const canDeleteItem = isSuperAdmin;
+  const canViewItems = true; // All roles can view items
 
   const getCategoryBadge = (category: string) => {
     switch (category) {
@@ -354,7 +237,11 @@ export default function ItemsPage() {
     }
   };
 
-  const getLocationBadge = (location: string) => {
+  const getLocationBadge = (location: string | null) => {
+    if (!location) {
+      return <Badge variant="outline" className="bg-gray-100 text-gray-800">Not Assigned</Badge>;
+    }
+    
     switch (location) {
       case 'Storage 1':
         return <Badge variant="outline" className="bg-gray-100 text-gray-800">Storage 1</Badge>;
@@ -405,17 +292,19 @@ export default function ItemsPage() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'active':
-        return <Badge variant="outline" className="bg-green-100 text-green-800">Active</Badge>;
-      case 'archived':
-        return <Badge variant="outline" className="bg-gray-100 text-gray-800">Archived</Badge>;
+      case 'pending_approval':
+        return <Badge variant="outline" className="bg-yellow-100 text-yellow-800">Pending Approval</Badge>;
+      case 'approved':
+        return <Badge variant="outline" className="bg-blue-100 text-blue-800">Approved</Badge>;
+      case 'available':
+        return <Badge variant="outline" className="bg-green-100 text-green-800">Available</Badge>;
+      case 'borrowed':
+        return <Badge variant="outline" className="bg-purple-100 text-purple-800">Borrowed</Badge>;
+      case 'in_clearance':
+        return <Badge variant="outline" className="bg-gray-100 text-gray-800">In Clearance</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
-  };
-
-  const hasAvailableStock = (inventory: number) => {
-    return inventory > 0;
   };
 
   const handleEditItem = (item: Item) => {
@@ -442,14 +331,8 @@ export default function ItemsPage() {
             <input
               type="checkbox"
               className="rounded border-gray-300"
-              checked={selectedItems.includes(item.id)}
-              onChange={(e) => {
-                if (e.target.checked) {
-                  setSelectedItems(prev => [...prev, item.id]);
-                } else {
-                  setSelectedItems(prev => prev.filter(id => id !== item.id));
-                }
-              }}
+              checked={false}
+              onChange={() => {}}
             />
           </TableCell>
         );
@@ -558,31 +441,17 @@ export default function ItemsPage() {
                   </DropdownMenuItem>
                 )}
                 
-                {isUser && hasAvailableStock(item.inventory) && (
+                {canEditItem && (
                   <DropdownMenuItem
-                    onClick={() => handleBorrowItem(item)}
-                    className="text-blue-600"
+                    onClick={() => handleEditItem(item)}
                   >
-                    <Hand className="mr-2 h-4 w-4" />
-                    Borrow
+                    <Edit className="mr-2 h-4 w-4" />
+                    Edit
                   </DropdownMenuItem>
                 )}
                 
-                {isAdmin && (
+                {canDeleteItem && (
                   <>
-                    <DropdownMenuItem
-                      onClick={() => handleEditItem(item)}
-                    >
-                      <Edit className="mr-2 h-4 w-4" />
-                      Edit
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => handleArchiveItem(item)}
-                      className="text-orange-600"
-                    >
-                      <ArchiveIcon className="mr-2 h-4 w-4" />
-                      Archive
-                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       onClick={() => setRemovingItemId(item.id)}
@@ -619,19 +488,11 @@ export default function ItemsPage() {
           </Button>
           <Button 
             variant="outline"
-            onClick={() => window.open('/api/items/export?type=active')}
+            onClick={() => window.open('/api/items/export')}
           >
-            Export Active
+            Export
           </Button>
-          <Button 
-            variant="outline"
-            onClick={handleBulkArchive}
-            disabled={selectedItems.length === 0}
-          >
-            <Archive className="mr-2 h-4 w-4" />
-            Bulk Archive ({selectedItems.length})
-          </Button>
-          {isAdmin && (
+          {canAddItem && (
             <Button 
               onClick={() => setShowAddModal(true)} 
               className="bg-primary-500 hover:bg-primary-600"
@@ -691,6 +552,7 @@ export default function ItemsPage() {
                 <option value="Storage 1">Storage 1</option>
                 <option value="Storage 2">Storage 2</option>
                 <option value="Storage 3">Storage 3</option>
+                <option value="">Not Assigned</option>
               </select>
             </div>
             <div>
@@ -727,8 +589,11 @@ export default function ItemsPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
                 <option value="all">All Status</option>
-                <option value="active">Active</option>
-                <option value="archived">Archived</option>
+                <option value="pending_approval">Pending Approval</option>
+                <option value="approved">Approved</option>
+                <option value="available">Available</option>
+                <option value="borrowed">Borrowed</option>
+                <option value="in_clearance">In Clearance</option>
               </select>
             </div>
           </div>
@@ -770,7 +635,7 @@ export default function ItemsPage() {
                 </TableRow>
               )}
               
-              {isAdmin && !showInlineAdd && (
+              {canAddItem && !showInlineAdd && (
                 <TableRow>
                   <TableCell colSpan={visibleColumns.length} className="text-center py-2">
                     <Button 
@@ -838,14 +703,6 @@ export default function ItemsPage() {
         onSuccess={handleAddItemSuccess}
       />
 
-      {/* Borrow Item Modal */}
-      <BorrowItemModal
-        isOpen={showBorrowModal}
-        onClose={() => setShowBorrowModal(false)}
-        onSuccess={handleBorrowSuccess}
-        item={selectedItem}
-      />
-
       {/* Edit Item Modal */}
       <EditItemModal
         isOpen={showEditModal}
@@ -875,65 +732,25 @@ export default function ItemsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Archive Item Modal */}
-      <ArchiveItemModal
-        isOpen={showArchiveModal}
-        onClose={() => setShowArchiveModal(false)}
-        onSuccess={handleArchiveSuccess}
-        item={items.find(item => item.id === archivingItemId) ?? null}
-      />
-
-      {/* Bulk Archive Modal */}
-      <BulkArchiveModal
-        isOpen={showBulkArchiveModal}
-        onClose={() => {
-          setShowBulkArchiveModal(false);
-          setArchiveReason('');
-        }}
-        onSuccess={handleBulkArchiveSuccess}
-        selectedItems={selectedItems}
-      />
-
       {/* Delete Confirmation Dialog */}
-      <Dialog open={removingItemId !== null} onOpenChange={() => {
-        setRemovingItemId(null);
-        setRemovalReason('');
-      }}>
+      <Dialog open={removingItemId !== null} onOpenChange={() => setRemovingItemId(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete Item</DialogTitle>
             <DialogDescription>
-              This action cannot be undone. Please provide a reason for deleting this item.
+              Are you sure you want to delete this item? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Reason for deletion *
-              </label>
-              <textarea
-                value={removalReason}
-                onChange={(e) => setRemovalReason(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                rows={3}
-                placeholder="Enter reason for deletion..."
-              />
-            </div>
-          </div>
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => {
-                setRemovingItemId(null);
-                setRemovalReason('');
-              }}
+              onClick={() => setRemovingItemId(null)}
             >
               Cancel
             </Button>
             <Button
               variant="destructive"
               onClick={() => removingItemId && handleRemoveItem(removingItemId)}
-              disabled={!removalReason.trim()}
             >
               Delete Item
             </Button>

@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { borrowRequests, users, itemSizes } from '@/lib/db/schema';
+import { borrowRequests, users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
 export async function POST(
-  request: NextRequest,  // This is the NextRequest parameter
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -17,14 +17,14 @@ export async function POST(
     }
 
     const { id } = await params;
-    const { reason } = await request.json();  // Using the NextRequest parameter here
+    const { reason } = await request.json();
     
     if (!reason || !reason.trim()) {
       return NextResponse.json({ error: 'Rejection reason is required' }, { status: 400 });
     }
     
     // Check if request exists
-    const requestData = await db.select()  // Renamed to 'requestData' to avoid conflict
+    const requestData = await db.select()
       .from(borrowRequests)
       .where(eq(borrowRequests.id, id))
       .limit(1);
@@ -33,7 +33,7 @@ export async function POST(
       return NextResponse.json({ error: 'Request not found' }, { status: 404 });
     }
     
-    const borrowRequest = requestData[0];  // Renamed to 'borrowRequest' to avoid conflict
+    const borrowRequest = requestData[0];
     
     if (borrowRequest.status !== 'pending') {
       return NextResponse.json({ error: 'Request is not in pending status' }, { status: 400 });
@@ -51,22 +51,6 @@ export async function POST(
           rejectionReason: reason.trim(),
         })
         .where(eq(borrowRequests.id, id));
-      
-      // Return the reserved items to available stock
-      const itemSizeData = await db.select()
-        .from(itemSizes)
-        .where(eq(itemSizes.id, borrowRequest.itemSizeId))  // Using 'borrowRequest' here
-        .limit(1);
-      
-      if (itemSizeData.length > 0) {
-        const itemSize = itemSizeData[0];
-        
-        await db.update(itemSizes)
-          .set({
-            available: itemSize.available + borrowRequest.quantity,  // Using 'borrowRequest' here
-          })
-          .where(eq(itemSizes.id, itemSize.id));
-      }
       
       return NextResponse.json({ message: 'Request rejected successfully' });
     } else {

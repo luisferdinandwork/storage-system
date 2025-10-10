@@ -2,10 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { items, itemImages as itemImagesTable, users } from '@/lib/db/schema';
+import { items, itemImages as itemImagesTable } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { writeFile, mkdir, rename } from 'fs/promises';
-import { join } from 'path';
 
 // PUT /api/items/[id] - Update a specific item
 export async function PUT(
@@ -19,42 +17,37 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Only admins can update items
-    if (session.user.role !== 'admin') {
+    const allowedRoles = ['superadmin', 'item-master'];
+    if (!allowedRoles.includes(session.user.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const { id: itemId } = await params;
     const body = await request.json();
     const { 
-      productCode, 
-      description, 
-      brandCode, 
-      productGroup, 
-      productDivision, 
-      productCategory, 
-      inventory, 
-      vendor, 
-      period, 
-      season, 
-      gender, 
-      mould, 
-      tier, 
-      silo,
-      location,
-      unitOfMeasure,
-      condition,
-      conditionNotes,
-      status, // Added status field
-      images 
+      productCode, description, brandCode, productGroup, productDivision, 
+      productCategory, inventory, vendor, period, season, gender, mould, 
+      tier, silo, unitOfMeasure, condition, conditionNotes, images 
     } = body;
 
-    // Validate required fields
     if (!productCode || !description || !brandCode || !productGroup || !productDivision || 
-        !productCategory || !vendor || !period || !season || !gender || !mould || !tier || !silo || 
-        !location || !unitOfMeasure || !condition) {
+        !productCategory || !vendor || !period || !season || !gender || !mould || !tier || 
+        !silo || !unitOfMeasure || !condition) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+
+    // Get current item using Drizzle ORM
+    const currentItem = await db.query.items.findFirst({
+      where: eq(items.id, itemId),
+    });
+
+    if (!currentItem) {
+      return NextResponse.json({ error: 'Item not found' }, { status: 404 });
+    }
+
+    if (session.user.role === 'item-master' && currentItem.status !== 'pending_approval') {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: 'Item masters can only edit items with "Pending Approval" status' },
         { status: 400 }
       );
     }
@@ -63,100 +56,38 @@ export async function PUT(
     const [updatedItem] = await db
       .update(items)
       .set({
-        productCode,
-        description,
-        brandCode,
-        productGroup,
-        productDivision,
-        productCategory,
-        inventory: inventory || 0,
-        vendor,
-        period,
-        season,
-        gender,
-        mould,
-        tier,
-        silo,
-        location,
-        unitOfMeasure,
-        condition,
+        productCode, description, brandCode, productGroup, productDivision,
+        productCategory, inventory: inventory || 0, vendor, period, season,
+        gender, mould, tier, silo, unitOfMeasure, condition,
         conditionNotes: conditionNotes || null,
-        status: status || 'active', // Added status field with default
         updatedAt: new Date(),
       })
       .where(eq(items.id, itemId))
       .returning();
 
-    if (!updatedItem) {
-      return NextResponse.json({ error: 'Item not found' }, { status: 404 });
-    }
-
-    // Get existing images before deletion
-    const existingImages = await db
-      .select()
-      .from(itemImagesTable)
-      .where(eq(itemImagesTable.itemId, itemId));
-
-    // Move existing images to deleted directory
-    for (const image of existingImages) {
-      try {
-        const sourcePath = join(process.cwd(), 'public', 'uploads', image.fileName);
-        const deletedDir = join(process.cwd(), 'public', 'deleted');
-        
-        // Ensure deleted directory exists
-        await mkdir(deletedDir, { recursive: true });
-        
-        const destPath = join(deletedDir, image.fileName);
-        
-        // Check if source file exists before trying to move it
-        try {
-          await writeFile(sourcePath, Buffer.from(''), { flag: 'r' });
-          console.log(`Source file exists: ${sourcePath}`);
-          
-          // Move the file
-          await rename(sourcePath, destPath);
-          console.log(`Moved deleted image: ${image.fileName}`);
-        } catch (checkError) {
-          console.log(`Source file does not exist: ${sourcePath}`);
-          console.log(`Error checking file:`, checkError);
-        }
-      } catch (error) {
-        console.error(`Failed to move deleted image: ${image.fileName}`, error);
-      }
-    }
-
-    // Delete existing images from database
+    // Delete existing images
     await db.delete(itemImagesTable).where(eq(itemImagesTable.itemId, itemId));
 
     // Create new images if provided
-    let newImages: { id: string; createdAt: Date; itemId: string; fileName: string; originalName: string; mimeType: string; size: number; altText: string | null; isPrimary: boolean; }[] = [];
+    let newImages: any[] = [];
     if (images && images.length > 0) {
-      const imagesToInsert = images.map((image: { fileName: string; originalName: string; mimeType: string; size: number; altText?: string; isPrimary?: boolean }, index: number) => ({
+      const imagesToInsert = images.map((image: any, index: number) => ({
         itemId: updatedItem.id,
         fileName: image.fileName,
         originalName: image.originalName,
         mimeType: image.mimeType,
         size: image.size,
         altText: image.altText || `${description} - Image ${index + 1}`,
-        isPrimary: image.isPrimary || index === 0, // First image is primary by default
+        isPrimary: image.isPrimary || index === 0,
       }));
 
-      newImages = await db
-        .insert(itemImagesTable)
-        .values(imagesToInsert)
-        .returning();
+      newImages = await db.insert(itemImagesTable).values(imagesToInsert).returning();
     }
 
-    return NextResponse.json({
-      ...updatedItem,
-      images: newImages,
-    });
+    return NextResponse.json({ ...updatedItem, images: newImages });
   } catch (error) {
     console.error('Failed to update item:', error);
-    return NextResponse.json(
-      { error: 'Failed to update item' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to update item' }, { status: 500 });
   }
 }
 
@@ -172,36 +103,23 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Only admins can delete items
-    if (session.user.role !== 'admin') {
+    if (session.user.role !== 'superadmin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const { id: itemId } = await params;
-    const { reason } = await request.json();
 
-    if (!reason || !reason.trim()) {
-      return NextResponse.json(
-        { error: 'Reason is required for deletion' },
-        { status: 400 }
-      );
-    }
-
-    // Get the item to delete
-    const [itemToDelete] = await db
-      .select()
-      .from(items)
-      .where(eq(items.id, itemId));
+    // Get the item using Drizzle ORM
+    const itemToDelete = await db.query.items.findFirst({
+      where: eq(items.id, itemId),
+      with: {
+        images: true,
+      },
+    });
 
     if (!itemToDelete) {
       return NextResponse.json({ error: 'Item not found' }, { status: 404 });
     }
-
-    // Get item images before deletion
-    const imagesToDelete = await db
-      .select()
-      .from(itemImagesTable)
-      .where(eq(itemImagesTable.itemId, itemId));
 
     // Delete the item images from database
     await db.delete(itemImagesTable).where(eq(itemImagesTable.itemId, itemId));
@@ -215,9 +133,6 @@ export async function DELETE(
     });
   } catch (error) {
     console.error('Failed to delete item:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete item' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to delete item' }, { status: 500 });
   }
 }

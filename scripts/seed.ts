@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { db } from '../lib/db';
-import { users, items, departments, itemImages } from '../lib/db/schema';
+import { users, items, departments, itemImages, itemRequests } from '../lib/db/schema';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 
@@ -8,6 +8,7 @@ async function seed() {
   try {
     // Delete all existing data first (in correct order to respect foreign key constraints)
     console.log('Removing all existing data...');
+    await db.delete(itemRequests);
     await db.delete(itemImages);
     await db.delete(items);
     await db.delete(users);
@@ -26,19 +27,60 @@ async function seed() {
       description: 'Administrative department for overall management',
     }).returning();
 
+    const [storageDept] = await db.insert(departments).values({
+      name: 'Storage Management',
+      description: 'Manages all storage facilities and inventory',
+    }).returning();
+
     console.log('Departments created successfully');
 
-    // Create admin user
-    console.log('Creating admin user...');
-    const adminPassword = await bcrypt.hash('admin123', 10);
-    const [adminUser] = await db.insert(users).values({
-      name: 'Admin User',
-      email: 'admin@example.com',
-      password: adminPassword,
-      role: 'admin',
+    // Create superadmin user
+    console.log('Creating superadmin user...');
+    const superadminPassword = await bcrypt.hash('superadmin123', 10);
+    const [superadminUser] = await db.insert(users).values({
+      name: 'Super Admin',
+      email: 'superadmin@example.com',
+      password: superadminPassword,
+      role: 'superadmin',
       departmentId: adminDept.id,
     }).returning();
-    console.log('Admin user created');
+    console.log('Superadmin user created');
+
+    // Create storage master manager
+    console.log('Creating storage master manager...');
+    const storageManagerPassword = await bcrypt.hash('storagemanager123', 10);
+    const [storageManager] = await db.insert(users).values({
+      name: 'Storage Master Manager',
+      email: 'storage.manager@example.com',
+      password: storageManagerPassword,
+      role: 'storage-master-manager',
+      departmentId: storageDept.id,
+    }).returning();
+    console.log('Storage master manager created');
+
+    // Create only one storage master
+    console.log('Creating storage master...');
+    const storageMasterPassword = await bcrypt.hash('storagemaster123', 10);
+    const [storageMaster1] = await db.insert(users).values({
+      name: 'Storage Master',
+      email: 'storage.master@example.com',
+      password: storageMasterPassword,
+      role: 'storage-master',
+      departmentId: storageDept.id,
+    }).returning();
+    console.log('Storage master created');
+
+    // Create only one item master
+    console.log('Creating item master...');
+    const itemMasterPassword = await bcrypt.hash('itemmaster123', 10);
+    const [itemMaster1] = await db.insert(users).values({
+      name: 'Item Master',
+      email: 'item.master@example.com',
+      password: itemMasterPassword,
+      role: 'item-master',
+      departmentId: storageDept.id,
+    }).returning();
+    console.log('Item master created');
 
     // Create department managers
     console.log('Creating department managers...');
@@ -56,9 +98,17 @@ async function seed() {
     console.log('Creating regular users...');
     const userPassword = await bcrypt.hash('user123', 10);
     
-    const [sportsUser] = await db.insert(users).values({
-      name: 'Sports Specialist',
-      email: 'sports.specialist@example.com',
+    const [sportsUser1] = await db.insert(users).values({
+      name: 'Sports Specialist 1',
+      email: 'sports.specialist1@example.com',
+      password: userPassword,
+      role: 'user',
+      departmentId: sportsDept.id,
+    }).returning();
+
+    const [sportsUser2] = await db.insert(users).values({
+      name: 'Sports Specialist 2',
+      email: 'sports.specialist2@example.com',
       password: userPassword,
       role: 'user',
       departmentId: sportsDept.id,
@@ -84,10 +134,11 @@ async function seed() {
         mould: 'PRM 096',
         tier: 'PRO',
         silo: 'LIFESTYLE',
-        location: 'Storage 1' as const,
         unitOfMeasure: 'PRS' as const,
         condition: 'excellent' as const,
-        conditionNotes: 'Brand new in box'
+        conditionNotes: 'Brand new in box',
+        status: 'pending_approval' as const,
+        createdBy: itemMaster1.id,
       },
       {
         productCode: 'SPE1000002',
@@ -104,10 +155,11 @@ async function seed() {
         mould: 'PRM 096',
         tier: 'PRO',
         silo: 'LIFESTYLE',
-        location: 'Storage 2' as const,
         unitOfMeasure: 'PRS' as const,
         condition: 'good' as const,
-        conditionNotes: 'Minor scuff marks on sole'
+        conditionNotes: 'Minor scuff marks on sole',
+        status: 'pending_approval' as const,
+        createdBy: itemMaster1.id,
       },
       {
         productCode: 'SPE1000003',
@@ -124,10 +176,14 @@ async function seed() {
         mould: 'PRM 096',
         tier: 'PRO',
         silo: 'LIFESTYLE',
-        location: 'Storage 3' as const,
         unitOfMeasure: 'PRS' as const,
         condition: 'good' as const,
-        conditionNotes: 'Display model, slight wear'
+        conditionNotes: 'Display model, slight wear',
+        status: 'approved' as const,
+        approvedBy: storageMaster1.id,
+        approvedAt: new Date(),
+        location: 'Storage 1' as const,
+        createdBy: itemMaster1.id,
       },
       {
         productCode: 'SPE1000004',
@@ -144,10 +200,14 @@ async function seed() {
         mould: 'PRM 096',
         tier: 'PRO',
         silo: 'LIFESTYLE',
-        location: 'Storage 1' as const,
         unitOfMeasure: 'PRS' as const,
         condition: 'fair' as const,
-        conditionNotes: 'Heel wear, needs replacement soon'
+        conditionNotes: 'Heel wear, needs replacement soon',
+        status: 'available' as const,
+        approvedBy: storageMaster1.id,
+        approvedAt: new Date(),
+        location: 'Storage 2' as const,
+        createdBy: itemMaster1.id,
       },
       {
         productCode: 'SPE1000006',
@@ -164,10 +224,14 @@ async function seed() {
         mould: 'PRM 096',
         tier: 'PRO',
         silo: 'LIFESTYLE',
-        location: 'Storage 2' as const,
         unitOfMeasure: 'PRS' as const,
         condition: 'excellent' as const,
-        conditionNotes: 'New collection'
+        conditionNotes: 'New collection',
+        status: 'available' as const,
+        approvedBy: storageMaster1.id,
+        approvedAt: new Date(),
+        location: 'Storage 3' as const,
+        createdBy: itemMaster1.id,
       },
       {
         productCode: 'SPE1000007',
@@ -184,10 +248,14 @@ async function seed() {
         mould: 'PRM 096',
         tier: 'PRO',
         silo: 'LIFESTYLE',
-        location: 'Storage 3' as const,
         unitOfMeasure: 'PRS' as const,
         condition: 'good' as const,
-        conditionNotes: 'No original box'
+        conditionNotes: 'No original box',
+        status: 'borrowed' as const,
+        approvedBy: storageMaster1.id,
+        approvedAt: new Date(),
+        location: 'Storage 1' as const,
+        createdBy: itemMaster1.id,
       },
       // Add more items with different categories
       {
@@ -205,10 +273,14 @@ async function seed() {
         mould: 'ACC 001',
         tier: 'PRO',
         silo: 'SPORTS',
-        location: 'Storage 1' as const,
         unitOfMeasure: 'PCS' as const,
         condition: 'excellent' as const,
-        conditionNotes: 'With original packaging'
+        conditionNotes: 'With original packaging',
+        status: 'available' as const,
+        approvedBy: storageMaster1.id,
+        approvedAt: new Date(),
+        location: 'Storage 2' as const,
+        createdBy: itemMaster1.id,
       },
       {
         productCode: 'EQU1000001',
@@ -225,10 +297,14 @@ async function seed() {
         mould: 'TEN 045',
         tier: 'PRO',
         silo: 'SPORTS',
-        location: 'Storage 2' as const,
         unitOfMeasure: 'PCS' as const,
         condition: 'good' as const,
-        conditionNotes: 'String tension needs adjustment'
+        conditionNotes: 'String tension needs adjustment',
+        status: 'available' as const,
+        approvedBy: storageMaster1.id,
+        approvedAt: new Date(),
+        location: 'Storage 3' as const,
+        createdBy: itemMaster1.id,
       },
       {
         productCode: 'APP1000001',
@@ -245,10 +321,14 @@ async function seed() {
         mould: 'APP 012',
         tier: 'STD',
         silo: 'SPORTS',
-        location: 'Storage 3' as const,
         unitOfMeasure: 'PCS' as const,
         condition: 'good' as const,
-        conditionNotes: 'Minor fabric pilling'
+        conditionNotes: 'Minor fabric pilling',
+        status: 'available' as const,
+        approvedBy: storageMaster1.id,
+        approvedAt: new Date(),
+        location: 'Storage 1' as const,
+        createdBy: itemMaster1.id,
       },
       {
         productCode: 'APP1000002',
@@ -265,19 +345,18 @@ async function seed() {
         mould: 'APP 013',
         tier: 'STD',
         silo: 'SPORTS',
-        location: 'Storage 1' as const,
         unitOfMeasure: 'PCS' as const,
         condition: 'excellent' as const,
-        conditionNotes: 'New with tags'
+        conditionNotes: 'New with tags',
+        status: 'available' as const,
+        approvedBy: storageMaster1.id,
+        approvedAt: new Date(),
+        location: 'Storage 2' as const,
+        createdBy: itemMaster1.id,
       }
     ];
 
-    const createdItems = await db.insert(items).values(
-      itemsData.map(item => ({
-        ...item,
-        createdBy: adminUser.id,
-      }))
-    ).returning();
+    const createdItems = await db.insert(items).values(itemsData).returning();
 
     console.log('Items created successfully');
 
@@ -309,7 +388,30 @@ async function seed() {
     }
     console.log('Item images created successfully');
 
+    // Create item requests for pending items
+    console.log('Creating item requests...');
+    for (const item of createdItems) {
+      if (item.status === 'pending_approval') {
+        await db.insert(itemRequests).values({
+          itemId: item.id,
+          requestedBy: item.createdBy,
+          status: 'pending',
+          notes: 'Please review and approve this item for storage location assignment',
+        });
+      }
+    }
+    console.log('Item requests created successfully');
+
     console.log('Seed data created successfully');
+    console.log('\nLogin credentials:');
+    console.log('Superadmin: superadmin@example.com / superadmin123');
+    console.log('Storage Master Manager: storage.manager@example.com / storagemanager123');
+    console.log('Storage Master: storage.master@example.com / storagemaster123');
+    console.log('Item Master: item.master@example.com / itemmaster123');
+    console.log('Sports Manager: sports.manager@example.com / manager123');
+    console.log('Sports Specialist 1: sports.specialist1@example.com / user123');
+    console.log('Sports Specialist 2: sports.specialist2@example.com / user123');
+    
     process.exit(0);
   } catch (error) {
     console.error('Error seeding data:', error);

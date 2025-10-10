@@ -1,5 +1,3 @@
-// scripts/reset-db.ts
-
 import 'dotenv/config';
 import { neon } from '@neondatabase/serverless';
 
@@ -10,12 +8,11 @@ async function resetDatabase() {
     console.log('Resetting database...');
     
     // Drop all tables in correct order to respect foreign key constraints
-    await sql`DROP TABLE IF EXISTS item_removals CASCADE`;
-    await sql`DROP TABLE IF EXISTS item_condition_details CASCADE`;
-    await sql`DROP TABLE IF EXISTS item_conditions CASCADE`;
-    await sql`DROP TABLE IF EXISTS item_images CASCADE`;
+    await sql`DROP TABLE IF EXISTS item_clearances CASCADE`;
+    await sql`DROP TABLE IF EXISTS return_requests CASCADE`;
     await sql`DROP TABLE IF EXISTS borrow_requests CASCADE`;
-    await sql`DROP TABLE IF EXISTS item_sizes CASCADE`;
+    await sql`DROP TABLE IF EXISTS item_requests CASCADE`;
+    await sql`DROP TABLE IF EXISTS item_images CASCADE`;
     await sql`DROP TABLE IF EXISTS items CASCADE`;
     await sql`DROP TABLE IF EXISTS users CASCADE`;
     await sql`DROP TABLE IF EXISTS departments CASCADE`;

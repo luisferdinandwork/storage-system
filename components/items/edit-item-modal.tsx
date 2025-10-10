@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ImagePlus, X, Upload } from 'lucide-react';
 
 interface Item {
@@ -39,13 +41,16 @@ interface Item {
   mould: string;
   tier: string;
   silo: string;
-  location: string;
+  location: string | null;
   unitOfMeasure: string;
   condition: string;
   conditionNotes: string | null;
+  status: 'pending_approval' | 'approved' | 'available' | 'borrowed' | 'in_clearance';
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  approvedBy: string | null;
+  approvedAt: string | null;
   createdByUser?: {
     id: string;
     name: string;
@@ -82,8 +87,10 @@ interface UploadedImage {
 }
 
 export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModalProps) {
+  const { data: session } = useSession();
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     productCode: '',
     description: '',
@@ -99,7 +106,6 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
     mould: '',
     tier: '',
     silo: '',
-    location: 'Storage 1',
     unitOfMeasure: 'PCS',
     condition: 'good',
     conditionNotes: '',
@@ -123,7 +129,6 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
         mould: item.mould,
         tier: item.tier,
         silo: item.silo,
-        location: item.location,
         unitOfMeasure: item.unitOfMeasure,
         condition: item.condition,
         conditionNotes: item.conditionNotes || '',
@@ -141,6 +146,7 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
         isNew: false,
       }));
       setImages(existingImages);
+      setError(null);
     }
   }, [isOpen, item]);
 
@@ -159,44 +165,63 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
     }));
   };
 
-  // In the handleFileUpload function of EditItemModal
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const files = e.target.files;
-  if (!files || files.length === 0) return;
+    setIsUploading(true);
+    setError(null);
+    
+    try {
+      for (const file of files) {
+        // Check file size (max 5MB)
+        const maxSize = 5 * 1024 * 1024; // 5MB
+        if (file.size > maxSize) {
+          setError(`File ${file.name} is too large. Maximum size is 5MB.`);
+          continue;
+        }
 
-  setIsUploading(true);
-  
-  try {
-    for (const file of files) {
-      const uploadFormData = new FormData(); // Rename to avoid conflict
-      uploadFormData.append('file', file);
+        // Check file type
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+        if (!allowedTypes.includes(file.type)) {
+          setError(`File ${file.name} is not a valid image type. Only JPEG, PNG, and WebP are allowed.`);
+          continue;
+        }
 
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: uploadFormData,
-      });
+        const uploadFormData = new FormData();
+        uploadFormData.append('file', file);
+        uploadFormData.append('sku', formData.productCode);
 
-      if (response.ok) {
-        const uploadedFile = await response.json();
-        setImages(prev => [...prev, {
-          ...uploadedFile,
-          altText: `${formData.description} - Image ${prev.length + 1}`, // Use component's formData
-          isPrimary: prev.length === 0,
-          isNew: true,
-        }]);
-      } else {
-        console.error('Failed to upload file:', file.name);
+        try {
+          const response = await fetch('/api/upload', {
+            method: 'POST',
+            body: uploadFormData,
+          });
+
+          if (response.ok) {
+            const uploadedFile = await response.json();
+            setImages(prev => [...prev, {
+              ...uploadedFile,
+              altText: `${formData.description} - Image ${prev.length + 1}`,
+              isPrimary: prev.length === 0,
+              isNew: true,
+            }]);
+          } else {
+            const errorData = await response.json().catch(() => ({}));
+            setError(`Failed to upload ${file.name}: ${errorData.error || 'Server error'}`);
+          }
+        } catch (fetchError) {
+          setError(`Failed to upload ${file.name}: Network error`);
+        }
       }
+    } catch (error) {
+      setError('Failed to upload files. Please try again.');
+    } finally {
+      setIsUploading(false);
+      // Clear the input
+      e.target.value = '';
     }
-  } catch (error) {
-    console.error('Error uploading files:', error);
-  } finally {
-    setIsUploading(false);
-    // Clear the input
-    e.target.value = '';
-  }
-};
+  };
 
   const handleImageChange = (index: number, field: string, value: string | boolean) => {
     setImages(prev => {
@@ -226,11 +251,81 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     });
   };
 
+  const validateForm = () => {
+    if (!formData.productCode.trim()) {
+      setError('Product Code is required');
+      return false;
+    }
+    if (!formData.description.trim()) {
+      setError('Description is required');
+      return false;
+    }
+    if (!formData.brandCode.trim()) {
+      setError('Brand Code is required');
+      return false;
+    }
+    if (!formData.productGroup.trim()) {
+      setError('Product Group is required');
+      return false;
+    }
+    if (!formData.productDivision.trim()) {
+      setError('Product Division is required');
+      return false;
+    }
+    if (!formData.productCategory) {
+      setError('Product Category is required');
+      return false;
+    }
+    if (!formData.vendor.trim()) {
+      setError('Vendor is required');
+      return false;
+    }
+    if (!formData.period.trim()) {
+      setError('Period is required');
+      return false;
+    }
+    if (!formData.season) {
+      setError('Season is required');
+      return false;
+    }
+    if (!formData.gender) {
+      setError('Gender is required');
+      return false;
+    }
+    if (!formData.mould.trim()) {
+      setError('Mould is required');
+      return false;
+    }
+    if (!formData.tier) {
+      setError('Tier is required');
+      return false;
+    }
+    if (!formData.silo) {
+      setError('Silo is required');
+      return false;
+    }
+    if (!formData.unitOfMeasure) {
+      setError('Unit of Measure is required');
+      return false;
+    }
+    if (!formData.condition) {
+      setError('Condition is required');
+      return false;
+    }
+    
+    return true;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!item) return;
     
+    if (!validateForm()) {
+      return;
+    }
+    
     setIsLoading(true);
+    setError(null);
 
     try {
       const response = await fetch(`/api/items/${item.id}`, {
@@ -247,25 +342,59 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (response.ok) {
         onSuccess();
       } else {
-        const error = await response.json();
-        console.error('Failed to update item:', error);
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to update item. Please try again.');
       }
     } catch (error) {
       console.error('Failed to update item:', error);
+      setError('Failed to update item. Please check your connection and try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Check if the current user can edit this item
+  const userRole = session?.user?.role;
+  const isSuperAdmin = userRole === 'superadmin';
+  const isItemMaster = userRole === 'item-master';
+  
+  // Super admins can edit any item regardless of status
+  // Item masters can only edit items with pending_approval status
+  const canEditItem = (isSuperAdmin || isItemMaster) && 
+                      (isSuperAdmin || item?.status === 'pending_approval');
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Item</DialogTitle>
           <DialogDescription>
             Update the item information. Fill in all the required fields.
+            {isItemMaster && item?.status !== 'pending_approval' && (
+              <span className="text-amber-600 block mt-1">
+                Note: As an Item Master, you can only edit items with "Pending Approval" status.
+              </span>
+            )}
           </DialogDescription>
         </DialogHeader>
+        
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        
+        {!canEditItem && item && (
+          <Alert variant="destructive">
+            <AlertDescription>
+              {isSuperAdmin 
+                ? 'You don\'t have permission to edit this item.'
+                : 'You don\'t have permission to edit this item. Only superadmins can edit items with any status, and item-masters can only edit items with "Pending Approval" status.'
+              }
+            </AlertDescription>
+          </Alert>
+        )}
+        
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -276,6 +405,7 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 value={formData.productCode}
                 onChange={handleInputChange}
                 required
+                disabled={!canEditItem}
               />
             </div>
             <div className="space-y-2">
@@ -286,6 +416,7 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 value={formData.brandCode}
                 onChange={handleInputChange}
                 required
+                disabled={!canEditItem}
               />
             </div>
             <div className="space-y-2 md:col-span-2">
@@ -296,6 +427,7 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 value={formData.description}
                 onChange={handleInputChange}
                 required
+                disabled={!canEditItem}
               />
             </div>
             <div className="space-y-2">
@@ -306,6 +438,7 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 value={formData.productGroup}
                 onChange={handleInputChange}
                 required
+                disabled={!canEditItem}
               />
             </div>
             <div className="space-y-2">
@@ -316,11 +449,16 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 value={formData.productDivision}
                 onChange={handleInputChange}
                 required
+                disabled={!canEditItem}
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="productCategory">Product Category</Label>
-              <Select value={formData.productCategory} onValueChange={(value) => handleSelectChange('productCategory', value)}>
+              <Select 
+                value={formData.productCategory} 
+                onValueChange={(value) => handleSelectChange('productCategory', value)}
+                disabled={!canEditItem}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
@@ -341,6 +479,7 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 value={formData.inventory}
                 onChange={handleInputChange}
                 required
+                disabled={!canEditItem}
               />
             </div>
             <div className="space-y-2">
@@ -351,6 +490,7 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 value={formData.vendor}
                 onChange={handleInputChange}
                 required
+                disabled={!canEditItem}
               />
             </div>
             <div className="space-y-2">
@@ -362,11 +502,16 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 onChange={handleInputChange}
                 placeholder="e.g., 24Q1"
                 required
+                disabled={!canEditItem}
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="season">Season</Label>
-              <Select value={formData.season} onValueChange={(value) => handleSelectChange('season', value)}>
+              <Select 
+                value={formData.season} 
+                onValueChange={(value) => handleSelectChange('season', value)}
+                disabled={!canEditItem}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select season" />
                 </SelectTrigger>
@@ -378,7 +523,11 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             </div>
             <div className="space-y-2">
               <Label htmlFor="gender">Gender</Label>
-              <Select value={formData.gender} onValueChange={(value) => handleSelectChange('gender', value)}>
+              <Select 
+                value={formData.gender} 
+                onValueChange={(value) => handleSelectChange('gender', value)}
+                disabled={!canEditItem}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select gender" />
                 </SelectTrigger>
@@ -397,11 +546,16 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 value={formData.mould}
                 onChange={handleInputChange}
                 required
+                disabled={!canEditItem}
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="tier">Tier</Label>
-              <Select value={formData.tier} onValueChange={(value) => handleSelectChange('tier', value)}>
+              <Select 
+                value={formData.tier} 
+                onValueChange={(value) => handleSelectChange('tier', value)}
+                disabled={!canEditItem}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select tier" />
                 </SelectTrigger>
@@ -414,7 +568,11 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             </div>
             <div className="space-y-2">
               <Label htmlFor="silo">Silo</Label>
-              <Select value={formData.silo} onValueChange={(value) => handleSelectChange('silo', value)}>
+              <Select 
+                value={formData.silo} 
+                onValueChange={(value) => handleSelectChange('silo', value)}
+                disabled={!canEditItem}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select silo" />
                 </SelectTrigger>
@@ -425,22 +583,16 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="location">Location</Label>
-              <Select value={formData.location} onValueChange={(value) => handleSelectChange('location', value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select location" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Storage 1">Storage 1</SelectItem>
-                  <SelectItem value="Storage 2">Storage 2</SelectItem>
-                  <SelectItem value="Storage 3">Storage 3</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            
+            {/* Location field is removed as it's set by storage master */}
+            
             <div className="space-y-2">
               <Label htmlFor="unitOfMeasure">Unit of Measure</Label>
-              <Select value={formData.unitOfMeasure} onValueChange={(value) => handleSelectChange('unitOfMeasure', value)}>
+              <Select 
+                value={formData.unitOfMeasure} 
+                onValueChange={(value) => handleSelectChange('unitOfMeasure', value)}
+                disabled={!canEditItem}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select unit" />
                 </SelectTrigger>
@@ -452,7 +604,11 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             </div>
             <div className="space-y-2">
               <Label htmlFor="condition">Condition</Label>
-              <Select value={formData.condition} onValueChange={(value) => handleSelectChange('condition', value)}>
+              <Select 
+                value={formData.condition} 
+                onValueChange={(value) => handleSelectChange('condition', value)}
+                disabled={!canEditItem}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select condition" />
                 </SelectTrigger>
@@ -472,6 +628,7 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 value={formData.conditionNotes}
                 onChange={handleInputChange}
                 placeholder="Additional notes about the item condition"
+                disabled={!canEditItem}
               />
             </div>
           </div>
@@ -488,14 +645,14 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                   accept="image/*"
                   onChange={handleFileUpload}
                   className="hidden"
-                  disabled={isUploading}
+                  disabled={isUploading || !canEditItem}
                 />
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => document.getElementById('image-upload')?.click()}
-                  disabled={isUploading}
+                  disabled={isUploading || !canEditItem}
                 >
                   {isUploading ? (
                     <>
@@ -524,6 +681,7 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleRemoveImage(index)}
+                        disabled={!canEditItem}
                       >
                         <X className="h-4 w-4" />
                       </Button>
@@ -542,6 +700,7 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                             value={image.altText || ''}
                             onChange={(e) => handleImageChange(index, 'altText', e.target.value)}
                             placeholder="Image description"
+                            disabled={!canEditItem}
                           />
                         </div>
                       </div>
@@ -552,6 +711,7 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                         id={`image-primary-${index}`}
                         checked={image.isPrimary || false}
                         onChange={(e) => handleImageChange(index, 'isPrimary', e.target.checked)}
+                        disabled={!canEditItem}
                       />
                       <Label htmlFor={`image-primary-${index}`} className="text-sm">
                         Primary Image
@@ -567,7 +727,10 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading || isUploading}>
+            <Button 
+              type="submit" 
+              disabled={isLoading || isUploading || !canEditItem}
+            >
               {isLoading ? 'Updating...' : 'Update Item'}
             </Button>
           </DialogFooter>

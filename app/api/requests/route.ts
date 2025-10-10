@@ -18,6 +18,7 @@ export async function GET() {
     const requestUser = alias(users, 'requestUser');
     const managerUser = alias(users, 'managerUser');
     const adminUser = alias(users, 'adminUser');
+    const returnApprovedUser = alias(users, 'returnApprovedUser');
 
     let requests;
     
@@ -27,14 +28,25 @@ export async function GET() {
         id: borrowRequests.id,
         item: {
           id: items.id,
-          name: items.name,
-          category: items.category,
-        },
-        itemSize: {
-          id: itemSizes.id,
-          size: itemSizes.size,
-          quantity: itemSizes.quantity,
-          available: itemSizes.available,
+          productCode: items.productCode,
+          description: items.description,
+          brandCode: items.brandCode,
+          productGroup: items.productGroup,
+          productDivision: items.productDivision,
+          productCategory: items.productCategory,
+          inventory: items.inventory,
+          vendor: items.vendor,
+          period: items.period,
+          season: items.season,
+          gender: items.gender,
+          mould: items.mould,
+          tier: items.tier,
+          silo: items.silo,
+          location: items.location,
+          unitOfMeasure: items.unitOfMeasure,
+          condition: items.condition,
+          conditionNotes: items.conditionNotes,
+          status: items.status,
         },
         user: {
           id: requestUser.id,
@@ -44,6 +56,7 @@ export async function GET() {
           departmentId: requestUser.departmentId,
         },
         quantity: borrowRequests.quantity,
+        requestedAt: borrowRequests.requestedAt,
         startDate: borrowRequests.startDate,
         endDate: borrowRequests.endDate,
         reason: borrowRequests.reason,
@@ -61,18 +74,27 @@ export async function GET() {
         managerApprovedAt: borrowRequests.managerApprovedAt,
         adminApprovedAt: borrowRequests.adminApprovedAt,
         rejectionReason: borrowRequests.rejectionReason,
+        dueDate: borrowRequests.dueDate,
+        returnRequestedAt: borrowRequests.returnRequestedAt,
+        returnApprovedBy: {
+          id: returnApprovedUser.id,
+          name: returnApprovedUser.name,
+        },
+        returnApprovedAt: borrowRequests.returnApprovedAt,
+        receivedAt: borrowRequests.receivedAt,
+        returnNotes: borrowRequests.returnNotes,
+        receiveNotes: borrowRequests.receiveNotes,
         returnedAt: borrowRequests.returnedAt,
       })
       .from(borrowRequests)
       .leftJoin(items, eq(borrowRequests.itemId, items.id))
-      .leftJoin(itemSizes, eq(borrowRequests.itemSizeId, itemSizes.id))
       .leftJoin(requestUser, eq(borrowRequests.userId, requestUser.id))
       .leftJoin(managerUser, eq(borrowRequests.managerApprovedBy, managerUser.id))
       .leftJoin(adminUser, eq(borrowRequests.adminApprovedBy, adminUser.id))
+      .leftJoin(returnApprovedUser, eq(borrowRequests.returnApprovedBy, returnApprovedUser.id))
       .where(eq(borrowRequests.userId, session.user.id));
     } else if (session.user.role === 'manager') {
       // Managers can only see requests from users in their department
-      // First get the manager's department
       const manager = await db.select({
         departmentId: users.departmentId,
       })
@@ -86,19 +108,29 @@ export async function GET() {
       
       const managerDepartmentId = manager[0].departmentId;
       
-      // Get requests from users in the same department
       requests = await db.select({
         id: borrowRequests.id,
         item: {
           id: items.id,
-          name: items.name,
-          category: items.category,
-        },
-        itemSize: {
-          id: itemSizes.id,
-          size: itemSizes.size,
-          quantity: itemSizes.quantity,
-          available: itemSizes.available,
+          productCode: items.productCode,
+          description: items.description,
+          brandCode: items.brandCode,
+          productGroup: items.productGroup,
+          productDivision: items.productDivision,
+          productCategory: items.productCategory,
+          inventory: items.inventory,
+          vendor: items.vendor,
+          period: items.period,
+          season: items.season,
+          gender: items.gender,
+          mould: items.mould,
+          tier: items.tier,
+          silo: items.silo,
+          location: items.location,
+          unitOfMeasure: items.unitOfMeasure,
+          condition: items.condition,
+          conditionNotes: items.conditionNotes,
+          status: items.status,
         },
         user: {
           id: requestUser.id,
@@ -108,6 +140,7 @@ export async function GET() {
           departmentId: requestUser.departmentId,
         },
         quantity: borrowRequests.quantity,
+        requestedAt: borrowRequests.requestedAt,
         startDate: borrowRequests.startDate,
         endDate: borrowRequests.endDate,
         reason: borrowRequests.reason,
@@ -125,14 +158,24 @@ export async function GET() {
         managerApprovedAt: borrowRequests.managerApprovedAt,
         adminApprovedAt: borrowRequests.adminApprovedAt,
         rejectionReason: borrowRequests.rejectionReason,
+        dueDate: borrowRequests.dueDate,
+        returnRequestedAt: borrowRequests.returnRequestedAt,
+        returnApprovedBy: {
+          id: returnApprovedUser.id,
+          name: returnApprovedUser.name,
+        },
+        returnApprovedAt: borrowRequests.returnApprovedAt,
+        receivedAt: borrowRequests.receivedAt,
+        returnNotes: borrowRequests.returnNotes,
+        receiveNotes: borrowRequests.receiveNotes,
         returnedAt: borrowRequests.returnedAt,
       })
       .from(borrowRequests)
       .leftJoin(items, eq(borrowRequests.itemId, items.id))
-      .leftJoin(itemSizes, eq(borrowRequests.itemSizeId, itemSizes.id))
       .leftJoin(requestUser, eq(borrowRequests.userId, requestUser.id))
       .leftJoin(managerUser, eq(borrowRequests.managerApprovedBy, managerUser.id))
       .leftJoin(adminUser, eq(borrowRequests.adminApprovedBy, adminUser.id))
+      .leftJoin(returnApprovedUser, eq(borrowRequests.returnApprovedBy, returnApprovedUser.id))
       .where(eq(requestUser.departmentId, managerDepartmentId));
     } else {
       // Admins can see all requests
@@ -140,14 +183,25 @@ export async function GET() {
         id: borrowRequests.id,
         item: {
           id: items.id,
-          name: items.name,
-          category: items.category,
-        },
-        itemSize: {
-          id: itemSizes.id,
-          size: itemSizes.size,
-          quantity: itemSizes.quantity,
-          available: itemSizes.available,
+          productCode: items.productCode,
+          description: items.description,
+          brandCode: items.brandCode,
+          productGroup: items.productGroup,
+          productDivision: items.productDivision,
+          productCategory: items.productCategory,
+          inventory: items.inventory,
+          vendor: items.vendor,
+          period: items.period,
+          season: items.season,
+          gender: items.gender,
+          mould: items.mould,
+          tier: items.tier,
+          silo: items.silo,
+          location: items.location,
+          unitOfMeasure: items.unitOfMeasure,
+          condition: items.condition,
+          conditionNotes: items.conditionNotes,
+          status: items.status,
         },
         user: {
           id: requestUser.id,
@@ -157,6 +211,7 @@ export async function GET() {
           departmentId: requestUser.departmentId,
         },
         quantity: borrowRequests.quantity,
+        requestedAt: borrowRequests.requestedAt,
         startDate: borrowRequests.startDate,
         endDate: borrowRequests.endDate,
         reason: borrowRequests.reason,
@@ -174,14 +229,24 @@ export async function GET() {
         managerApprovedAt: borrowRequests.managerApprovedAt,
         adminApprovedAt: borrowRequests.adminApprovedAt,
         rejectionReason: borrowRequests.rejectionReason,
+        dueDate: borrowRequests.dueDate,
+        returnRequestedAt: borrowRequests.returnRequestedAt,
+        returnApprovedBy: {
+          id: returnApprovedUser.id,
+          name: returnApprovedUser.name,
+        },
+        returnApprovedAt: borrowRequests.returnApprovedAt,
+        receivedAt: borrowRequests.receivedAt,
+        returnNotes: borrowRequests.returnNotes,
+        receiveNotes: borrowRequests.receiveNotes,
         returnedAt: borrowRequests.returnedAt,
       })
       .from(borrowRequests)
       .leftJoin(items, eq(borrowRequests.itemId, items.id))
-      .leftJoin(itemSizes, eq(borrowRequests.itemSizeId, itemSizes.id))
       .leftJoin(requestUser, eq(borrowRequests.userId, requestUser.id))
       .leftJoin(managerUser, eq(borrowRequests.managerApprovedBy, managerUser.id))
-      .leftJoin(adminUser, eq(borrowRequests.adminApprovedBy, adminUser.id));
+      .leftJoin(adminUser, eq(borrowRequests.adminApprovedBy, adminUser.id))
+      .leftJoin(returnApprovedUser, eq(borrowRequests.returnApprovedBy, returnApprovedUser.id));
     }
     
     // Fetch department information for each request
@@ -229,9 +294,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { itemId, itemSizeId, quantity, startDate, endDate, reason } = await request.json();
+    const { itemId, quantity, startDate, reason } = await request.json();
     
-    if (!itemId || !itemSizeId || !quantity || !startDate || !endDate || !reason) {
+    // Fixed: Removed endDate from required fields
+    if (!itemId || !quantity || !startDate || !reason) {
       return NextResponse.json({ error: 'All fields are required' }, { status: 400 });
     }
 
@@ -242,35 +308,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Item not found' }, { status: 404 });
     }
 
-    // Check if the item size exists and has enough available quantity
-    const itemSize = await db.select().from(itemSizes).where(eq(itemSizes.id, itemSizeId)).limit(1);
-    
-    if (!itemSize.length) {
-      return NextResponse.json({ error: 'Item size not found' }, { status: 404 });
-    }
-
-    if (itemSize[0].available < quantity) {
+    // Check if the item has enough available quantity
+    if (item[0].inventory < quantity) {
       return NextResponse.json({ error: 'Not enough items available' }, { status: 400 });
     }
 
-    // Check if the requested period is within 14 days
+    // Fixed: Removed date range validation
+    // Just check if start date is not in the past
     const start = new Date(startDate);
-    const end = new Date(endDate);
     const today = new Date();
-    const maxEndDate = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000);
+    today.setHours(0, 0, 0, 0);
     
-    if (start < today || end > maxEndDate) {
-      return NextResponse.json({ error: 'Invalid date range. Maximum borrowing period is 14 days.' }, { status: 400 });
+    if (start < today) {
+      return NextResponse.json({ error: 'Start date cannot be in the past' }, { status: 400 });
     }
 
     // Create the borrow request
     const newRequest = await db.insert(borrowRequests).values({
       itemId,
-      itemSizeId,
       userId: session.user.id,
       quantity,
       startDate: new Date(startDate),
-      endDate: new Date(endDate),
+      // Fixed: Set endDate to null, it will be set when approved
+      endDate: null,
       reason,
     }).returning();
 

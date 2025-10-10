@@ -1,4 +1,3 @@
-// File: components/items/add-item-modal.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -61,7 +60,7 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
     mould: '',
     tier: '',
     silo: '',
-    location: 'Storage 1',
+    // Location is not set by item master, will be set by storage master
     unitOfMeasure: 'PCS',
     condition: 'good',
     conditionNotes: '',
@@ -85,7 +84,6 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
         mould: '',
         tier: '',
         silo: '',
-        location: 'Storage 1',
         unitOfMeasure: 'PCS',
         condition: 'good',
         conditionNotes: '',
@@ -135,9 +133,7 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
 
         const uploadFormData = new FormData();
         uploadFormData.append('file', file);
-        uploadFormData.append('sku', formData.productCode); // Add SKU to form data
-
-        console.log('Uploading file:', file.name, 'Size:', file.size, 'Type:', file.type);
+        uploadFormData.append('sku', formData.productCode);
 
         try {
           const response = await fetch('/api/upload', {
@@ -145,11 +141,8 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
             body: uploadFormData,
           });
 
-          console.log('Upload response status:', response.status);
-
           if (response.ok) {
             const uploadedFile = await response.json();
-            console.log('Uploaded file:', uploadedFile);
             setImages(prev => [...prev, {
               ...uploadedFile,
               altText: `${formData.description} - Image ${prev.length + 1}`,
@@ -157,16 +150,13 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
             }]);
           } else {
             const errorData = await response.json().catch(() => ({}));
-            console.error('Upload error response:', errorData);
             setError(`Failed to upload ${file.name}: ${errorData.error || 'Server error'}`);
           }
         } catch (fetchError) {
-          console.error('Fetch error for file:', file.name, fetchError);
           setError(`Failed to upload ${file.name}: Network error`);
         }
       }
     } catch (error) {
-      console.error('Error uploading files:', error);
       setError('Failed to upload files. Please try again.');
     } finally {
       setIsUploading(false);
@@ -256,10 +246,6 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
       setError('Silo is required');
       return false;
     }
-    if (!formData.location) {
-      setError('Location is required');
-      return false;
-    }
     if (!formData.unitOfMeasure) {
       setError('Unit of Measure is required');
       return false;
@@ -301,7 +287,6 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
         setError(errorData.error || 'Failed to add item. Please try again.');
       }
     } catch (error) {
-      console.error('Failed to add item:', error);
       setError('Failed to add item. Please check your connection and try again.');
     } finally {
       setIsLoading(false);
@@ -315,6 +300,7 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
           <DialogTitle>Add New Item</DialogTitle>
           <DialogDescription>
             Add a new item to the inventory. Fill in all the required information.
+            The item will be submitted for approval by the Storage Master.
           </DialogDescription>
         </DialogHeader>
         
@@ -480,19 +466,6 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
                   <SelectItem value="LIFESTYLE">Lifestyle</SelectItem>
                   <SelectItem value="SPORTS">Sports</SelectItem>
                   <SelectItem value="OUTDOOR">Outdoor</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="location">Location</Label>
-              <Select value={formData.location} onValueChange={(value) => handleSelectChange('location', value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select location" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Storage 1">Storage 1</SelectItem>
-                  <SelectItem value="Storage 2">Storage 2</SelectItem>
-                  <SelectItem value="Storage 3">Storage 3</SelectItem>
                 </SelectContent>
               </Select>
             </div>

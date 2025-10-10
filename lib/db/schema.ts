@@ -10,19 +10,21 @@ export const departments = pgTable('departments', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// Users table
+// Users table with updated roles
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: text('name').notNull(),
   email: text('email').notNull().unique(),
   password: text('password').notNull(),
-  role: text('role', { enum: ['admin', 'manager', 'user'] }).notNull().default('user'),
+  role: text('role', { 
+    enum: ['superadmin', 'user', 'manager', 'item-master', 'storage-master', 'storage-master-manager'] 
+  }).notNull().default('user'),
   departmentId: uuid('department_id').references(() => departments.id),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// Items table
+// Items table with updated status
 export const items = pgTable('items', {
   id: uuid('id').defaultRandom().primaryKey(),
   productCode: text('product_code').notNull().unique(),
@@ -39,12 +41,16 @@ export const items = pgTable('items', {
   mould: text('mould').notNull(),
   tier: text('tier').notNull(),
   silo: text('silo').notNull(),
-  location: text('location', { enum: ['Storage 1', 'Storage 2', 'Storage 3'] }).notNull().default('Storage 1'),
+  location: text('location', { enum: ['Storage 1', 'Storage 2', 'Storage 3'] }),
   unitOfMeasure: text('unit_of_measure', { enum: ['PCS', 'PRS'] }).notNull().default('PCS'),
   condition: text('condition', { enum: ['excellent', 'good', 'fair', 'poor'] }).notNull().default('good'),
   conditionNotes: text('condition_notes'),
-  status: text('status', { enum: ['active', 'archived'] }).notNull().default('active'),
+  status: text('status', { 
+    enum: ['pending_approval', 'approved', 'available', 'borrowed', 'in_clearance', 'rejected'] 
+  }).notNull().default('pending_approval'),
   createdBy: uuid('created_by').references(() => users.id).notNull(),
+  approvedBy: uuid('approved_by').references(() => users.id),
+  approvedAt: timestamp('approved_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -62,18 +68,17 @@ export const itemImages = pgTable('item_images', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
-// Item archives table
-export const itemArchives = pgTable('item_archives', {
+// Item requests table (for item addition workflow)
+export const itemRequests = pgTable('item_requests', {
   id: uuid('id').defaultRandom().primaryKey(),
-  itemId: uuid('item_id').references(() => items.id).notNull(),
-  archivedBy: uuid('archived_by').references(() => users.id).notNull(),
-  archivedAt: timestamp('archived_at').defaultNow().notNull(),
-  reason: text('reason').notNull(),
-  archivedInventory: integer('archived_inventory').notNull(),
-  archivedCondition: text('archived_condition').notNull(),
-  archivedConditionNotes: text('archived_condition_notes'),
-  archivedImages: jsonb('archived_images').notNull(), // Store image data as JSON
-  metadata: jsonb('metadata').notNull(), // Store all item data at time of archiving
+  itemId: uuid('item_id').references(() => items.id, { onDelete: 'cascade' }).notNull(),
+  requestedBy: uuid('requested_by').references(() => users.id).notNull(),
+  requestedAt: timestamp('requested_at').defaultNow().notNull(),
+  status: text('status', { enum: ['pending', 'approved', 'rejected'] }).notNull().default('pending'),
+  approvedBy: uuid('approved_by').references(() => users.id),
+  approvedAt: timestamp('approved_at'),
+  rejectionReason: text('rejection_reason'),
+  notes: text('notes'),
 });
 
 // Borrow requests table
@@ -86,15 +91,62 @@ export const borrowRequests = pgTable('borrow_requests', {
   startDate: timestamp('start_date').notNull(),
   endDate: timestamp('end_date').notNull(),
   reason: text('reason').notNull(),
-  status: text('status', { enum: ['pending', 'approved', 'rejected', 'active', 'returned'] }).notNull().default('pending'),
-  managerApproved: boolean('manager_approved').default(false),
-  adminApproved: boolean('admin_approved').default(false),
+  status: text('status', { 
+    enum: ['pending_manager', 'pending_storage', 'approved', 'rejected', 'active', 'overdue', 'returned'] 
+  }).notNull().default('pending_manager'),
+  
+  // Manager approval fields
   managerApprovedBy: uuid('manager_approved_by').references(() => users.id),
-  adminApprovedBy: uuid('admin_approved_by').references(() => users.id),
   managerApprovedAt: timestamp('manager_approved_at'),
-  adminApprovedAt: timestamp('admin_approved_at'),
-  rejectionReason: text('rejection_reason'),
+  managerRejectionReason: text('manager_rejection_reason'),
+  
+  // Storage master approval fields
+  storageApprovedBy: uuid('storage_approved_by').references(() => users.id),
+  storageApprovedAt: timestamp('storage_approved_at'),
+  storageRejectionReason: text('storage_rejection_reason'),
+  
+  // Return fields
+  dueDate: timestamp('due_date'),
   returnedAt: timestamp('returned_at'),
+  returnCondition: text('return_condition', { enum: ['excellent', 'good', 'fair', 'poor'] }),
+  returnNotes: text('return_notes'),
+  receivedBy: uuid('received_by').references(() => users.id),
+  receivedAt: timestamp('received_at'),
+  receiveNotes: text('receive_notes'),
+});
+
+// Return requests table
+export const returnRequests = pgTable('return_requests', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  borrowRequestId: uuid('borrow_request_id').references(() => borrowRequests.id, { onDelete: 'cascade' }).notNull(),
+  itemId: uuid('item_id').references(() => items.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid('user_id').references(() => users.id).notNull(),
+  requestedAt: timestamp('requested_at').defaultNow().notNull(),
+  reason: text('reason').notNull(),
+  returnCondition: text('return_condition', { enum: ['excellent', 'good', 'fair', 'poor'] }).notNull(),
+  returnNotes: text('return_notes'),
+  status: text('status', { enum: ['pending', 'approved', 'rejected'] }).notNull().default('pending'),
+  approvedBy: uuid('approved_by').references(() => users.id),
+  approvedAt: timestamp('approved_at'),
+  rejectionReason: text('rejection_reason'),
+  receivedBy: uuid('received_by').references(() => users.id),
+  receivedAt: timestamp('received_at'),
+  receiveNotes: text('receive_notes'),
+});
+
+// Item clearances table
+export const itemClearances = pgTable('item_clearances', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  itemId: uuid('item_id').references(() => items.id, { onDelete: 'cascade' }).notNull(),
+  requestedBy: uuid('requested_by').references(() => users.id).notNull(),
+  requestedAt: timestamp('requested_at').defaultNow().notNull(),
+  reason: text('reason').notNull(),
+  status: text('status', { enum: ['pending', 'approved', 'rejected'] }).notNull().default('pending'),
+  approvedBy: uuid('approved_by').references(() => users.id),
+  approvedAt: timestamp('approved_at'),
+  rejectionReason: text('rejection_reason'),
+  clearedAt: timestamp('cleared_at'),
+  metadata: jsonb('metadata').notNull(), // Store all item data at time of clearance
 });
 
 // Relations
@@ -108,10 +160,15 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     references: [departments.id],
   }),
   itemsCreated: many(items),
+  itemsApproved: many(items),
+  itemRequests: many(itemRequests),
   borrowRequests: many(borrowRequests),
+  returnRequests: many(returnRequests),
+  itemClearances: many(itemClearances),
   managerApprovals: many(borrowRequests, { relationName: 'managerApproval' }),
-  adminApprovals: many(borrowRequests, { relationName: 'adminApproval' }),
-  itemArchives: many(itemArchives),
+  storageApprovals: many(borrowRequests, { relationName: 'storageApproval' }),
+  returnApprovals: many(returnRequests, { relationName: 'returnApproval' }),
+  clearanceApprovals: many(itemClearances, { relationName: 'clearanceApproval' }),
 }));
 
 export const itemsRelations = relations(items, ({ one, many }) => ({
@@ -119,9 +176,18 @@ export const itemsRelations = relations(items, ({ one, many }) => ({
     fields: [items.createdBy],
     references: [users.id],
   }),
+  approvedBy: one(users, {
+    fields: [items.approvedBy],
+    references: [users.id],
+  }),
   images: many(itemImages),
+  itemRequests: many(itemRequests),
   borrowRequests: many(borrowRequests),
-  archives: many(itemArchives),
+  returnRequests: many(returnRequests),
+  clearance: one(itemClearances, {
+    fields: [items.id],
+    references: [itemClearances.itemId],
+  }),
 }));
 
 export const itemImagesRelations = relations(itemImages, ({ one }) => ({
@@ -131,13 +197,17 @@ export const itemImagesRelations = relations(itemImages, ({ one }) => ({
   }),
 }));
 
-export const itemArchivesRelations = relations(itemArchives, ({ one }) => ({
+export const itemRequestsRelations = relations(itemRequests, ({ one }) => ({
   item: one(items, {
-    fields: [itemArchives.itemId],
+    fields: [itemRequests.itemId],
     references: [items.id],
   }),
-  archivedBy: one(users, {
-    fields: [itemArchives.archivedBy],
+  requestedBy: one(users, {
+    fields: [itemRequests.requestedBy],
+    references: [users.id],
+  }),
+  approvedBy: one(users, {
+    fields: [itemRequests.approvedBy],
     references: [users.id],
   }),
 }));
@@ -156,17 +226,89 @@ export const borrowRequestsRelations = relations(borrowRequests, ({ one }) => ({
     references: [users.id],
     relationName: 'managerApproval',
   }),
-  adminApprovedBy: one(users, {
-    fields: [borrowRequests.adminApprovedBy],
+  storageApprovedBy: one(users, {
+    fields: [borrowRequests.storageApprovedBy],
     references: [users.id],
-    relationName: 'adminApproval',
+    relationName: 'storageApproval',
+  }),
+  receivedBy: one(users, {
+    fields: [borrowRequests.receivedBy],
+    references: [users.id],
+  }),
+}));
+
+export const returnRequestsRelations = relations(returnRequests, ({ one }) => ({
+  borrowRequest: one(borrowRequests, {
+    fields: [returnRequests.borrowRequestId],
+    references: [borrowRequests.id],
+  }),
+  item: one(items, {
+    fields: [returnRequests.itemId],
+    references: [items.id],
+  }),
+  user: one(users, {
+    fields: [returnRequests.userId],
+    references: [users.id],
+  }),
+  approvedBy: one(users, {
+    fields: [returnRequests.approvedBy],
+    references: [users.id],
+    relationName: 'returnApproval',
+  }),
+  receivedBy: one(users, {
+    fields: [returnRequests.receivedBy],
+    references: [users.id],
+  }),
+}));
+
+export const itemClearancesRelations = relations(itemClearances, ({ one }) => ({
+  item: one(items, {
+    fields: [itemClearances.itemId],
+    references: [items.id],
+  }),
+  requestedBy: one(users, {
+    fields: [itemClearances.requestedBy],
+    references: [users.id],
+  }),
+  approvedBy: one(users, {
+    fields: [itemClearances.approvedBy],
+    references: [users.id],
+    relationName: 'clearanceApproval',
   }),
 }));
 
 // Type exports for use in your application
 export type Department = typeof departments.$inferSelect;
+export type NewDepartment = typeof departments.$inferInsert;
+
 export type User = typeof users.$inferSelect;
+export type NewUser = typeof users.$inferInsert;
+
 export type Item = typeof items.$inferSelect;
+export type NewItem = typeof items.$inferInsert;
+
 export type ItemImage = typeof itemImages.$inferSelect;
-export type ItemArchive = typeof itemArchives.$inferSelect;
+export type NewItemImage = typeof itemImages.$inferInsert;
+
+export type ItemRequest = typeof itemRequests.$inferSelect;
+export type NewItemRequest = typeof itemRequests.$inferInsert;
+
 export type BorrowRequest = typeof borrowRequests.$inferSelect;
+export type NewBorrowRequest = typeof borrowRequests.$inferInsert;
+
+export type ReturnRequest = typeof returnRequests.$inferSelect;
+export type NewReturnRequest = typeof returnRequests.$inferInsert;
+
+export type ItemClearance = typeof itemClearances.$inferSelect;
+export type NewItemClearance = typeof itemClearances.$inferInsert;
+
+// Additional useful types
+export type UserRole = User['role'];
+export type ItemStatus = Item['status'];
+export type ItemCondition = Item['condition'];
+export type ItemLocation = Item['location'];
+export type UnitOfMeasure = Item['unitOfMeasure'];
+export type BorrowRequestStatus = BorrowRequest['status'];
+export type ReturnRequestStatus = ReturnRequest['status'];
+export type ItemRequestStatus = ItemRequest['status'];
+export type ItemClearanceStatus = ItemClearance['status'];

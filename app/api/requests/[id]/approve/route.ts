@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { borrowRequests, users } from '@/lib/db/schema';
+import { borrowRequests, users, items } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 
 export async function POST(
   request: NextRequest,
@@ -60,11 +61,24 @@ export async function POST(
         .limit(1);
       
       if (updatedRequest[0].managerApproved === true && updatedRequest[0].adminApproved === true) {
+        // Calculate due date (14 days from now)
+        const dueDate = new Date();
+        dueDate.setDate(dueDate.getDate() + 14);
+        
+        // Update status to approved and set due date
         await db.update(borrowRequests)
           .set({
             status: 'approved',
+            dueDate,
           })
           .where(eq(borrowRequests.id, id));
+        
+        // Update item inventory (reduce by borrowed quantity)
+        await db.update(items)
+          .set({
+            inventory: sql`${items.inventory} - ${updatedRequest[0].quantity}`,
+          })
+          .where(eq(items.id, updatedRequest[0].itemId));
         
         return NextResponse.json({ message: 'Request approved and status updated to approved' });
       }
@@ -105,11 +119,24 @@ export async function POST(
         .limit(1);
       
       if (updatedRequest[0].managerApproved === true && updatedRequest[0].adminApproved === true) {
+        // Calculate due date (14 days from now)
+        const dueDate = new Date();
+        dueDate.setDate(dueDate.getDate() + 14);
+        
+        // Update status to approved and set due date
         await db.update(borrowRequests)
           .set({
             status: 'approved',
+            dueDate,
           })
           .where(eq(borrowRequests.id, id));
+        
+        // Update item inventory (reduce by borrowed quantity)
+        await db.update(items)
+          .set({
+            inventory: sql`${items.inventory} - ${updatedRequest[0].quantity}`,
+          })
+          .where(eq(items.id, updatedRequest[0].itemId));
         
         return NextResponse.json({ message: 'Request approved and status updated to approved' });
       }

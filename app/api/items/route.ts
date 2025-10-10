@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { items, users, itemImages } from '@/lib/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { items, users, itemImages, itemRequests } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
 
 // GET /api/items - List items with their images
 export async function GET(request: NextRequest) {
@@ -15,10 +15,10 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status') || 'active'; // Default to 'active'
+    const status = searchParams.get('status');
 
-    // Build the base query
-    const baseQuery = db
+    // Build the query
+    let query = db
       .select({
         id: items.id,
         productCode: items.productCode,
@@ -43,6 +43,8 @@ export async function GET(request: NextRequest) {
         createdBy: items.createdBy,
         createdAt: items.createdAt,
         updatedAt: items.updatedAt,
+        approvedBy: items.approvedBy,
+        approvedAt: items.approvedAt,
         createdByUser: {
           id: users.id,
           name: users.name,
@@ -51,24 +53,27 @@ export async function GET(request: NextRequest) {
       .from(items)
       .leftJoin(users, eq(items.createdBy, users.id));
 
-    // Apply status filter if specified and valid
-    const itemsData = status === 'active' || status === 'archived'
-      ? await baseQuery.where(eq(items.status, status))
-      : await baseQuery;
+    // Apply status filter if specified
+    let itemsData;
+    if (status) {
+      itemsData = await query.where(eq(items.status, status as any));
+    } else {
+      itemsData = await query;
+    }
 
-    // Fetch all images for all items
+    // Fetch all images
     const allImages = await db
       .select()
       .from(itemImages);
 
     // Group images by itemId
-    const imagesByItemId = allImages.reduce((acc, image) => {
-      if (!acc[image.itemId]) {
-        acc[image.itemId] = [];
+    const imagesByItemId: Record<string, any[]> = {};
+    for (const image of allImages) {
+      if (!imagesByItemId[image.itemId]) {
+        imagesByItemId[image.itemId] = [];
       }
-      acc[image.itemId].push(image);
-      return acc;
-    }, {} as Record<string, typeof allImages>);
+      imagesByItemId[image.itemId].push(image);
+    }
 
     // Combine items with their images
     const itemsWithImages = itemsData.map(item => ({
@@ -80,7 +85,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Failed to fetch items:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch items' },
+      { error: 'Failed to fetch items', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }
@@ -95,13 +100,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Only admins can add items
-    if (session.user.role !== 'admin') {
+    // Only superadmin and item-master can add items
+    if (session.user.role !== 'superadmin' && session.user.role !== 'item-master') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const body = await request.json();
-    console.log('Received request body:', body); // Add this line for debugging
     
     const { 
       productCode, 
@@ -118,43 +122,37 @@ export async function POST(request: NextRequest) {
       mould, 
       tier, 
       silo,
-      location,
       unitOfMeasure,
       condition,
       conditionNotes,
-      status,
-      images 
+      images: imageData 
     } = body;
 
     // Validate required fields
     if (!productCode || !description || !brandCode || !productGroup || !productDivision || 
         !productCategory || !vendor || !period || !season || !gender || !mould || !tier || !silo || 
-        !location || !unitOfMeasure || !condition) {
-      console.log('Missing required fields:', {
-        productCode: !!productCode,
-        description: !!description,
-        brandCode: !!brandCode,
-        productGroup: !!productGroup,
-        productDivision: !!productDivision,
-        productCategory: !!productCategory,
-        vendor: !!vendor,
-        period: !!period,
-        season: !!season,
-        gender: !!gender,
-        mould: !!mould,
-        tier: !!tier,
-        silo: !!silo,
-        location: !!location,
-        unitOfMeasure: !!unitOfMeasure,
-        condition: !!condition,
-      });
+        !unitOfMeasure || !condition) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       );
     }
 
-    // Create the item
+    // Check for duplicate product code
+    const existingItem = await db
+      .select()
+      .from(items)
+      .where(eq(items.productCode, productCode))
+      .limit(1);
+
+    if (existingItem.length > 0) {
+      return NextResponse.json(
+        { error: 'Product code already exists' },
+        { status: 400 }
+      );
+    }
+
+    // Create the item with pending_approval status
     const [newItem] = await db
       .insert(items)
       .values({
@@ -172,26 +170,38 @@ export async function POST(request: NextRequest) {
         mould,
         tier,
         silo,
-        location,
+        location: null, // Will be set by storage master
         unitOfMeasure,
         condition,
         conditionNotes: conditionNotes || null,
-        status: status || 'active', // Use provided status or default to 'active'
+        status: 'pending_approval',
         createdBy: session.user.id,
+        approvedBy: null,
+        approvedAt: null,
       })
       .returning();
 
+    // Create item request for approval workflow
+    await db
+      .insert(itemRequests)
+      .values({
+        itemId: newItem.id,
+        requestedBy: session.user.id,
+        status: 'pending',
+        notes: 'New item added, awaiting approval from Storage Master',
+      });
+
     // Create item images if provided
-    let newImages: { id: string; createdAt: Date; itemId: string; fileName: string; originalName: string; mimeType: string; size: number; altText: string | null; isPrimary: boolean; }[] = [];
-    if (images && images.length > 0) {
-      const imagesToInsert = images.map((image: { fileName: string; originalName: string; mimeType: string; size: number; altText?: string; isPrimary?: boolean }, index: number) => ({
+    let newImages: any[] = [];
+    if (imageData && Array.isArray(imageData) && imageData.length > 0) {
+      const imagesToInsert = imageData.map((image: any, index: number) => ({
         itemId: newItem.id,
         fileName: image.fileName,
         originalName: image.originalName,
         mimeType: image.mimeType,
         size: image.size,
         altText: image.altText || `${description} - Image ${index + 1}`,
-        isPrimary: image.isPrimary || index === 0, // First image is primary by default
+        isPrimary: image.isPrimary || index === 0,
       }));
 
       newImages = await db
@@ -210,7 +220,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Failed to create item:', error);
     return NextResponse.json(
-      { error: 'Failed to create item' },
+      { error: 'Failed to create item', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }
