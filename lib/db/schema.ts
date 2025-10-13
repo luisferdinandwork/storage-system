@@ -94,7 +94,7 @@ export const borrowRequests = pgTable('borrow_requests', {
   endDate: timestamp('end_date').notNull(),
   reason: text('reason').notNull(),
   status: text('status', { 
-    enum: ['pending_manager', 'pending_storage', 'approved', 'rejected', 'active', 'overdue', 'returned', 'pending_return'] 
+    enum: ['pending_manager', 'pending_storage', 'approved', 'rejected', 'active', 'overdue', 'returned', 'pending_return', 'seeded'] 
   }).notNull().default('pending_manager'),
   
   // Manager approval fields
