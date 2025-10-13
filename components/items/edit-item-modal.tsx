@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,31 +22,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ImagePlus, X, Upload } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ImagePlus, X, Upload, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface Item {
   id: string;
   productCode: string;
   description: string;
   brandCode: string;
-  productGroup: string;
   productDivision: string;
   productCategory: string;
   inventory: number;
-  vendor: string;
   period: string;
   season: string;
-  gender: string;
-  mould: string;
-  tier: string;
-  silo: string;
-  location: string;
   unitOfMeasure: string;
+  location: string | null;
   condition: string;
   conditionNotes: string | null;
+  status: 'pending_approval' | 'approved' | 'available' | 'borrowed' | 'in_clearance' | 'rejected';
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  approvedBy: string | null;
+  approvedAt: string | null;
   createdByUser?: {
     id: string;
     name: string;
@@ -81,25 +80,31 @@ interface UploadedImage {
   isNew?: boolean; // Flag to track newly uploaded images
 }
 
+interface ParsedProductCode {
+  brandCode: string;
+  brandName: string;
+  productDivision: string;
+  divisionName: string;
+  productCategory: string;
+  categoryName: string;
+  sequenceNumber: string;
+  isValid: boolean;
+  error?: string;
+}
+
 export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModalProps) {
+  const { data: session } = useSession();
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [productCodeError, setProductCodeError] = useState<string | null>(null);
+  const [parsedProductCode, setParsedProductCode] = useState<ParsedProductCode | null>(null);
   const [formData, setFormData] = useState({
     productCode: '',
     description: '',
-    brandCode: '',
-    productGroup: '',
-    productDivision: '',
-    productCategory: '',
     inventory: 0,
-    vendor: '',
     period: '',
     season: '',
-    gender: '',
-    mould: '',
-    tier: '',
-    silo: '',
-    location: 'Storage 1',
     unitOfMeasure: 'PCS',
     condition: 'good',
     conditionNotes: '',
@@ -111,19 +116,9 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
       setFormData({
         productCode: item.productCode,
         description: item.description,
-        brandCode: item.brandCode,
-        productGroup: item.productGroup,
-        productDivision: item.productDivision,
-        productCategory: item.productCategory,
         inventory: item.inventory,
-        vendor: item.vendor,
         period: item.period,
         season: item.season,
-        gender: item.gender,
-        mould: item.mould,
-        tier: item.tier,
-        silo: item.silo,
-        location: item.location,
         unitOfMeasure: item.unitOfMeasure,
         condition: item.condition,
         conditionNotes: item.conditionNotes || '',
@@ -141,6 +136,11 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
         isNew: false,
       }));
       setImages(existingImages);
+      setError(null);
+      setProductCodeError(null);
+      
+      // Parse the existing product code
+      parseProductCode(item.productCode);
     }
   }, [isOpen, item]);
 
@@ -150,6 +150,11 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
       ...prev,
       [name]: name === 'inventory' ? parseInt(value) || 0 : value,
     }));
+    
+    // If product code is changed, parse it
+    if (name === 'productCode') {
+      parseProductCode(value);
+    }
   };
 
   const handleSelectChange = (name: string, value: string) => {
@@ -159,44 +164,89 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
     }));
   };
 
-  // In the handleFileUpload function of EditItemModal
-
-const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const files = e.target.files;
-  if (!files || files.length === 0) return;
-
-  setIsUploading(true);
-  
-  try {
-    for (const file of files) {
-      const uploadFormData = new FormData(); // Rename to avoid conflict
-      uploadFormData.append('file', file);
-
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: uploadFormData,
-      });
-
-      if (response.ok) {
-        const uploadedFile = await response.json();
-        setImages(prev => [...prev, {
-          ...uploadedFile,
-          altText: `${formData.description} - Image ${prev.length + 1}`, // Use component's formData
-          isPrimary: prev.length === 0,
-          isNew: true,
-        }]);
-      } else {
-        console.error('Failed to upload file:', file.name);
-      }
+  const parseProductCode = async (code: string) => {
+    if (!code.trim()) {
+      setProductCodeError(null);
+      setParsedProductCode(null);
+      return;
     }
-  } catch (error) {
-    console.error('Error uploading files:', error);
-  } finally {
-    setIsUploading(false);
-    // Clear the input
-    e.target.value = '';
-  }
-};
+
+    try {
+      // Import the parseProductCode function from the schema
+      const { parseProductCode: parseCode } = await import('@/lib/db/schema');
+      const parsed = parseCode(code);
+      
+      if (parsed.isValid) {
+        setParsedProductCode(parsed);
+        setProductCodeError(null);
+      } else {
+        setParsedProductCode(null);
+        setProductCodeError(parsed.error || 'Invalid product code');
+      }
+    } catch (error) {
+      console.error('Error parsing product code:', error);
+      setParsedProductCode(null);
+      setProductCodeError('Failed to parse product code');
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    setError(null);
+    
+    try {
+      for (const file of files) {
+        // Check file size (max 5MB)
+        const maxSize = 5 * 1024 * 1024; // 5MB
+        if (file.size > maxSize) {
+          setError(`File ${file.name} is too large. Maximum size is 5MB.`);
+          continue;
+        }
+
+        // Check file type
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+        if (!allowedTypes.includes(file.type)) {
+          setError(`File ${file.name} is not a valid image type. Only JPEG, PNG, and WebP are allowed.`);
+          continue;
+        }
+
+        const uploadFormData = new FormData();
+        uploadFormData.append('file', file);
+        uploadFormData.append('sku', formData.productCode);
+
+        try {
+          const response = await fetch('/api/upload', {
+            method: 'POST',
+            body: uploadFormData,
+          });
+
+          if (response.ok) {
+            const uploadedFile = await response.json();
+            setImages(prev => [...prev, {
+              ...uploadedFile,
+              altText: `${formData.description} - Image ${prev.length + 1}`,
+              isPrimary: prev.length === 0,
+              isNew: true,
+            }]);
+          } else {
+            const errorData = await response.json().catch(() => ({}));
+            setError(`Failed to upload ${file.name}: ${errorData.error || 'Server error'}`);
+          }
+        } catch (fetchError) {
+          setError(`Failed to upload ${file.name}: Network error`);
+        }
+      }
+    } catch (error) {
+      setError('Failed to upload files. Please try again.');
+    } finally {
+      setIsUploading(false);
+      // Clear the input
+      e.target.value = '';
+    }
+  };
 
   const handleImageChange = (index: number, field: string, value: string | boolean) => {
     setImages(prev => {
@@ -226,11 +276,60 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     });
   };
 
+  const validateForm = () => {
+    if (!formData.productCode.trim()) {
+      setError('Product Code is required');
+      return false;
+    }
+    
+    if (productCodeError) {
+      setError(productCodeError);
+      return false;
+    }
+    
+    if (!parsedProductCode) {
+      setError('Please enter a valid product code');
+      return false;
+    }
+    
+    if (!formData.description.trim()) {
+      setError('Description is required');
+      return false;
+    }
+    
+    if (!formData.period.trim()) {
+      setError('Period is required');
+      return false;
+    }
+    
+    if (!formData.season) {
+      setError('Season is required');
+      return false;
+    }
+    
+    if (!formData.unitOfMeasure) {
+      setError('Unit of Measure is required');
+      return false;
+    }
+    
+    if (!formData.condition) {
+      setError('Condition is required');
+      return false;
+    }
+    
+    return true;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!item) return;
     
+    if (!validateForm()) {
+      return;
+    }
+    
     setIsLoading(true);
+    setError(null);
 
     try {
       const response = await fetch(`/api/items/${item.id}`, {
@@ -247,48 +346,106 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (response.ok) {
         onSuccess();
       } else {
-        const error = await response.json();
-        console.error('Failed to update item:', error);
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to update item. Please try again.');
       }
     } catch (error) {
       console.error('Failed to update item:', error);
+      setError('Failed to update item. Please check your connection and try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Check if the current user can edit this item
+  const userRole = session?.user?.role;
+  const isSuperAdmin = userRole === 'superadmin';
+  const isItemMaster = userRole === 'item-master';
+  
+  // Super admins can edit any item regardless of status
+  // Item masters can only edit items with pending_approval status
+  const canEditItem = (isSuperAdmin || isItemMaster) && 
+                      (isSuperAdmin || item?.status === 'pending_approval');
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Item</DialogTitle>
           <DialogDescription>
             Update the item information. Fill in all the required fields.
+            {isItemMaster && item?.status !== 'pending_approval' && (
+              <span className="text-amber-600 block mt-1">
+                Note: As an Item Master, you can only edit items with "Pending Approval" status.
+              </span>
+            )}
           </DialogDescription>
         </DialogHeader>
+        
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        
+        {!canEditItem && item && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              {isSuperAdmin 
+                ? 'You don\'t have permission to edit this item.'
+                : 'You don\'t have permission to edit this item. Only superadmins can edit items with any status, and item-masters can only edit items with "Pending Approval" status.'
+              }
+            </AlertDescription>
+          </Alert>
+        )}
+        
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="productCode">Product Code</Label>
-              <Input
-                id="productCode"
-                name="productCode"
-                value={formData.productCode}
-                onChange={handleInputChange}
-                required
-              />
+              <div className="relative">
+                <Input
+                  id="productCode"
+                  name="productCode"
+                  value={formData.productCode}
+                  onChange={handleInputChange}
+                  required
+                  disabled={!canEditItem}
+                  className={productCodeError ? "border-red-500" : parsedProductCode ? "border-green-500" : ""}
+                />
+                {parsedProductCode && (
+                  <CheckCircle className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-green-500" />
+                )}
+                {productCodeError && (
+                  <AlertCircle className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-red-500" />
+                )}
+              </div>
+              {productCodeError && (
+                <p className="text-sm text-red-500">{productCodeError}</p>
+              )}
+              {parsedProductCode && (
+                <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-md">
+                  <p className="text-sm font-medium text-green-800">Valid Product Code</p>
+                  <div className="grid grid-cols-2 gap-2 mt-1">
+                    <div className="text-xs text-green-700">
+                      <span className="font-medium">Brand:</span> {parsedProductCode.brandName} ({parsedProductCode.brandCode})
+                    </div>
+                    <div className="text-xs text-green-700">
+                      <span className="font-medium">Division:</span> {parsedProductCode.divisionName} ({parsedProductCode.productDivision})
+                    </div>
+                    <div className="text-xs text-green-700">
+                      <span className="font-medium">Category:</span> {parsedProductCode.categoryName} ({parsedProductCode.productCategory})
+                    </div>
+                    <div className="text-xs text-green-700">
+                      <span className="font-medium">Sequence:</span> {parsedProductCode.sequenceNumber}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="brandCode">Brand Code</Label>
-              <Input
-                id="brandCode"
-                name="brandCode"
-                value={formData.brandCode}
-                onChange={handleInputChange}
-                required
-              />
-            </div>
-            <div className="space-y-2 md:col-span-2">
               <Label htmlFor="description">Description</Label>
               <Textarea
                 id="description"
@@ -296,40 +453,8 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 value={formData.description}
                 onChange={handleInputChange}
                 required
+                disabled={!canEditItem}
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="productGroup">Product Group</Label>
-              <Input
-                id="productGroup"
-                name="productGroup"
-                value={formData.productGroup}
-                onChange={handleInputChange}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="productDivision">Product Division</Label>
-              <Input
-                id="productDivision"
-                name="productDivision"
-                value={formData.productDivision}
-                onChange={handleInputChange}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="productCategory">Product Category</Label>
-              <Select value={formData.productCategory} onValueChange={(value) => handleSelectChange('productCategory', value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="LST">Lifestyle</SelectItem>
-                  <SelectItem value="PRF">Performance</SelectItem>
-                  <SelectItem value="SLR">Slider</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="inventory">Inventory</Label>
@@ -341,16 +466,7 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 value={formData.inventory}
                 onChange={handleInputChange}
                 required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="vendor">Vendor</Label>
-              <Input
-                id="vendor"
-                name="vendor"
-                value={formData.vendor}
-                onChange={handleInputChange}
-                required
+                disabled={!canEditItem}
               />
             </div>
             <div className="space-y-2">
@@ -362,11 +478,16 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 onChange={handleInputChange}
                 placeholder="e.g., 24Q1"
                 required
+                disabled={!canEditItem}
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="season">Season</Label>
-              <Select value={formData.season} onValueChange={(value) => handleSelectChange('season', value)}>
+              <Select 
+                value={formData.season} 
+                onValueChange={(value) => handleSelectChange('season', value)}
+                disabled={!canEditItem}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select season" />
                 </SelectTrigger>
@@ -377,70 +498,12 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="gender">Gender</Label>
-              <Select value={formData.gender} onValueChange={(value) => handleSelectChange('gender', value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select gender" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="M">Men</SelectItem>
-                  <SelectItem value="W">Women</SelectItem>
-                  <SelectItem value="U">Unisex</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="mould">Mould</Label>
-              <Input
-                id="mould"
-                name="mould"
-                value={formData.mould}
-                onChange={handleInputChange}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="tier">Tier</Label>
-              <Select value={formData.tier} onValueChange={(value) => handleSelectChange('tier', value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select tier" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PRO">Professional</SelectItem>
-                  <SelectItem value="STD">Standard</SelectItem>
-                  <SelectItem value="ECO">Economy</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="silo">Silo</Label>
-              <Select value={formData.silo} onValueChange={(value) => handleSelectChange('silo', value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select silo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="LIFESTYLE">Lifestyle</SelectItem>
-                  <SelectItem value="SPORTS">Sports</SelectItem>
-                  <SelectItem value="OUTDOOR">Outdoor</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="location">Location</Label>
-              <Select value={formData.location} onValueChange={(value) => handleSelectChange('location', value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select location" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Storage 1">Storage 1</SelectItem>
-                  <SelectItem value="Storage 2">Storage 2</SelectItem>
-                  <SelectItem value="Storage 3">Storage 3</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
               <Label htmlFor="unitOfMeasure">Unit of Measure</Label>
-              <Select value={formData.unitOfMeasure} onValueChange={(value) => handleSelectChange('unitOfMeasure', value)}>
+              <Select 
+                value={formData.unitOfMeasure} 
+                onValueChange={(value) => handleSelectChange('unitOfMeasure', value)}
+                disabled={!canEditItem}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select unit" />
                 </SelectTrigger>
@@ -452,7 +515,11 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             </div>
             <div className="space-y-2">
               <Label htmlFor="condition">Condition</Label>
-              <Select value={formData.condition} onValueChange={(value) => handleSelectChange('condition', value)}>
+              <Select 
+                value={formData.condition} 
+                onValueChange={(value) => handleSelectChange('condition', value)}
+                disabled={!canEditItem}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select condition" />
                 </SelectTrigger>
@@ -472,6 +539,7 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 value={formData.conditionNotes}
                 onChange={handleInputChange}
                 placeholder="Additional notes about the item condition"
+                disabled={!canEditItem}
               />
             </div>
           </div>
@@ -488,14 +556,14 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                   accept="image/*"
                   onChange={handleFileUpload}
                   className="hidden"
-                  disabled={isUploading}
+                  disabled={isUploading || !canEditItem}
                 />
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => document.getElementById('image-upload')?.click()}
-                  disabled={isUploading}
+                  disabled={isUploading || !canEditItem}
                 >
                   {isUploading ? (
                     <>
@@ -524,6 +592,7 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleRemoveImage(index)}
+                        disabled={!canEditItem}
                       >
                         <X className="h-4 w-4" />
                       </Button>
@@ -542,6 +611,7 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                             value={image.altText || ''}
                             onChange={(e) => handleImageChange(index, 'altText', e.target.value)}
                             placeholder="Image description"
+                            disabled={!canEditItem}
                           />
                         </div>
                       </div>
@@ -552,6 +622,7 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                         id={`image-primary-${index}`}
                         checked={image.isPrimary || false}
                         onChange={(e) => handleImageChange(index, 'isPrimary', e.target.checked)}
+                        disabled={!canEditItem}
                       />
                       <Label htmlFor={`image-primary-${index}`} className="text-sm">
                         Primary Image
@@ -567,7 +638,10 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading || isUploading}>
+            <Button 
+              type="submit" 
+              disabled={isLoading || isUploading || !canEditItem || !parsedProductCode}
+            >
               {isLoading ? 'Updating...' : 'Update Item'}
             </Button>
           </DialogFooter>

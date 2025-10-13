@@ -1,4 +1,3 @@
-// File: components/items/add-item-modal.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -22,7 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useSession } from 'next-auth/react';
-import { ImagePlus, X, Upload } from 'lucide-react';
+import { ImagePlus, X, Upload, CheckCircle, AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface AddItemModalProps {
@@ -41,27 +40,31 @@ interface UploadedImage {
   isPrimary?: boolean;
 }
 
+interface ParsedProductCode {
+  brandCode: string;
+  brandName: string;
+  productDivision: string;
+  divisionName: string;
+  productCategory: string;
+  categoryName: string;
+  sequenceNumber: string;
+  isValid: boolean;
+  error?: string;
+}
+
 export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) {
   const { data: session } = useSession();
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [productCodeError, setProductCodeError] = useState<string | null>(null);
+  const [parsedProductCode, setParsedProductCode] = useState<ParsedProductCode | null>(null);
   const [formData, setFormData] = useState({
     productCode: '',
     description: '',
-    brandCode: '',
-    productGroup: '',
-    productDivision: '',
-    productCategory: '',
     inventory: 0,
-    vendor: '',
     period: '',
     season: '',
-    gender: '',
-    mould: '',
-    tier: '',
-    silo: '',
-    location: 'Storage 1',
     unitOfMeasure: 'PCS',
     condition: 'good',
     conditionNotes: '',
@@ -73,25 +76,17 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
       setFormData({
         productCode: '',
         description: '',
-        brandCode: '',
-        productGroup: '',
-        productDivision: '',
-        productCategory: '',
         inventory: 0,
-        vendor: '',
         period: '',
         season: '',
-        gender: '',
-        mould: '',
-        tier: '',
-        silo: '',
-        location: 'Storage 1',
         unitOfMeasure: 'PCS',
         condition: 'good',
         conditionNotes: '',
       });
       setImages([]);
       setError(null);
+      setProductCodeError(null);
+      setParsedProductCode(null);
     }
   }, [isOpen]);
 
@@ -101,6 +96,11 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
       ...prev,
       [name]: name === 'inventory' ? parseInt(value) || 0 : value,
     }));
+    
+    // If product code is changed, parse it
+    if (name === 'productCode') {
+      parseProductCode(value);
+    }
   };
 
   const handleSelectChange = (name: string, value: string) => {
@@ -108,6 +108,32 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
       ...prev,
       [name]: value,
     }));
+  };
+
+  const parseProductCode = async (code: string) => {
+    if (!code.trim()) {
+      setProductCodeError(null);
+      setParsedProductCode(null);
+      return;
+    }
+
+    try {
+      // Import the parseProductCode function from the schema
+      const { parseProductCode: parseCode } = await import('@/lib/db/schema');
+      const parsed = parseCode(code);
+      
+      if (parsed.isValid) {
+        setParsedProductCode(parsed);
+        setProductCodeError(null);
+      } else {
+        setParsedProductCode(null);
+        setProductCodeError(parsed.error || 'Invalid product code');
+      }
+    } catch (error) {
+      console.error('Error parsing product code:', error);
+      setParsedProductCode(null);
+      setProductCodeError('Failed to parse product code');
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -135,9 +161,7 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
 
         const uploadFormData = new FormData();
         uploadFormData.append('file', file);
-        uploadFormData.append('sku', formData.productCode); // Add SKU to form data
-
-        console.log('Uploading file:', file.name, 'Size:', file.size, 'Type:', file.type);
+        uploadFormData.append('sku', formData.productCode);
 
         try {
           const response = await fetch('/api/upload', {
@@ -145,11 +169,8 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
             body: uploadFormData,
           });
 
-          console.log('Upload response status:', response.status);
-
           if (response.ok) {
             const uploadedFile = await response.json();
-            console.log('Uploaded file:', uploadedFile);
             setImages(prev => [...prev, {
               ...uploadedFile,
               altText: `${formData.description} - Image ${prev.length + 1}`,
@@ -157,16 +178,13 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
             }]);
           } else {
             const errorData = await response.json().catch(() => ({}));
-            console.error('Upload error response:', errorData);
             setError(`Failed to upload ${file.name}: ${errorData.error || 'Server error'}`);
           }
         } catch (fetchError) {
-          console.error('Fetch error for file:', file.name, fetchError);
           setError(`Failed to upload ${file.name}: Network error`);
         }
       }
     } catch (error) {
-      console.error('Error uploading files:', error);
       setError('Failed to upload files. Please try again.');
     } finally {
       setIsUploading(false);
@@ -208,62 +226,37 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
       setError('Product Code is required');
       return false;
     }
+    
+    if (productCodeError) {
+      setError(productCodeError);
+      return false;
+    }
+    
+    if (!parsedProductCode) {
+      setError('Please enter a valid product code');
+      return false;
+    }
+    
     if (!formData.description.trim()) {
       setError('Description is required');
       return false;
     }
-    if (!formData.brandCode.trim()) {
-      setError('Brand Code is required');
-      return false;
-    }
-    if (!formData.productGroup.trim()) {
-      setError('Product Group is required');
-      return false;
-    }
-    if (!formData.productDivision.trim()) {
-      setError('Product Division is required');
-      return false;
-    }
-    if (!formData.productCategory) {
-      setError('Product Category is required');
-      return false;
-    }
-    if (!formData.vendor.trim()) {
-      setError('Vendor is required');
-      return false;
-    }
+    
     if (!formData.period.trim()) {
       setError('Period is required');
       return false;
     }
+    
     if (!formData.season) {
       setError('Season is required');
       return false;
     }
-    if (!formData.gender) {
-      setError('Gender is required');
-      return false;
-    }
-    if (!formData.mould.trim()) {
-      setError('Mould is required');
-      return false;
-    }
-    if (!formData.tier) {
-      setError('Tier is required');
-      return false;
-    }
-    if (!formData.silo) {
-      setError('Silo is required');
-      return false;
-    }
-    if (!formData.location) {
-      setError('Location is required');
-      return false;
-    }
+    
     if (!formData.unitOfMeasure) {
       setError('Unit of Measure is required');
       return false;
     }
+    
     if (!formData.condition) {
       setError('Condition is required');
       return false;
@@ -301,7 +294,6 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
         setError(errorData.error || 'Failed to add item. Please try again.');
       }
     } catch (error) {
-      console.error('Failed to add item:', error);
       setError('Failed to add item. Please check your connection and try again.');
     } finally {
       setIsLoading(false);
@@ -315,11 +307,13 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
           <DialogTitle>Add New Item</DialogTitle>
           <DialogDescription>
             Add a new item to the inventory. Fill in all the required information.
+            The item will be submitted for approval by the Storage Master.
           </DialogDescription>
         </DialogHeader>
         
         {error && (
           <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
@@ -328,25 +322,46 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="productCode">Product Code</Label>
-              <Input
-                id="productCode"
-                name="productCode"
-                value={formData.productCode}
-                onChange={handleInputChange}
-                required
-              />
+              <div className="relative">
+                <Input
+                  id="productCode"
+                  name="productCode"
+                  value={formData.productCode}
+                  onChange={handleInputChange}
+                  required
+                  className={productCodeError ? "border-red-500" : parsedProductCode ? "border-green-500" : ""}
+                />
+                {parsedProductCode && (
+                  <CheckCircle className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-green-500" />
+                )}
+                {productCodeError && (
+                  <AlertCircle className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-red-500" />
+                )}
+              </div>
+              {productCodeError && (
+                <p className="text-sm text-red-500">{productCodeError}</p>
+              )}
+              {parsedProductCode && (
+                <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-md">
+                  <p className="text-sm font-medium text-green-800">Valid Product Code</p>
+                  <div className="grid grid-cols-2 gap-2 mt-1">
+                    <div className="text-xs text-green-700">
+                      <span className="font-medium">Brand:</span> {parsedProductCode.brandName} ({parsedProductCode.brandCode})
+                    </div>
+                    <div className="text-xs text-green-700">
+                      <span className="font-medium">Division:</span> {parsedProductCode.divisionName} ({parsedProductCode.productDivision})
+                    </div>
+                    <div className="text-xs text-green-700">
+                      <span className="font-medium">Category:</span> {parsedProductCode.categoryName} ({parsedProductCode.productCategory})
+                    </div>
+                    <div className="text-xs text-green-700">
+                      <span className="font-medium">Sequence:</span> {parsedProductCode.sequenceNumber}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="brandCode">Brand Code</Label>
-              <Input
-                id="brandCode"
-                name="brandCode"
-                value={formData.brandCode}
-                onChange={handleInputChange}
-                required
-              />
-            </div>
-            <div className="space-y-2 md:col-span-2">
               <Label htmlFor="description">Description</Label>
               <Textarea
                 id="description"
@@ -357,39 +372,6 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="productGroup">Product Group</Label>
-              <Input
-                id="productGroup"
-                name="productGroup"
-                value={formData.productGroup}
-                onChange={handleInputChange}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="productDivision">Product Division</Label>
-              <Input
-                id="productDivision"
-                name="productDivision"
-                value={formData.productDivision}
-                onChange={handleInputChange}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="productCategory">Product Category</Label>
-              <Select value={formData.productCategory} onValueChange={(value) => handleSelectChange('productCategory', value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="LST">Lifestyle</SelectItem>
-                  <SelectItem value="PRF">Performance</SelectItem>
-                  <SelectItem value="SLR">Slider</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
               <Label htmlFor="inventory">Inventory</Label>
               <Input
                 id="inventory"
@@ -397,16 +379,6 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
                 type="number"
                 min="0"
                 value={formData.inventory}
-                onChange={handleInputChange}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="vendor">Vendor</Label>
-              <Input
-                id="vendor"
-                name="vendor"
-                value={formData.vendor}
                 onChange={handleInputChange}
                 required
               />
@@ -431,68 +403,6 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
                 <SelectContent>
                   <SelectItem value="SS">Spring/Summer</SelectItem>
                   <SelectItem value="FW">Fall/Winter</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="gender">Gender</Label>
-              <Select value={formData.gender} onValueChange={(value) => handleSelectChange('gender', value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select gender" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="M">Men</SelectItem>
-                  <SelectItem value="W">Women</SelectItem>
-                  <SelectItem value="U">Unisex</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="mould">Mould</Label>
-              <Input
-                id="mould"
-                name="mould"
-                value={formData.mould}
-                onChange={handleInputChange}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="tier">Tier</Label>
-              <Select value={formData.tier} onValueChange={(value) => handleSelectChange('tier', value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select tier" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PRO">Professional</SelectItem>
-                  <SelectItem value="STD">Standard</SelectItem>
-                  <SelectItem value="ECO">Economy</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="silo">Silo</Label>
-              <Select value={formData.silo} onValueChange={(value) => handleSelectChange('silo', value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select silo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="LIFESTYLE">Lifestyle</SelectItem>
-                  <SelectItem value="SPORTS">Sports</SelectItem>
-                  <SelectItem value="OUTDOOR">Outdoor</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="location">Location</Label>
-              <Select value={formData.location} onValueChange={(value) => handleSelectChange('location', value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select location" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Storage 1">Storage 1</SelectItem>
-                  <SelectItem value="Storage 2">Storage 2</SelectItem>
-                  <SelectItem value="Storage 3">Storage 3</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -625,7 +535,7 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading || isUploading}>
+            <Button type="submit" disabled={isLoading || isUploading || !parsedProductCode}>
               {isLoading ? 'Adding...' : 'Add Item'}
             </Button>
           </DialogFooter>

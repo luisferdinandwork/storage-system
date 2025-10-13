@@ -1,5 +1,5 @@
 {
-  "id": "12e9b78b-2f4b-452c-a470-d0b4150d9809",
+  "id": "254ba73b-4497-4577-a15d-20e0efa72ddb",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -64,30 +64,10 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'pending'"
-        },
-        "manager_approved": {
-          "name": "manager_approved",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": false
-        },
-        "admin_approved": {
-          "name": "admin_approved",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": false
+          "default": "'pending_manager'"
         },
         "manager_approved_by": {
           "name": "manager_approved_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "admin_approved_by": {
-          "name": "admin_approved_by",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -98,21 +78,69 @@
           "primaryKey": false,
           "notNull": false
         },
-        "admin_approved_at": {
-          "name": "admin_approved_at",
+        "manager_rejection_reason": {
+          "name": "manager_rejection_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "storage_approved_by": {
+          "name": "storage_approved_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "storage_approved_at": {
+          "name": "storage_approved_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false
         },
-        "rejection_reason": {
-          "name": "rejection_reason",
+        "storage_rejection_reason": {
+          "name": "storage_rejection_reason",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "due_date": {
+          "name": "due_date",
+          "type": "timestamp",
           "primaryKey": false,
           "notNull": false
         },
         "returned_at": {
           "name": "returned_at",
           "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "return_condition": {
+          "name": "return_condition",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "return_notes": {
+          "name": "return_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "received_by": {
+          "name": "received_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "received_at": {
+          "name": "received_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "receive_notes": {
+          "name": "receive_notes",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         }
@@ -158,12 +186,25 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "borrow_requests_admin_approved_by_users_id_fk": {
-          "name": "borrow_requests_admin_approved_by_users_id_fk",
+        "borrow_requests_storage_approved_by_users_id_fk": {
+          "name": "borrow_requests_storage_approved_by_users_id_fk",
           "tableFrom": "borrow_requests",
           "tableTo": "users",
           "columnsFrom": [
-            "admin_approved_by"
+            "storage_approved_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "borrow_requests_received_by_users_id_fk": {
+          "name": "borrow_requests_received_by_users_id_fk",
+          "tableFrom": "borrow_requests",
+          "tableTo": "users",
+          "columnsFrom": [
+            "received_by"
           ],
           "columnsTo": [
             "id"
@@ -224,8 +265,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.item_archives": {
-      "name": "item_archives",
+    "public.item_clearances": {
+      "name": "item_clearances",
       "schema": "",
       "columns": {
         "id": {
@@ -241,14 +282,14 @@
           "primaryKey": false,
           "notNull": true
         },
-        "archived_by": {
-          "name": "archived_by",
+        "requested_by": {
+          "name": "requested_by",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "archived_at": {
-          "name": "archived_at",
+        "requested_at": {
+          "name": "requested_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
@@ -260,29 +301,36 @@
           "primaryKey": false,
           "notNull": true
         },
-        "archived_inventory": {
-          "name": "archived_inventory",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "archived_condition": {
-          "name": "archived_condition",
+        "status": {
+          "name": "status",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "default": "'pending'"
         },
-        "archived_condition_notes": {
-          "name": "archived_condition_notes",
+        "approved_by": {
+          "name": "approved_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "approved_at": {
+          "name": "approved_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rejection_reason": {
+          "name": "rejection_reason",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "archived_images": {
-          "name": "archived_images",
-          "type": "jsonb",
+        "cleared_at": {
+          "name": "cleared_at",
+          "type": "timestamp",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "metadata": {
           "name": "metadata",
@@ -293,9 +341,9 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "item_archives_item_id_items_id_fk": {
-          "name": "item_archives_item_id_items_id_fk",
-          "tableFrom": "item_archives",
+        "item_clearances_item_id_items_id_fk": {
+          "name": "item_clearances_item_id_items_id_fk",
+          "tableFrom": "item_clearances",
           "tableTo": "items",
           "columnsFrom": [
             "item_id"
@@ -303,15 +351,28 @@
           "columnsTo": [
             "id"
           ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "item_clearances_requested_by_users_id_fk": {
+          "name": "item_clearances_requested_by_users_id_fk",
+          "tableFrom": "item_clearances",
+          "tableTo": "users",
+          "columnsFrom": [
+            "requested_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "item_archives_archived_by_users_id_fk": {
-          "name": "item_archives_archived_by_users_id_fk",
-          "tableFrom": "item_archives",
+        "item_clearances_approved_by_users_id_fk": {
+          "name": "item_clearances_approved_by_users_id_fk",
+          "tableFrom": "item_clearances",
           "tableTo": "users",
           "columnsFrom": [
-            "archived_by"
+            "approved_by"
           ],
           "columnsTo": [
             "id"
@@ -410,6 +471,116 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.item_requests": {
+      "name": "item_requests",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "requested_by": {
+          "name": "requested_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "requested_at": {
+          "name": "requested_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "approved_by": {
+          "name": "approved_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "approved_at": {
+          "name": "approved_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rejection_reason": {
+          "name": "rejection_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "item_requests_item_id_items_id_fk": {
+          "name": "item_requests_item_id_items_id_fk",
+          "tableFrom": "item_requests",
+          "tableTo": "items",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "item_requests_requested_by_users_id_fk": {
+          "name": "item_requests_requested_by_users_id_fk",
+          "tableFrom": "item_requests",
+          "tableTo": "users",
+          "columnsFrom": [
+            "requested_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "item_requests_approved_by_users_id_fk": {
+          "name": "item_requests_approved_by_users_id_fk",
+          "tableFrom": "item_requests",
+          "tableTo": "users",
+          "columnsFrom": [
+            "approved_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.items": {
       "name": "items",
       "schema": "",
@@ -433,14 +604,34 @@
           "primaryKey": false,
           "notNull": true
         },
-        "brand_code": {
-          "name": "brand_code",
+        "inventory": {
+          "name": "inventory",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "period": {
+          "name": "period",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "product_group": {
-          "name": "product_group",
+        "season": {
+          "name": "season",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unit_of_measure": {
+          "name": "unit_of_measure",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'PCS'"
+        },
+        "brand_code": {
+          "name": "brand_code",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -457,68 +648,11 @@
           "primaryKey": false,
           "notNull": true
         },
-        "inventory": {
-          "name": "inventory",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "vendor": {
-          "name": "vendor",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "period": {
-          "name": "period",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "season": {
-          "name": "season",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "gender": {
-          "name": "gender",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "mould": {
-          "name": "mould",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tier": {
-          "name": "tier",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "silo": {
-          "name": "silo",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
         "location": {
           "name": "location",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
-          "default": "'Storage 1'"
-        },
-        "unit_of_measure": {
-          "name": "unit_of_measure",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'PCS'"
+          "notNull": false
         },
         "condition": {
           "name": "condition",
@@ -538,13 +672,25 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'active'"
+          "default": "'pending_approval'"
         },
         "created_by": {
           "name": "created_by",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
+        },
+        "approved_by": {
+          "name": "approved_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "approved_at": {
+          "name": "approved_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -575,6 +721,19 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "items_approved_by_users_id_fk": {
+          "name": "items_approved_by_users_id_fk",
+          "tableFrom": "items",
+          "tableTo": "users",
+          "columnsFrom": [
+            "approved_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -587,6 +746,178 @@
           ]
         }
       },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.return_requests": {
+      "name": "return_requests",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "borrow_request_id": {
+          "name": "borrow_request_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "requested_at": {
+          "name": "requested_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "return_condition": {
+          "name": "return_condition",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "return_notes": {
+          "name": "return_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "approved_by": {
+          "name": "approved_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "approved_at": {
+          "name": "approved_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rejection_reason": {
+          "name": "rejection_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "received_by": {
+          "name": "received_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "received_at": {
+          "name": "received_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "receive_notes": {
+          "name": "receive_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "return_requests_borrow_request_id_borrow_requests_id_fk": {
+          "name": "return_requests_borrow_request_id_borrow_requests_id_fk",
+          "tableFrom": "return_requests",
+          "tableTo": "borrow_requests",
+          "columnsFrom": [
+            "borrow_request_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "return_requests_item_id_items_id_fk": {
+          "name": "return_requests_item_id_items_id_fk",
+          "tableFrom": "return_requests",
+          "tableTo": "items",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "return_requests_user_id_users_id_fk": {
+          "name": "return_requests_user_id_users_id_fk",
+          "tableFrom": "return_requests",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "return_requests_approved_by_users_id_fk": {
+          "name": "return_requests_approved_by_users_id_fk",
+          "tableFrom": "return_requests",
+          "tableTo": "users",
+          "columnsFrom": [
+            "approved_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "return_requests_received_by_users_id_fk": {
+          "name": "return_requests_received_by_users_id_fk",
+          "tableFrom": "return_requests",
+          "tableTo": "users",
+          "columnsFrom": [
+            "received_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
