@@ -1,5 +1,5 @@
 {
-  "id": "ab0694b3-e1e1-481a-9a9f-5e84b157bcb0",
+  "id": "254ba73b-4497-4577-a15d-20e0efa72ddb",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -604,14 +604,34 @@
           "primaryKey": false,
           "notNull": true
         },
-        "brand_code": {
-          "name": "brand_code",
+        "inventory": {
+          "name": "inventory",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "period": {
+          "name": "period",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "product_group": {
-          "name": "product_group",
+        "season": {
+          "name": "season",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unit_of_measure": {
+          "name": "unit_of_measure",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'PCS'"
+        },
+        "brand_code": {
+          "name": "brand_code",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -628,67 +648,11 @@
           "primaryKey": false,
           "notNull": true
         },
-        "inventory": {
-          "name": "inventory",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "vendor": {
-          "name": "vendor",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "period": {
-          "name": "period",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "season": {
-          "name": "season",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "gender": {
-          "name": "gender",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "mould": {
-          "name": "mould",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tier": {
-          "name": "tier",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "silo": {
-          "name": "silo",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
         "location": {
           "name": "location",
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "unit_of_measure": {
-          "name": "unit_of_measure",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'PCS'"
         },
         "condition": {
           "name": "condition",

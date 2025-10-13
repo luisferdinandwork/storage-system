@@ -9,13 +9,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Users, Plus, Search, Edit, Trash2, Mail, Shield, Building, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatDate } from '@/lib/utils';
 
 interface User {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'manager' | 'user';
+  role: 'superadmin' | 'manager' | 'user';
   departmentId?: string;
   department?: {
     id: string;
@@ -44,14 +43,14 @@ export default function UsersPage() {
     name: '', 
     email: '', 
     password: '', 
-    role: 'user' as 'admin' | 'manager' | 'user',
+    role: 'user' as 'superadmin' | 'manager' | 'user',
     departmentId: ''
   });
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editUser, setEditUser] = useState({ 
     name: '', 
     email: '', 
-    role: 'user' as 'admin' | 'manager' | 'user',
+    role: 'user' as 'superadmin' | 'manager' | 'user',
     departmentId: '',
     status: 'active' as 'active' | 'inactive'
   });
@@ -192,7 +191,7 @@ export default function UsersPage() {
 
   const getRoleColor = (role: string) => {
     switch (role) {
-      case 'admin':
+      case 'superadmin':
         return 'bg-red-100 text-red-800';
       case 'manager':
         return 'bg-blue-100 text-blue-800';
@@ -205,7 +204,7 @@ export default function UsersPage() {
 
   const getRoleIcon = (role: string) => {
     switch (role) {
-      case 'admin':
+      case 'superadmin':
         return <Shield className="h-4 w-4" />;
       case 'manager':
         return <Users className="h-4 w-4" />;
@@ -216,7 +215,7 @@ export default function UsersPage() {
     }
   };
 
-  if (session?.user?.role !== 'admin') {
+  if (session?.user?.role !== 'superadmin') {
     return (
       <div className="text-center py-12">
         <Shield className="mx-auto h-12 w-12 text-gray-400" />
@@ -308,14 +307,14 @@ export default function UsersPage() {
                   <select
                     id="role"
                     value={newUser.role}
-                    onChange={(e) => setNewUser({ ...newUser, role: e.target.value as 'admin' | 'manager' | 'user' })}
+                    onChange={(e) => setNewUser({ ...newUser, role: e.target.value as 'superadmin' | 'manager' | 'user' })}
                     className="w-full p-2 border border-gray-300 rounded-md"
                     required
                     disabled={isSubmitting}
                   >
                     <option value="user">User</option>
                     <option value="manager">Manager</option>
-                    <option value="admin">Admin</option>
+                    <option value="superadmin">Admin</option>
                   </select>
                 </div>
                 <div>
@@ -327,7 +326,7 @@ export default function UsersPage() {
                     value={newUser.departmentId}
                     onChange={(e) => setNewUser({ ...newUser, departmentId: e.target.value })}
                     className="w-full p-2 border border-gray-300 rounded-md"
-                    disabled={isSubmitting || newUser.role === 'admin'}
+                    disabled={isSubmitting || newUser.role === 'superadmin'}
                   >
                     <option value="">Select a department</option>
                     {departments.map((dept) => (
@@ -363,7 +362,7 @@ export default function UsersPage() {
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
         </div>
       ) : (
-        <div className="bg-white shadow overflow-hidden sm:rounded-md">
+        <div className="bg-white shadow sm:rounded-md">
           <ul className="divide-y divide-gray-200">
             {filteredUsers.map((user) => (
               <li key={user.id}>
@@ -464,13 +463,13 @@ export default function UsersPage() {
                           </label>
                           <select
                             value={editUser.role}
-                            onChange={(e) => setEditUser({ ...editUser, role: e.target.value as 'admin' | 'manager' | 'user' })}
+                            onChange={(e) => setEditUser({ ...editUser, role: e.target.value as 'superadmin' | 'manager' | 'user' })}
                             className="w-full p-2 border border-gray-300 rounded-md"
                             disabled={isSubmitting}
                           >
                             <option value="user">User</option>
                             <option value="manager">Manager</option>
-                            <option value="admin">Admin</option>
+                            <option value="superadmin">Admin</option>
                           </select>
                         </div>
                         <div>
@@ -481,7 +480,7 @@ export default function UsersPage() {
                             value={editUser.departmentId}
                             onChange={(e) => setEditUser({ ...editUser, departmentId: e.target.value })}
                             className="w-full p-2 border border-gray-300 rounded-md"
-                            disabled={isSubmitting || editUser.role === 'admin'}
+                            disabled={isSubmitting || editUser.role === 'superadmin'}
                           >
                             <option value="">Select a department</option>
                             {departments.map((dept) => (

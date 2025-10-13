@@ -17,7 +17,7 @@ export async function GET() {
     // Create aliases for users table to avoid conflicts
     const requestUser = alias(users, 'requestUser');
     const managerUser = alias(users, 'managerUser');
-    const adminUser = alias(users, 'adminUser');
+    const storageUser = alias(users, 'storageUser');
     const returnApprovedUser = alias(users, 'returnApprovedUser');
 
     let requests;
@@ -31,22 +31,16 @@ export async function GET() {
           productCode: items.productCode,
           description: items.description,
           brandCode: items.brandCode,
-          productGroup: items.productGroup,
           productDivision: items.productDivision,
           productCategory: items.productCategory,
           inventory: items.inventory,
-          vendor: items.vendor,
           period: items.period,
           season: items.season,
-          gender: items.gender,
-          mould: items.mould,
-          tier: items.tier,
-          silo: items.silo,
-          location: items.location,
           unitOfMeasure: items.unitOfMeasure,
           condition: items.condition,
           conditionNotes: items.conditionNotes,
           status: items.status,
+          location: items.location,
         },
         user: {
           id: requestUser.id,
@@ -61,37 +55,35 @@ export async function GET() {
         endDate: borrowRequests.endDate,
         reason: borrowRequests.reason,
         status: borrowRequests.status,
-        managerApproved: borrowRequests.managerApproved,
-        adminApproved: borrowRequests.adminApproved,
         managerApprovedBy: {
           id: managerUser.id,
           name: managerUser.name,
         },
-        adminApprovedBy: {
-          id: adminUser.id,
-          name: adminUser.name,
+        storageApprovedBy: {
+          id: storageUser.id,
+          name: storageUser.name,
         },
         managerApprovedAt: borrowRequests.managerApprovedAt,
-        adminApprovedAt: borrowRequests.adminApprovedAt,
-        rejectionReason: borrowRequests.rejectionReason,
+        storageApprovedAt: borrowRequests.storageApprovedAt,
+        managerRejectionReason: borrowRequests.managerRejectionReason,
+        storageRejectionReason: borrowRequests.storageRejectionReason,
         dueDate: borrowRequests.dueDate,
-        returnRequestedAt: borrowRequests.returnRequestedAt,
-        returnApprovedBy: {
+        returnedAt: borrowRequests.returnedAt,
+        returnCondition: borrowRequests.returnCondition,
+        returnNotes: borrowRequests.returnNotes,
+        receivedBy: {
           id: returnApprovedUser.id,
           name: returnApprovedUser.name,
         },
-        returnApprovedAt: borrowRequests.returnApprovedAt,
         receivedAt: borrowRequests.receivedAt,
-        returnNotes: borrowRequests.returnNotes,
         receiveNotes: borrowRequests.receiveNotes,
-        returnedAt: borrowRequests.returnedAt,
       })
       .from(borrowRequests)
       .leftJoin(items, eq(borrowRequests.itemId, items.id))
       .leftJoin(requestUser, eq(borrowRequests.userId, requestUser.id))
       .leftJoin(managerUser, eq(borrowRequests.managerApprovedBy, managerUser.id))
-      .leftJoin(adminUser, eq(borrowRequests.adminApprovedBy, adminUser.id))
-      .leftJoin(returnApprovedUser, eq(borrowRequests.returnApprovedBy, returnApprovedUser.id))
+      .leftJoin(storageUser, eq(borrowRequests.storageApprovedBy, storageUser.id))
+      .leftJoin(returnApprovedUser, eq(borrowRequests.receivedBy, returnApprovedUser.id))
       .where(eq(borrowRequests.userId, session.user.id));
     } else if (session.user.role === 'manager') {
       // Managers can only see requests from users in their department
@@ -115,22 +107,16 @@ export async function GET() {
           productCode: items.productCode,
           description: items.description,
           brandCode: items.brandCode,
-          productGroup: items.productGroup,
           productDivision: items.productDivision,
           productCategory: items.productCategory,
           inventory: items.inventory,
-          vendor: items.vendor,
           period: items.period,
           season: items.season,
-          gender: items.gender,
-          mould: items.mould,
-          tier: items.tier,
-          silo: items.silo,
-          location: items.location,
           unitOfMeasure: items.unitOfMeasure,
           condition: items.condition,
           conditionNotes: items.conditionNotes,
           status: items.status,
+          location: items.location,
         },
         user: {
           id: requestUser.id,
@@ -145,40 +131,38 @@ export async function GET() {
         endDate: borrowRequests.endDate,
         reason: borrowRequests.reason,
         status: borrowRequests.status,
-        managerApproved: borrowRequests.managerApproved,
-        adminApproved: borrowRequests.adminApproved,
         managerApprovedBy: {
           id: managerUser.id,
           name: managerUser.name,
         },
-        adminApprovedBy: {
-          id: adminUser.id,
-          name: adminUser.name,
+        storageApprovedBy: {
+          id: storageUser.id,
+          name: storageUser.name,
         },
         managerApprovedAt: borrowRequests.managerApprovedAt,
-        adminApprovedAt: borrowRequests.adminApprovedAt,
-        rejectionReason: borrowRequests.rejectionReason,
+        storageApprovedAt: borrowRequests.storageApprovedAt,
+        managerRejectionReason: borrowRequests.managerRejectionReason,
+        storageRejectionReason: borrowRequests.storageRejectionReason,
         dueDate: borrowRequests.dueDate,
-        returnRequestedAt: borrowRequests.returnRequestedAt,
-        returnApprovedBy: {
+        returnedAt: borrowRequests.returnedAt,
+        returnCondition: borrowRequests.returnCondition,
+        returnNotes: borrowRequests.returnNotes,
+        receivedBy: {
           id: returnApprovedUser.id,
           name: returnApprovedUser.name,
         },
-        returnApprovedAt: borrowRequests.returnApprovedAt,
         receivedAt: borrowRequests.receivedAt,
-        returnNotes: borrowRequests.returnNotes,
         receiveNotes: borrowRequests.receiveNotes,
-        returnedAt: borrowRequests.returnedAt,
       })
       .from(borrowRequests)
       .leftJoin(items, eq(borrowRequests.itemId, items.id))
       .leftJoin(requestUser, eq(borrowRequests.userId, requestUser.id))
       .leftJoin(managerUser, eq(borrowRequests.managerApprovedBy, managerUser.id))
-      .leftJoin(adminUser, eq(borrowRequests.adminApprovedBy, adminUser.id))
-      .leftJoin(returnApprovedUser, eq(borrowRequests.returnApprovedBy, returnApprovedUser.id))
+      .leftJoin(storageUser, eq(borrowRequests.storageApprovedBy, storageUser.id))
+      .leftJoin(returnApprovedUser, eq(borrowRequests.receivedBy, returnApprovedUser.id))
       .where(eq(requestUser.departmentId, managerDepartmentId));
     } else {
-      // Admins can see all requests
+      // Storage masters and superadmins can see all requests
       requests = await db.select({
         id: borrowRequests.id,
         item: {
@@ -186,22 +170,16 @@ export async function GET() {
           productCode: items.productCode,
           description: items.description,
           brandCode: items.brandCode,
-          productGroup: items.productGroup,
           productDivision: items.productDivision,
           productCategory: items.productCategory,
           inventory: items.inventory,
-          vendor: items.vendor,
           period: items.period,
           season: items.season,
-          gender: items.gender,
-          mould: items.mould,
-          tier: items.tier,
-          silo: items.silo,
-          location: items.location,
           unitOfMeasure: items.unitOfMeasure,
           condition: items.condition,
           conditionNotes: items.conditionNotes,
           status: items.status,
+          location: items.location,
         },
         user: {
           id: requestUser.id,
@@ -216,37 +194,35 @@ export async function GET() {
         endDate: borrowRequests.endDate,
         reason: borrowRequests.reason,
         status: borrowRequests.status,
-        managerApproved: borrowRequests.managerApproved,
-        adminApproved: borrowRequests.adminApproved,
         managerApprovedBy: {
           id: managerUser.id,
           name: managerUser.name,
         },
-        adminApprovedBy: {
-          id: adminUser.id,
-          name: adminUser.name,
+        storageApprovedBy: {
+          id: storageUser.id,
+          name: storageUser.name,
         },
         managerApprovedAt: borrowRequests.managerApprovedAt,
-        adminApprovedAt: borrowRequests.adminApprovedAt,
-        rejectionReason: borrowRequests.rejectionReason,
+        storageApprovedAt: borrowRequests.storageApprovedAt,
+        managerRejectionReason: borrowRequests.managerRejectionReason,
+        storageRejectionReason: borrowRequests.storageRejectionReason,
         dueDate: borrowRequests.dueDate,
-        returnRequestedAt: borrowRequests.returnRequestedAt,
-        returnApprovedBy: {
+        returnedAt: borrowRequests.returnedAt,
+        returnCondition: borrowRequests.returnCondition,
+        returnNotes: borrowRequests.returnNotes,
+        receivedBy: {
           id: returnApprovedUser.id,
           name: returnApprovedUser.name,
         },
-        returnApprovedAt: borrowRequests.returnApprovedAt,
         receivedAt: borrowRequests.receivedAt,
-        returnNotes: borrowRequests.returnNotes,
         receiveNotes: borrowRequests.receiveNotes,
-        returnedAt: borrowRequests.returnedAt,
       })
       .from(borrowRequests)
       .leftJoin(items, eq(borrowRequests.itemId, items.id))
       .leftJoin(requestUser, eq(borrowRequests.userId, requestUser.id))
       .leftJoin(managerUser, eq(borrowRequests.managerApprovedBy, managerUser.id))
-      .leftJoin(adminUser, eq(borrowRequests.adminApprovedBy, adminUser.id))
-      .leftJoin(returnApprovedUser, eq(borrowRequests.returnApprovedBy, returnApprovedUser.id));
+      .leftJoin(storageUser, eq(borrowRequests.storageApprovedBy, storageUser.id))
+      .leftJoin(returnApprovedUser, eq(borrowRequests.receivedBy, returnApprovedUser.id));
     }
     
     // Fetch department information for each request
@@ -294,10 +270,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { itemId, quantity, startDate, reason } = await request.json();
+    const { itemId, quantity, startDate, endDate, reason } = await request.json();
     
-    // Fixed: Removed endDate from required fields
-    if (!itemId || !quantity || !startDate || !reason) {
+    if (!itemId || !quantity || !startDate || !endDate || !reason) {
       return NextResponse.json({ error: 'All fields are required' }, { status: 400 });
     }
 
@@ -313,15 +288,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not enough items available' }, { status: 400 });
     }
 
-    // Fixed: Removed date range validation
-    // Just check if start date is not in the past
+    // Validate date range
     const start = new Date(startDate);
+    const end = new Date(endDate);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
     if (start < today) {
       return NextResponse.json({ error: 'Start date cannot be in the past' }, { status: 400 });
     }
+    
+    if (end <= start) {
+      return NextResponse.json({ error: 'End date must be after start date' }, { status: 400 });
+    }
+
+    // Determine the initial status based on user role
+    const isManager = session.user.role === 'manager';
+    const initialStatus = isManager ? 'pending_storage' : 'pending_manager';
 
     // Create the borrow request
     const newRequest = await db.insert(borrowRequests).values({
@@ -329,9 +312,9 @@ export async function POST(request: NextRequest) {
       userId: session.user.id,
       quantity,
       startDate: new Date(startDate),
-      // Fixed: Set endDate to null, it will be set when approved
-      endDate: null,
+      endDate: new Date(endDate),
       reason,
+      status: initialStatus,
     }).returning();
 
     return NextResponse.json(newRequest[0], { status: 201 });

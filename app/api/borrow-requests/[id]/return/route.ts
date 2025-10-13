@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { borrowRequests, users } from '@/lib/db/schema';
+import { borrowRequests, returnRequests, items } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
 export async function POST(
@@ -17,7 +17,11 @@ export async function POST(
     }
 
     const { id } = await params;
-    const { notes } = await request.json();
+    const { returnCondition, returnNotes, reason } = await request.json();
+    
+    if (!returnCondition || !reason) {
+      return NextResponse.json({ error: 'Return condition and reason are required' }, { status: 400 });
+    }
     
     // Check if request exists
     const requestData = await db.select()
@@ -31,30 +35,33 @@ export async function POST(
     
     const borrowRequest = requestData[0];
     
-    // Check if request is in approved status
-    if (borrowRequest.status !== 'approved') {
-      return NextResponse.json({ error: 'Only approved requests can be returned' }, { status: 400 });
+    if (borrowRequest.status !== 'active') {
+      return NextResponse.json({ error: 'Request is not in active status' }, { status: 400 });
     }
     
-    // Check if user is the owner of the request
-    if (borrowRequest.userId !== session.user.id) {
+    if (borrowRequest.userId !== session.user.id && session.user.role !== 'superadmin') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
-    // Check if return has already been requested
-    if (borrowRequest.returnRequestedAt) {
-      return NextResponse.json({ error: 'Return has already been requested' }, { status: 400 });
-    }
+    // Create a return request with all required fields
+    const newReturnRequest = await db.insert(returnRequests).values({
+      borrowRequestId: id,
+      itemId: borrowRequest.itemId,
+      userId: session.user.id,
+      reason: reason, // Make sure to include the reason
+      returnCondition: returnCondition,
+      returnNotes: returnNotes || null,
+      status: 'pending', // Explicitly set the status
+    }).returning();
     
-    // Update the request with return request
+    // Update borrow request status to pending_return
     await db.update(borrowRequests)
       .set({
-        returnRequestedAt: new Date(),
-        returnNotes: notes || null,
+        status: 'pending_return',
       })
       .where(eq(borrowRequests.id, id));
     
-    return NextResponse.json({ message: 'Return request submitted successfully' });
+    return NextResponse.json(newReturnRequest[0], { status: 201 });
   } catch (error) {
     console.error('Error requesting return:', error);
     return NextResponse.json({ error: 'Failed to request return' }, { status: 500 });

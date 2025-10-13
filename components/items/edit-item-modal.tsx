@@ -23,29 +23,23 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ImagePlus, X, Upload } from 'lucide-react';
+import { ImagePlus, X, Upload, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface Item {
   id: string;
   productCode: string;
   description: string;
   brandCode: string;
-  productGroup: string;
   productDivision: string;
   productCategory: string;
   inventory: number;
-  vendor: string;
   period: string;
   season: string;
-  gender: string;
-  mould: string;
-  tier: string;
-  silo: string;
-  location: string | null;
   unitOfMeasure: string;
+  location: string | null;
   condition: string;
   conditionNotes: string | null;
-  status: 'pending_approval' | 'approved' | 'available' | 'borrowed' | 'in_clearance';
+  status: 'pending_approval' | 'approved' | 'available' | 'borrowed' | 'in_clearance' | 'rejected';
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -86,26 +80,31 @@ interface UploadedImage {
   isNew?: boolean; // Flag to track newly uploaded images
 }
 
+interface ParsedProductCode {
+  brandCode: string;
+  brandName: string;
+  productDivision: string;
+  divisionName: string;
+  productCategory: string;
+  categoryName: string;
+  sequenceNumber: string;
+  isValid: boolean;
+  error?: string;
+}
+
 export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModalProps) {
   const { data: session } = useSession();
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [productCodeError, setProductCodeError] = useState<string | null>(null);
+  const [parsedProductCode, setParsedProductCode] = useState<ParsedProductCode | null>(null);
   const [formData, setFormData] = useState({
     productCode: '',
     description: '',
-    brandCode: '',
-    productGroup: '',
-    productDivision: '',
-    productCategory: '',
     inventory: 0,
-    vendor: '',
     period: '',
     season: '',
-    gender: '',
-    mould: '',
-    tier: '',
-    silo: '',
     unitOfMeasure: 'PCS',
     condition: 'good',
     conditionNotes: '',
@@ -117,18 +116,9 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
       setFormData({
         productCode: item.productCode,
         description: item.description,
-        brandCode: item.brandCode,
-        productGroup: item.productGroup,
-        productDivision: item.productDivision,
-        productCategory: item.productCategory,
         inventory: item.inventory,
-        vendor: item.vendor,
         period: item.period,
         season: item.season,
-        gender: item.gender,
-        mould: item.mould,
-        tier: item.tier,
-        silo: item.silo,
         unitOfMeasure: item.unitOfMeasure,
         condition: item.condition,
         conditionNotes: item.conditionNotes || '',
@@ -147,6 +137,10 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
       }));
       setImages(existingImages);
       setError(null);
+      setProductCodeError(null);
+      
+      // Parse the existing product code
+      parseProductCode(item.productCode);
     }
   }, [isOpen, item]);
 
@@ -156,6 +150,11 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
       ...prev,
       [name]: name === 'inventory' ? parseInt(value) || 0 : value,
     }));
+    
+    // If product code is changed, parse it
+    if (name === 'productCode') {
+      parseProductCode(value);
+    }
   };
 
   const handleSelectChange = (name: string, value: string) => {
@@ -163,6 +162,32 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
       ...prev,
       [name]: value,
     }));
+  };
+
+  const parseProductCode = async (code: string) => {
+    if (!code.trim()) {
+      setProductCodeError(null);
+      setParsedProductCode(null);
+      return;
+    }
+
+    try {
+      // Import the parseProductCode function from the schema
+      const { parseProductCode: parseCode } = await import('@/lib/db/schema');
+      const parsed = parseCode(code);
+      
+      if (parsed.isValid) {
+        setParsedProductCode(parsed);
+        setProductCodeError(null);
+      } else {
+        setParsedProductCode(null);
+        setProductCodeError(parsed.error || 'Invalid product code');
+      }
+    } catch (error) {
+      console.error('Error parsing product code:', error);
+      setParsedProductCode(null);
+      setProductCodeError('Failed to parse product code');
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -256,58 +281,37 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
       setError('Product Code is required');
       return false;
     }
+    
+    if (productCodeError) {
+      setError(productCodeError);
+      return false;
+    }
+    
+    if (!parsedProductCode) {
+      setError('Please enter a valid product code');
+      return false;
+    }
+    
     if (!formData.description.trim()) {
       setError('Description is required');
       return false;
     }
-    if (!formData.brandCode.trim()) {
-      setError('Brand Code is required');
-      return false;
-    }
-    if (!formData.productGroup.trim()) {
-      setError('Product Group is required');
-      return false;
-    }
-    if (!formData.productDivision.trim()) {
-      setError('Product Division is required');
-      return false;
-    }
-    if (!formData.productCategory) {
-      setError('Product Category is required');
-      return false;
-    }
-    if (!formData.vendor.trim()) {
-      setError('Vendor is required');
-      return false;
-    }
+    
     if (!formData.period.trim()) {
       setError('Period is required');
       return false;
     }
+    
     if (!formData.season) {
       setError('Season is required');
       return false;
     }
-    if (!formData.gender) {
-      setError('Gender is required');
-      return false;
-    }
-    if (!formData.mould.trim()) {
-      setError('Mould is required');
-      return false;
-    }
-    if (!formData.tier) {
-      setError('Tier is required');
-      return false;
-    }
-    if (!formData.silo) {
-      setError('Silo is required');
-      return false;
-    }
+    
     if (!formData.unitOfMeasure) {
       setError('Unit of Measure is required');
       return false;
     }
+    
     if (!formData.condition) {
       setError('Condition is required');
       return false;
@@ -380,12 +384,14 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
         
         {error && (
           <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
         
         {!canEditItem && item && (
           <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
             <AlertDescription>
               {isSuperAdmin 
                 ? 'You don\'t have permission to edit this item.'
@@ -399,27 +405,47 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="productCode">Product Code</Label>
-              <Input
-                id="productCode"
-                name="productCode"
-                value={formData.productCode}
-                onChange={handleInputChange}
-                required
-                disabled={!canEditItem}
-              />
+              <div className="relative">
+                <Input
+                  id="productCode"
+                  name="productCode"
+                  value={formData.productCode}
+                  onChange={handleInputChange}
+                  required
+                  disabled={!canEditItem}
+                  className={productCodeError ? "border-red-500" : parsedProductCode ? "border-green-500" : ""}
+                />
+                {parsedProductCode && (
+                  <CheckCircle className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-green-500" />
+                )}
+                {productCodeError && (
+                  <AlertCircle className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-red-500" />
+                )}
+              </div>
+              {productCodeError && (
+                <p className="text-sm text-red-500">{productCodeError}</p>
+              )}
+              {parsedProductCode && (
+                <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-md">
+                  <p className="text-sm font-medium text-green-800">Valid Product Code</p>
+                  <div className="grid grid-cols-2 gap-2 mt-1">
+                    <div className="text-xs text-green-700">
+                      <span className="font-medium">Brand:</span> {parsedProductCode.brandName} ({parsedProductCode.brandCode})
+                    </div>
+                    <div className="text-xs text-green-700">
+                      <span className="font-medium">Division:</span> {parsedProductCode.divisionName} ({parsedProductCode.productDivision})
+                    </div>
+                    <div className="text-xs text-green-700">
+                      <span className="font-medium">Category:</span> {parsedProductCode.categoryName} ({parsedProductCode.productCategory})
+                    </div>
+                    <div className="text-xs text-green-700">
+                      <span className="font-medium">Sequence:</span> {parsedProductCode.sequenceNumber}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="brandCode">Brand Code</Label>
-              <Input
-                id="brandCode"
-                name="brandCode"
-                value={formData.brandCode}
-                onChange={handleInputChange}
-                required
-                disabled={!canEditItem}
-              />
-            </div>
-            <div className="space-y-2 md:col-span-2">
               <Label htmlFor="description">Description</Label>
               <Textarea
                 id="description"
@@ -431,45 +457,6 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="productGroup">Product Group</Label>
-              <Input
-                id="productGroup"
-                name="productGroup"
-                value={formData.productGroup}
-                onChange={handleInputChange}
-                required
-                disabled={!canEditItem}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="productDivision">Product Division</Label>
-              <Input
-                id="productDivision"
-                name="productDivision"
-                value={formData.productDivision}
-                onChange={handleInputChange}
-                required
-                disabled={!canEditItem}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="productCategory">Product Category</Label>
-              <Select 
-                value={formData.productCategory} 
-                onValueChange={(value) => handleSelectChange('productCategory', value)}
-                disabled={!canEditItem}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="LST">Lifestyle</SelectItem>
-                  <SelectItem value="PRF">Performance</SelectItem>
-                  <SelectItem value="SLR">Slider</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
               <Label htmlFor="inventory">Inventory</Label>
               <Input
                 id="inventory"
@@ -477,17 +464,6 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
                 type="number"
                 min="0"
                 value={formData.inventory}
-                onChange={handleInputChange}
-                required
-                disabled={!canEditItem}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="vendor">Vendor</Label>
-              <Input
-                id="vendor"
-                name="vendor"
-                value={formData.vendor}
                 onChange={handleInputChange}
                 required
                 disabled={!canEditItem}
@@ -521,71 +497,6 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="gender">Gender</Label>
-              <Select 
-                value={formData.gender} 
-                onValueChange={(value) => handleSelectChange('gender', value)}
-                disabled={!canEditItem}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select gender" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="M">Men</SelectItem>
-                  <SelectItem value="W">Women</SelectItem>
-                  <SelectItem value="U">Unisex</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="mould">Mould</Label>
-              <Input
-                id="mould"
-                name="mould"
-                value={formData.mould}
-                onChange={handleInputChange}
-                required
-                disabled={!canEditItem}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="tier">Tier</Label>
-              <Select 
-                value={formData.tier} 
-                onValueChange={(value) => handleSelectChange('tier', value)}
-                disabled={!canEditItem}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select tier" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PRO">Professional</SelectItem>
-                  <SelectItem value="STD">Standard</SelectItem>
-                  <SelectItem value="ECO">Economy</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="silo">Silo</Label>
-              <Select 
-                value={formData.silo} 
-                onValueChange={(value) => handleSelectChange('silo', value)}
-                disabled={!canEditItem}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select silo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="LIFESTYLE">Lifestyle</SelectItem>
-                  <SelectItem value="SPORTS">Sports</SelectItem>
-                  <SelectItem value="OUTDOOR">Outdoor</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            {/* Location field is removed as it's set by storage master */}
-            
             <div className="space-y-2">
               <Label htmlFor="unitOfMeasure">Unit of Measure</Label>
               <Select 
@@ -729,7 +640,7 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
             </Button>
             <Button 
               type="submit" 
-              disabled={isLoading || isUploading || !canEditItem}
+              disabled={isLoading || isUploading || !canEditItem || !parsedProductCode}
             >
               {isLoading ? 'Updating...' : 'Update Item'}
             </Button>

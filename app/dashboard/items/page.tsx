@@ -23,8 +23,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Badge } from '@/components/ui/badge';
-import { EditItemModal } from '@/components/items/edit-item-modal';
 import { MessageContainer } from '@/components/ui/message';
 import { useMessages } from '@/hooks/use-messages';
 import {
@@ -35,9 +33,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { InlineAddItem } from '@/components/items/inline-add-item';
 import React from 'react';
 import ColumnSelectorModal from '@/components/items/ColumnSelectorModal';
+import { UniversalBadge } from '@/components/ui/universal-badge';
+import { EditItemModal } from '@/components/items/edit-item-modal';
 
 interface ItemImage {
   id: string;
@@ -56,22 +55,16 @@ interface Item {
   productCode: string;
   description: string;
   brandCode: string;
-  productGroup: string;
   productDivision: string;
   productCategory: string;
   inventory: number;
-  vendor: string;
   period: string;
   season: string;
-  gender: string;
-  mould: string;
-  tier: string;
-  silo: string;
-  location: string | null;
   unitOfMeasure: string;
+  location: string | null;
   condition: string;
   conditionNotes: string | null;
-  status: 'pending_approval' | 'approved' | 'available' | 'borrowed' | 'in_clearance';
+  status: 'pending_approval' | 'approved' | 'available' | 'borrowed' | 'in_clearance' | 'rejected';
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -90,10 +83,9 @@ const ALL_COLUMNS = [
   { id: 'productCode', label: 'Product Code', defaultVisible: true },
   { id: 'category', label: 'Category', defaultVisible: true },
   { id: 'unit', label: 'Unit', defaultVisible: true },
-  { id: 'condition', label: 'Condition', defaultVisible: true },
-  { id: 'location', label: 'Location', defaultVisible: true },
+  { id: 'condition', label: 'Condition', defaultVisible: false },
+  { id: 'location', label: 'Location', defaultVisible: false },
   { id: 'inventory', label: 'Inventory', defaultVisible: true },
-  { id: 'vendor', label: 'Vendor', defaultVisible: false },
   { id: 'createdBy', label: 'Created By', defaultVisible: false },
   { id: 'status', label: 'Status', defaultVisible: true },
   { id: 'actions', label: 'Actions', defaultVisible: true },
@@ -194,11 +186,6 @@ export default function ItemsPage() {
     });
   };
 
-  const handleInlineAdd = (index: number) => {
-    setInlineAddRowIndex(index);
-    setShowInlineAdd(true);
-  };
-
   const filteredItems = items.filter(item => {
     const matchesSearch = item.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
                        item.productCode.toLowerCase().includes(searchTerm.toLowerCase());
@@ -222,90 +209,7 @@ export default function ItemsPage() {
   const canAddItem = isSuperAdmin || isItemMaster;
   const canEditItem = isSuperAdmin || isItemMaster;
   const canDeleteItem = isSuperAdmin;
-  const canViewItems = true; // All roles can view items
-
-  const getCategoryBadge = (category: string) => {
-    switch (category) {
-      case 'LST':
-        return <Badge variant="outline" className="bg-blue-100 text-blue-800">Lifestyle</Badge>;
-      case 'PRF':
-        return <Badge variant="outline" className="bg-green-100 text-green-800">Performance</Badge>;
-      case 'SLR':
-        return <Badge variant="outline" className="bg-purple-100 text-purple-800">Slider</Badge>;
-      default:
-        return <Badge variant="outline">{category}</Badge>;
-    }
-  };
-
-  const getLocationBadge = (location: string | null) => {
-    if (!location) {
-      return <Badge variant="outline" className="bg-gray-100 text-gray-800">Not Assigned</Badge>;
-    }
-    
-    switch (location) {
-      case 'Storage 1':
-        return <Badge variant="outline" className="bg-gray-100 text-gray-800">Storage 1</Badge>;
-      case 'Storage 2':
-        return <Badge variant="outline" className="bg-indigo-100 text-indigo-800">Storage 2</Badge>;
-      case 'Storage 3':
-        return <Badge variant="outline" className="bg-pink-100 text-pink-800">Storage 3</Badge>;
-      default:
-        return <Badge variant="outline">{location}</Badge>;
-    }
-  };
-
-  const getUnitBadge = (unit: string) => {
-    switch (unit) {
-      case 'PCS':
-        return <Badge variant="outline" className="bg-cyan-100 text-cyan-800">PCS</Badge>;
-      case 'PRS':
-        return <Badge variant="outline" className="bg-orange-100 text-orange-800">PRS</Badge>;
-      default:
-        return <Badge variant="outline">{unit}</Badge>;
-    }
-  };
-
-  const getConditionBadge = (condition: string) => {
-    switch (condition) {
-      case 'excellent':
-        return <Badge variant="outline" className="bg-green-100 text-green-800">Excellent</Badge>;
-      case 'good':
-        return <Badge variant="outline" className="bg-blue-100 text-blue-800">Good</Badge>;
-      case 'fair':
-        return <Badge variant="outline" className="bg-amber-100 text-amber-800">Fair</Badge>;
-      case 'poor':
-        return <Badge variant="outline" className="bg-red-100 text-red-800">Poor</Badge>;
-      default:
-        return <Badge variant="outline">{condition}</Badge>;
-    }
-  };
-
-  const getStockStatus = (inventory: number) => {
-    if (inventory === 0) {
-      return <Badge variant="destructive">Out of Stock</Badge>;
-    } else if (inventory < 5) {
-      return <Badge variant="outline" className="bg-amber-100 text-amber-800">Low Stock</Badge>;
-    } else {
-      return <Badge variant="outline" className="bg-green-100 text-green-800 w-fit">In Stock</Badge>;
-    }
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'pending_approval':
-        return <Badge variant="outline" className="bg-yellow-100 text-yellow-800">Pending Approval</Badge>;
-      case 'approved':
-        return <Badge variant="outline" className="bg-blue-100 text-blue-800">Approved</Badge>;
-      case 'available':
-        return <Badge variant="outline" className="bg-green-100 text-green-800">Available</Badge>;
-      case 'borrowed':
-        return <Badge variant="outline" className="bg-purple-100 text-purple-800">Borrowed</Badge>;
-      case 'in_clearance':
-        return <Badge variant="outline" className="bg-gray-100 text-gray-800">In Clearance</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
-  };
+  const canViewItems = true; 
 
   const handleEditItem = (item: Item) => {
     setEditingItem(item);
@@ -325,17 +229,6 @@ export default function ItemsPage() {
 
   const renderTableCell = (item: Item, columnId: string) => {
     switch (columnId) {
-      case 'checkbox':
-        return (
-          <TableCell key={`checkbox-${item.id}`}>
-            <input
-              type="checkbox"
-              className="rounded border-gray-300"
-              checked={false}
-              onChange={() => {}}
-            />
-          </TableCell>
-        );
       case 'item':
         return (
           <TableCell key={`item-${item.id}`}>
@@ -354,8 +247,10 @@ export default function ItemsPage() {
               )}
               <div className="flex flex-col space-y-1 min-w-0">
                 <div className="font-medium truncate">{item.description}</div>
-                <div className="text-sm text-gray-500 truncate max-w-xs" title={item.brandCode}>
-                  {item.brandCode} / {item.productGroup}
+                <div className="flex items-center space-x-2 text-sm text-gray-500">
+                  <UniversalBadge type="brand" value={item.brandCode} />
+                  <span>/</span>
+                  <UniversalBadge type="division" value={item.productDivision} />
                 </div>
               </div>
             </div>
@@ -370,40 +265,33 @@ export default function ItemsPage() {
       case 'category':
         return (
           <TableCell key={`category-${item.id}`}>
-            {getCategoryBadge(item.productCategory)}
+            <UniversalBadge type="category" value={item.productCategory} />
           </TableCell>
         );
       case 'unit':
         return (
           <TableCell key={`unit-${item.id}`}>
-            {getUnitBadge(item.unitOfMeasure)}
+            <UniversalBadge type="unit" value={item.unitOfMeasure} />
           </TableCell>
         );
       case 'condition':
         return (
           <TableCell key={`condition-${item.id}`}>
-            {getConditionBadge(item.condition)}
+            <UniversalBadge type="condition" value={item.condition} />
           </TableCell>
         );
       case 'location':
         return (
           <TableCell key={`location-${item.id}`}>
-            {getLocationBadge(item.location)}
+            <UniversalBadge type="location" value={item.location || ''} />
           </TableCell>
         );
       case 'inventory':
         return (
           <TableCell key={`inventory-${item.id}`}>
-            <div className="flex flex-col space-y-1">
+            <div className="flex justify-center">
               <div className="font-medium">{item.inventory}</div>
-              {getStockStatus(item.inventory)}
             </div>
-          </TableCell>
-        );
-      case 'vendor':
-        return (
-          <TableCell key={`vendor-${item.id}`}>
-            <div className="text-sm">{item.vendor}</div>
           </TableCell>
         );
       case 'createdBy':
@@ -417,7 +305,7 @@ export default function ItemsPage() {
       case 'status':
         return (
           <TableCell key={`status-${item.id}`}>
-            {getStatusBadge(item.status)}
+            <UniversalBadge type="status" value={item.status} />
           </TableCell>
         );
       case 'actions':
@@ -536,9 +424,19 @@ export default function ItemsPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
                 <option value="all">All Categories</option>
-                <option value="LST">Lifestyle</option>
-                <option value="PRF">Performance</option>
-                <option value="SLR">Slider</option>
+                <option value="00">Lifestyle</option>
+                <option value="01">Football</option>
+                <option value="02">Futsal</option>
+                <option value="03">Street Soccer</option>
+                <option value="04">Running</option>
+                <option value="05">Training</option>
+                <option value="06">Volley</option>
+                <option value="08">Badminton</option>
+                <option value="09">Tennis</option>
+                <option value="10">Basketball</option>
+                <option value="12">Skateboard</option>
+                <option value="14">Swimming</option>
+                <option value="17">Back to school</option>
               </select>
             </div>
             <div>
@@ -594,6 +492,7 @@ export default function ItemsPage() {
                 <option value="available">Available</option>
                 <option value="borrowed">Borrowed</option>
                 <option value="in_clearance">In Clearance</option>
+                <option value="rejected">Rejected</option>
               </select>
             </div>
           </div>
@@ -621,35 +520,6 @@ export default function ItemsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {showInlineAdd && inlineAddRowIndex === filteredItems.length && (
-                <TableRow>
-                  <TableCell colSpan={visibleColumns.length} className="p-0">
-                    <InlineAddItem
-                      onSuccess={handleAddItemSuccess}
-                      onCancel={() => {
-                        setShowInlineAdd(false);
-                        setInlineAddRowIndex(-1);
-                      }}
-                    />
-                  </TableCell>
-                </TableRow>
-              )}
-              
-              {canAddItem && !showInlineAdd && (
-                <TableRow>
-                  <TableCell colSpan={visibleColumns.length} className="text-center py-2">
-                    <Button 
-                      variant="ghost" 
-                      onClick={() => handleInlineAdd(filteredItems.length)}
-                      className="text-primary-600"
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Item
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              )}
-              
               {filteredItems.map((item, index) => (
                 <React.Fragment key={item.id}>
                   <TableRow>
@@ -666,19 +536,6 @@ export default function ItemsPage() {
                       </React.Fragment>
                     )}
                   </TableRow>
-                  {showInlineAdd && inlineAddRowIndex === index && (
-                    <TableRow>
-                      <TableCell colSpan={visibleColumns.length} className="p-0">
-                        <InlineAddItem
-                          onSuccess={handleAddItemSuccess}
-                          onCancel={() => {
-                            setShowInlineAdd(false);
-                            setInlineAddRowIndex(-1);
-                          }}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  )}
                 </React.Fragment>
               ))}
             </TableBody>

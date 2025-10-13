@@ -10,7 +10,7 @@ export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     
-    if (!session || session.user.role !== 'admin') {
+    if (!session || session.user.role !== 'superadmin') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     
-    if (!session || session.user.role !== 'admin') {
+    if (!session || session.user.role !== 'superadmin') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate department assignment
-    if (role !== 'admin' && !departmentId) {
+    if (role !== 'superadmin' && !departmentId) {
       return NextResponse.json({ error: 'Department is required for non-admin users' }, { status: 400 });
     }
 
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       email,
       password: hashedPassword,
       role,
-      departmentId: role === 'admin' ? null : departmentId,
+      departmentId: role === 'superadmin' ? null : departmentId,
     }).returning({
       id: users.id,
       name: users.name,

@@ -20,7 +20,7 @@ export async function PUT(
     }
 
     // Only admins can update users
-    if (session.user.role !== 'admin') {
+    if (session.user.role !== 'superadmin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -100,7 +100,7 @@ export async function DELETE(
     }
 
     // Only admins can delete users
-    if (session.user.role !== 'admin') {
+    if (session.user.role !== 'superadmin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

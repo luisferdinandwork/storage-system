@@ -3,6 +3,7 @@ import { db } from '../lib/db';
 import { users, items, departments, itemImages, itemRequests } from '../lib/db/schema';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
+import { parseProductCode } from '../lib/db/schema';
 
 async function seed() {
   try {
@@ -58,7 +59,7 @@ async function seed() {
     }).returning();
     console.log('Storage master manager created');
 
-    // Create only one storage master
+    // Create storage master
     console.log('Creating storage master...');
     const storageMasterPassword = await bcrypt.hash('storagemaster123', 10);
     const [storageMaster1] = await db.insert(users).values({
@@ -70,7 +71,7 @@ async function seed() {
     }).returning();
     console.log('Storage master created');
 
-    // Create only one item master
+    // Create item master
     console.log('Creating item master...');
     const itemMasterPassword = await bcrypt.hash('itemmaster123', 10);
     const [itemMaster1] = await db.insert(users).values({
@@ -82,8 +83,8 @@ async function seed() {
     }).returning();
     console.log('Item master created');
 
-    // Create department managers
-    console.log('Creating department managers...');
+    // Create department manager
+    console.log('Creating department manager...');
     const sportsManagerPassword = await bcrypt.hash('manager123', 10);
     const [sportsManager] = await db.insert(users).values({
       name: 'Sports Manager',
@@ -92,9 +93,9 @@ async function seed() {
       role: 'manager',
       departmentId: sportsDept.id,
     }).returning();
-    console.log('Department managers created');
+    console.log('Department manager created');
 
-    // Create regular users for sports department
+    // Create regular users
     console.log('Creating regular users...');
     const userPassword = await bcrypt.hash('user123', 10);
     
@@ -116,24 +117,15 @@ async function seed() {
 
     console.log('Regular users created');
 
-    // Create sports equipment items using the new schema format
+    // Create 10 sports equipment items using the new schema format
     console.log('Creating sports equipment items...');
     const itemsData = [
       {
-        productCode: 'SPE1000001',
-        description: 'TEMPO SHIPYARD/EGRET/DOESKIN',
-        brandCode: 'SPE',
-        productGroup: 'SHO',
-        productDivision: 'FTW',
-        productCategory: 'LST',
+        productCode: 'SPE110000001',
+        description: 'TEMPO SHIPYARD/EGRET/DOESKIN Lifestyle Shoes',
         inventory: 35,
-        vendor: 'PT UNIMITRA',
         period: '24Q1',
         season: 'SS',
-        gender: 'M',
-        mould: 'PRM 096',
-        tier: 'PRO',
-        silo: 'LIFESTYLE',
         unitOfMeasure: 'PRS' as const,
         condition: 'excellent' as const,
         conditionNotes: 'Brand new in box',
@@ -141,20 +133,11 @@ async function seed() {
         createdBy: itemMaster1.id,
       },
       {
-        productCode: 'SPE1000002',
-        description: 'TEMPO SHADED SPRUCE/EGRET/DOESKIN',
-        brandCode: 'SPE',
-        productGroup: 'SHO',
-        productDivision: 'FTW',
-        productCategory: 'LST',
+        productCode: 'SPE110100001',
+        description: 'TEMPO SHADED SPRUCE/EGRET/DOESKIN Football Shoes',
         inventory: 2,
-        vendor: 'PT UNIMITRA',
         period: '24Q1',
         season: 'SS',
-        gender: 'M',
-        mould: 'PRM 096',
-        tier: 'PRO',
-        silo: 'LIFESTYLE',
         unitOfMeasure: 'PRS' as const,
         condition: 'good' as const,
         conditionNotes: 'Minor scuff marks on sole',
@@ -162,20 +145,11 @@ async function seed() {
         createdBy: itemMaster1.id,
       },
       {
-        productCode: 'SPE1000003',
-        description: 'TEMPO INDIA INK/EGRET/DOESKIN',
-        brandCode: 'SPE',
-        productGroup: 'SHO',
-        productDivision: 'FTW',
-        productCategory: 'LST',
+        productCode: 'SPE110200001',
+        description: 'TEMPO INDIA INK/EGRET/DOESKIN Futsal Shoes',
         inventory: 67,
-        vendor: 'PT UNIMITRA',
         period: '24Q1',
         season: 'SS',
-        gender: 'M',
-        mould: 'PRM 096',
-        tier: 'PRO',
-        silo: 'LIFESTYLE',
         unitOfMeasure: 'PRS' as const,
         condition: 'good' as const,
         conditionNotes: 'Display model, slight wear',
@@ -186,20 +160,11 @@ async function seed() {
         createdBy: itemMaster1.id,
       },
       {
-        productCode: 'SPE1000004',
-        description: 'TEMPO JUNGLE GREEN/INDIA INK/BRIGHT AQUA',
-        brandCode: 'SPE',
-        productGroup: 'SHO',
-        productDivision: 'FTW',
-        productCategory: 'LST',
+        productCode: 'SPE110300001',
+        description: 'TEMPO JUNGLE GREEN/INDIA INK/BRIGHT AQUA Street Soccer Shoes',
         inventory: 1,
-        vendor: 'PT UNIMITRA',
         period: '24Q1',
         season: 'SS',
-        gender: 'M',
-        mould: 'PRM 096',
-        tier: 'PRO',
-        silo: 'LIFESTYLE',
         unitOfMeasure: 'PRS' as const,
         condition: 'fair' as const,
         conditionNotes: 'Heel wear, needs replacement soon',
@@ -210,20 +175,11 @@ async function seed() {
         createdBy: itemMaster1.id,
       },
       {
-        productCode: 'SPE1000006',
-        description: '303_EARTHOVER FORGED IRON/PEARL CITY',
-        brandCode: 'SPE',
-        productGroup: 'SHO',
-        productDivision: 'FTW',
-        productCategory: 'LST',
+        productCode: 'SPE110400001',
+        description: '303_EARTHOVER FORGED IRON/PEARL CITY Running Shoes',
         inventory: 2,
-        vendor: 'PT UNIMITRA',
         period: '24Q1',
         season: 'SS',
-        gender: 'M',
-        mould: 'PRM 096',
-        tier: 'PRO',
-        silo: 'LIFESTYLE',
         unitOfMeasure: 'PRS' as const,
         condition: 'excellent' as const,
         conditionNotes: 'New collection',
@@ -234,20 +190,11 @@ async function seed() {
         createdBy: itemMaster1.id,
       },
       {
-        productCode: 'SPE1000007',
-        description: '303_EARTHOVER BLUE ODDYSEY/VANILLA ICE',
-        brandCode: 'SPE',
-        productGroup: 'SHO',
-        productDivision: 'FTW',
-        productCategory: 'LST',
+        productCode: 'SPE110500001',
+        description: '303_EARTHOVER BLUE ODDYSEY/VANILLA ICE Training Shoes',
         inventory: 2,
-        vendor: 'PT UNIMITRA',
         period: '24Q1',
         season: 'SS',
-        gender: 'M',
-        mould: 'PRM 096',
-        tier: 'PRO',
-        silo: 'LIFESTYLE',
         unitOfMeasure: 'PRS' as const,
         condition: 'good' as const,
         conditionNotes: 'No original box',
@@ -257,22 +204,12 @@ async function seed() {
         location: 'Storage 1' as const,
         createdBy: itemMaster1.id,
       },
-      // Add more items with different categories
       {
-        productCode: 'ACC1000001',
+        productCode: 'SPE130000001',
         description: 'SPORTS WATCH PROFESSIONAL',
-        brandCode: 'ACC',
-        productGroup: 'ACC',
-        productDivision: 'FTW',
-        productCategory: 'ACC',
         inventory: 15,
-        vendor: 'SPORTS GEAR INC',
         period: '24Q1',
         season: 'SS',
-        gender: 'U',
-        mould: 'ACC 001',
-        tier: 'PRO',
-        silo: 'SPORTS',
         unitOfMeasure: 'PCS' as const,
         condition: 'excellent' as const,
         conditionNotes: 'With original packaging',
@@ -283,20 +220,11 @@ async function seed() {
         createdBy: itemMaster1.id,
       },
       {
-        productCode: 'EQU1000001',
+        productCode: 'SPE140000001',
         description: 'TENNIS RACKET PROFESSIONAL',
-        brandCode: 'EQU',
-        productGroup: 'TEN',
-        productDivision: 'FTW',
-        productCategory: 'EQU',
         inventory: 8,
-        vendor: 'TENNIS PRO',
         period: '24Q1',
         season: 'SS',
-        gender: 'U',
-        mould: 'TEN 045',
-        tier: 'PRO',
-        silo: 'SPORTS',
         unitOfMeasure: 'PCS' as const,
         condition: 'good' as const,
         conditionNotes: 'String tension needs adjustment',
@@ -307,20 +235,11 @@ async function seed() {
         createdBy: itemMaster1.id,
       },
       {
-        productCode: 'APP1000001',
+        productCode: 'SPE120000001',
         description: 'SPORTS JERSEY TEAM EDITION',
-        brandCode: 'APP',
-        productGroup: 'APP',
-        productDivision: 'FTW',
-        productCategory: 'APP',
         inventory: 25,
-        vendor: 'SPORTSWEAR CO',
         period: '24Q1',
         season: 'SS',
-        gender: 'U',
-        mould: 'APP 012',
-        tier: 'STD',
-        silo: 'SPORTS',
         unitOfMeasure: 'PCS' as const,
         condition: 'good' as const,
         conditionNotes: 'Minor fabric pilling',
@@ -331,20 +250,11 @@ async function seed() {
         createdBy: itemMaster1.id,
       },
       {
-        productCode: 'APP1000002',
+        productCode: 'SPE120000002',
         description: 'SPORTS SHORTS COMFORT FIT',
-        brandCode: 'APP',
-        productGroup: 'APP',
-        productDivision: 'FTW',
-        productCategory: 'APP',
         inventory: 30,
-        vendor: 'SPORTSWEAR CO',
         period: '24Q1',
         season: 'SS',
-        gender: 'U',
-        mould: 'APP 013',
-        tier: 'STD',
-        silo: 'SPORTS',
         unitOfMeasure: 'PCS' as const,
         condition: 'excellent' as const,
         conditionNotes: 'New with tags',
@@ -356,7 +266,23 @@ async function seed() {
       }
     ];
 
-    const createdItems = await db.insert(items).values(itemsData).returning();
+    // Process items to extract brandCode, productDivision, and productCategory from productCode
+    const processedItems = itemsData.map(item => {
+      const parsed = parseProductCode(item.productCode);
+      if (!parsed.isValid) {
+        console.error(`Invalid product code: ${item.productCode}`, parsed.error);
+        throw new Error(`Invalid product code: ${item.productCode}`);
+      }
+      
+      return {
+        ...item,
+        brandCode: parsed.brandCode,
+        productDivision: parsed.productDivision,
+        productCategory: parsed.productCategory,
+      };
+    });
+
+    const createdItems = await db.insert(items).values(processedItems).returning();
 
     console.log('Items created successfully');
 

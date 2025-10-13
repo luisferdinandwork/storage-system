@@ -60,12 +60,6 @@ const navigation = [
     icon: Package, 
     roles: ['superadmin', 'item-master', 'storage-master', 'storage-manager', 'manager', 'user'] 
   },
-  { 
-    name: 'Add Item', 
-    href: '/dashboard/items/add', 
-    icon: Plus, 
-    roles: ['superadmin', 'item-master'] 
-  },
   
   // Storage Management - Storage Master and Storage Manager specific
   { 

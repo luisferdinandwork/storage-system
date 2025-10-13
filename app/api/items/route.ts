@@ -17,26 +17,20 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
 
-    // Build the query
+    // Build the query with updated schema
     let query = db
       .select({
         id: items.id,
         productCode: items.productCode,
         description: items.description,
         brandCode: items.brandCode,
-        productGroup: items.productGroup,
         productDivision: items.productDivision,
         productCategory: items.productCategory,
         inventory: items.inventory,
-        vendor: items.vendor,
         period: items.period,
         season: items.season,
-        gender: items.gender,
-        mould: items.mould,
-        tier: items.tier,
-        silo: items.silo,
-        location: items.location,
         unitOfMeasure: items.unitOfMeasure,
+        location: items.location,
         condition: items.condition,
         conditionNotes: items.conditionNotes,
         status: items.status,
@@ -110,18 +104,9 @@ export async function POST(request: NextRequest) {
     const { 
       productCode, 
       description, 
-      brandCode, 
-      productGroup, 
-      productDivision, 
-      productCategory, 
       inventory, 
-      vendor, 
       period, 
       season, 
-      gender, 
-      mould, 
-      tier, 
-      silo,
       unitOfMeasure,
       condition,
       conditionNotes,
@@ -129,11 +114,20 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Validate required fields
-    if (!productCode || !description || !brandCode || !productGroup || !productDivision || 
-        !productCategory || !vendor || !period || !season || !gender || !mould || !tier || !silo || 
-        !unitOfMeasure || !condition) {
+    if (!productCode || !description || !period || !season || !unitOfMeasure || !condition) {
       return NextResponse.json(
         { error: 'Missing required fields' },
+        { status: 400 }
+      );
+    }
+
+    // Parse product code to extract auto-generated fields
+    const { parseProductCode } = await import('@/lib/db/schema');
+    const parsed = parseProductCode(productCode);
+    
+    if (!parsed.isValid) {
+      return NextResponse.json(
+        { error: `Invalid product code: ${parsed.error}` },
         { status: 400 }
       );
     }
@@ -158,19 +152,12 @@ export async function POST(request: NextRequest) {
       .values({
         productCode,
         description,
-        brandCode,
-        productGroup,
-        productDivision,
-        productCategory,
+        brandCode: parsed.brandCode,
+        productDivision: parsed.productDivision,
+        productCategory: parsed.productCategory,
         inventory: inventory || 0,
-        vendor,
         period,
         season,
-        gender,
-        mould,
-        tier,
-        silo,
-        location: null, // Will be set by storage master
         unitOfMeasure,
         condition,
         conditionNotes: conditionNotes || null,

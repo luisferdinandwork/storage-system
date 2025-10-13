@@ -37,9 +37,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { MessageContainer } from '@/components/ui/message';
+
 import { useMessages } from '@/hooks/use-messages';
 import { 
   Package, 
@@ -56,28 +56,23 @@ import {
   Image
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { UniversalBadge } from '@/components/ui/universal-badge';
 
 interface Item {
   id: string;
   productCode: string;
   description: string;
   brandCode: string;
-  productGroup: string;
   productDivision: string;
   productCategory: string;
   inventory: number;
-  vendor: string;
   period: string;
   season: string;
-  gender: string;
-  mould: string;
-  tier: string;
-  silo: string;
-  location: string | null;
   unitOfMeasure: string;
+  location: string | null;
   condition: string;
   conditionNotes: string | null;
-  status: 'pending_approval' | 'approved' | 'available' | 'borrowed' | 'in_clearance';
+  status: 'pending_approval' | 'approved' | 'available' | 'borrowed' | 'in_clearance' | 'rejected';
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -277,50 +272,13 @@ export default function StorageManagementPage() {
   const userRole = session?.user?.role;
   const canManageStorage = userRole === 'storage-master' || userRole === 'storage-master-manager' || userRole === 'superadmin';
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return <Badge variant="outline" className="bg-yellow-100 text-yellow-800">Pending</Badge>;
-      case 'approved':
-        return <Badge variant="outline" className="bg-green-100 text-green-800">Approved</Badge>;
-      case 'rejected':
-        return <Badge variant="outline" className="bg-red-100 text-red-800">Rejected</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
-  };
-
-  const getItemStatusBadge = (status: string) => {
-    switch (status) {
-      case 'pending_approval':
-        return <Badge variant="outline" className="bg-yellow-100 text-yellow-800">Pending Approval</Badge>;
-      case 'approved':
-        return <Badge variant="outline" className="bg-blue-100 text-blue-800">Approved</Badge>;
-      case 'available':
-        return <Badge variant="outline" className="bg-green-100 text-green-800">Available</Badge>;
-      case 'borrowed':
-        return <Badge variant="outline" className="bg-purple-100 text-purple-800">Borrowed</Badge>;
-      case 'in_clearance':
-        return <Badge variant="outline" className="bg-gray-100 text-gray-800">In Clearance</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
-  };
-
-  const getLocationBadge = (location: string | null) => {
-    if (!location) {
-      return <Badge variant="outline" className="bg-gray-100 text-gray-800">Not Assigned</Badge>;
-    }
-    
-    switch (location) {
-      case 'Storage 1':
-        return <Badge variant="outline" className="bg-gray-100 text-gray-800">Storage 1</Badge>;
-      case 'Storage 2':
-        return <Badge variant="outline" className="bg-indigo-100 text-indigo-800">Storage 2</Badge>;
-      case 'Storage 3':
-        return <Badge variant="outline" className="bg-pink-100 text-pink-800">Storage 3</Badge>;
-      default:
-        return <Badge variant="outline">{location}</Badge>;
+  const getStockStatus = (inventory: number) => {
+    if (inventory === 0) {
+      return <UniversalBadge type="status" value="out_of_stock" />;
+    } else if (inventory < 5) {
+      return <UniversalBadge type="status" value="low_stock" />;
+    } else {
+      return <UniversalBadge type="status" value="in_stock" />;
     }
   };
 
@@ -340,12 +298,10 @@ export default function StorageManagementPage() {
           <p className="text-gray-600 mt-1">Manage item locations and approve new items</p>
         </div>
         <div className="flex items-center space-x-2">
-          <Badge variant="outline" className="bg-yellow-100 text-yellow-800">
-            {pendingRequests.length} Pending
-          </Badge>
-          <Badge variant="outline" className="bg-green-100 text-green-800">
-            {approvedRequests.length} Approved
-          </Badge>
+          <UniversalBadge type="status" value="pending" />
+          <span className="text-sm">{pendingRequests.length}</span>
+          <UniversalBadge type="status" value="approved" />
+          <span className="text-sm">{approvedRequests.length}</span>
         </div>
       </div>
 
@@ -461,34 +417,31 @@ export default function StorageManagementPage() {
                         )}
                       <div className="flex flex-col min-w-0">
                         <div className="font-medium truncate">{request.item.description}</div>
-                        <div className="text-sm text-gray-500 truncate">{request.item.brandCode}</div>
+                        <div className="flex items-center space-x-2 text-sm text-gray-500">
+                            <UniversalBadge type="brand" value={request.item.brandCode} />
+                          <span>/</span>
+                            <UniversalBadge type="division" value={request.item.productDivision} />
+                        </div>
                       </div>
                     </div>
                   </TableCell>
                   <TableCell className="font-mono text-sm">{request.item.productCode}</TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="bg-blue-100 text-blue-800">
-                      {request.item.productCategory}
-                    </Badge>
+                    <UniversalBadge type="category" value={request.item.productCategory} />
                   </TableCell>
                   <TableCell>
-                    <div className="flex flex-col">
+                    <div className="flex justify-center">
                       <span className="font-medium">{request.item.inventory}</span>
-                      {request.item.inventory === 0 && (
-                        <Badge variant="destructive" className="text-xs">Out of Stock</Badge>
-                      )}
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="bg-green-100 text-green-800">
-                      {request.item.condition}
-                    </Badge>
+                    <UniversalBadge type="condition" value={request.item.condition} />
                   </TableCell>
                   <TableCell>
-                    {getLocationBadge(request.item.location)}
+                    <UniversalBadge type="location" value={request.item.location || ''} />
                   </TableCell>
                   <TableCell>
-                    {getStatusBadge(request.status)}
+                    <UniversalBadge type="status" value={request.status} />
                   </TableCell>
                   <TableCell>
                     <div className="text-sm">
@@ -593,7 +546,7 @@ export default function StorageManagementPage() {
                           className="w-full h-32 object-cover rounded-md"
                         />
                         {image.isPrimary && (
-                          <Badge className="absolute top-2 left-2 text-xs">Primary</Badge>
+                          <UniversalBadge type="status" value="primary" className="absolute top-2 left-2 text-xs" />
                         )}
                       </div>
                     ))}
@@ -612,28 +565,29 @@ export default function StorageManagementPage() {
                   <p>{selectedItem.description}</p>
                 </div>
                 <div>
-                  <Label>Brand Code</Label>
-                  <p>{selectedItem.brandCode}</p>
-                </div>
-                <div>
-                  <Label>Product Group</Label>
-                  <p>{selectedItem.productGroup}</p>
+                  <Label>Brand</Label>
+                  <div className="flex items-center space-x-2">
+                    <UniversalBadge type="brand" value={selectedItem.brandCode} />
+                    <span>{selectedItem.brandCode}</span>
+                  </div>
                 </div>
                 <div>
                   <Label>Product Division</Label>
-                  <p>{selectedItem.productDivision}</p>
+                  <div className="flex items-center space-x-2">
+                    <UniversalBadge type="division" value={selectedItem.productDivision} />
+                    <span>{selectedItem.productDivision}</span>
+                  </div>
                 </div>
                 <div>
                   <Label>Product Category</Label>
-                  <p>{selectedItem.productCategory}</p>
+                  <div className="flex items-center space-x-2">
+                    <UniversalBadge type="category" value={selectedItem.productCategory} />
+                    <span>{selectedItem.productCategory}</span>
+                  </div>
                 </div>
                 <div>
                   <Label>Inventory</Label>
                   <p>{selectedItem.inventory}</p>
-                </div>
-                <div>
-                  <Label>Vendor</Label>
-                  <p>{selectedItem.vendor}</p>
                 </div>
                 <div>
                   <Label>Period</Label>
@@ -644,28 +598,23 @@ export default function StorageManagementPage() {
                   <p>{selectedItem.season}</p>
                 </div>
                 <div>
-                  <Label>Gender</Label>
-                  <p>{selectedItem.gender}</p>
-                </div>
-                <div>
-                  <Label>Mould</Label>
-                  <p>{selectedItem.mould}</p>
-                </div>
-                <div>
-                  <Label>Tier</Label>
-                  <p>{selectedItem.tier}</p>
-                </div>
-                <div>
-                  <Label>Silo</Label>
-                  <p>{selectedItem.silo}</p>
-                </div>
-                <div>
                   <Label>Unit of Measure</Label>
-                  <p>{selectedItem.unitOfMeasure}</p>
+                  <UniversalBadge type="unit" value={selectedItem.unitOfMeasure} />
                 </div>
                 <div>
                   <Label>Condition</Label>
-                  <p>{selectedItem.condition}</p>
+                  <div className="flex items-center space-x-2">
+                    <UniversalBadge type="condition" value={selectedItem.condition} />
+                    <span>{selectedItem.condition}</span>
+                  </div>
+                </div>
+                <div>
+                  <Label>Location</Label>
+                  <UniversalBadge type="location" value={selectedItem.location || ''} />
+                </div>
+                <div>
+                  <Label>Status</Label>
+                  <UniversalBadge type="status" value={selectedItem.status} />
                 </div>
                 <div className="col-span-2">
                   <Label>Condition Notes</Label>

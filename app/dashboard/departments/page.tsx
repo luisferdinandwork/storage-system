@@ -146,7 +146,7 @@ export default function DepartmentsPage() {
     (dept.description || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  if (session?.user?.role !== 'admin') {
+  if (session?.user?.role !== 'superadmin') {
     return (
       <div className="text-center py-12">
         <Building className="mx-auto h-12 w-12 text-gray-400" />

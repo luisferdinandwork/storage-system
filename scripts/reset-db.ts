@@ -7,7 +7,6 @@ async function resetDatabase() {
   try {
     console.log('Resetting database...');
     
-    // Drop all tables in correct order to respect foreign key constraints
     await sql`DROP TABLE IF EXISTS item_clearances CASCADE`;
     await sql`DROP TABLE IF EXISTS return_requests CASCADE`;
     await sql`DROP TABLE IF EXISTS borrow_requests CASCADE`;
