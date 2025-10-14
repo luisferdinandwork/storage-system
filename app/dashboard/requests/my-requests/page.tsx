@@ -396,7 +396,7 @@ export default function MyRequestsPage() {
               <TableHead>Item</TableHead>
               <TableHead>Quantity</TableHead>
               <TableHead>Period</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>Borrow Status</TableHead>
               <TableHead>Due Date</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>

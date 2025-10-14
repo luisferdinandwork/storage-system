@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { borrowRequests, items, users, departments } from '@/lib/db/schema';
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq, and, isNotNull } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
 export async function GET() {
@@ -276,11 +276,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'All fields are required' }, { status: 400 });
     }
 
-    // Check if the item exists
+    // Check if the item exists and is available for borrowing
     const item = await db.select().from(items).where(eq(items.id, itemId)).limit(1);
     
     if (!item.length) {
       return NextResponse.json({ error: 'Item not found' }, { status: 404 });
+    }
+
+    // Check if the item has been approved by storage master and has a location assigned
+    if (item[0].status !== 'available' || !item[0].location) {
+      return NextResponse.json({ 
+        error: 'Item is not available for borrowing. It must be approved by storage master and assigned a location.' 
+      }, { status: 400 });
     }
 
     // Check if the item has enough available quantity
