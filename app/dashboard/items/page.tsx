@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Package, Plus, Search, Filter, MoreHorizontal, Edit, Image, Columns, Trash2 } from 'lucide-react';
+import { Package, Plus, Search, Filter, MoreHorizontal, Edit, Image, Columns, Trash2, Upload, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AddItemModal } from '@/components/items/add-item-modal';
 import {
@@ -115,6 +115,10 @@ export default function ItemsPage() {
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [showInlineAdd, setShowInlineAdd] = useState(false);
   const [inlineAddRowIndex, setInlineAddRowIndex] = useState<number>(-1);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importResults, setImportResults] = useState<any>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchItems();
@@ -184,6 +188,65 @@ export default function ItemsPage() {
         return [...prev, columnId];
       }
     });
+  };
+
+  const handleExport = (format: 'csv' | 'excel') => {
+    const params = new URLSearchParams();
+    params.append('format', format);
+    
+    // Add current filters to export
+    if (statusFilter !== 'all') params.append('status', statusFilter);
+    if (categoryFilter !== 'all') params.append('category', categoryFilter);
+    if (locationFilter !== 'all') params.append('location', locationFilter);
+    
+    window.open(`/api/items/export?${params.toString()}`);
+  };
+
+  const handleDownloadTemplate = (format: 'csv' | 'excel') => {
+      window.open(`/api/items/import/template?format=${format}`);
+    };
+
+    const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    setImportResults(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/items/import', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setImportResults(result);
+        fetchItems();
+        
+        if (result.results.success > 0) {
+          addMessage('success', `${result.results.success} items imported successfully`, 'Success');
+        }
+        
+        if (result.results.failed > 0) {
+          addMessage('error', `${result.results.failed} items failed to import`, 'Error');
+        }
+      } else {
+        const error = await response.json();
+        addMessage('error', error.error || 'Failed to import items', 'Error');
+      }
+    } catch (error) {
+      addMessage('error', 'Failed to import items', 'Error');
+    } finally {
+      setIsImporting(false);
+      // Reset the file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
   };
 
   const filteredItems = items.filter(item => {
@@ -374,12 +437,47 @@ export default function ItemsPage() {
             <Columns className="mr-2 h-4 w-4" />
             Columns
           </Button>
-          <Button 
-            variant="outline"
-            onClick={() => window.open('/api/items/export')}
-          >
-            Export
-          </Button>
+          
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                <Download className="mr-2 h-4 w-4" />
+                Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Export Format</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => handleExport('csv')}>
+                Export as CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport('excel')}>
+                Export as Excel
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                <Upload className="mr-2 h-4 w-4" />
+                Import
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Import Options</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => handleDownloadTemplate('csv')}>
+                Download CSV Template
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleDownloadTemplate('excel')}>
+                Download Excel Template
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                Import from File
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          
           {canAddItem && (
             <Button 
               onClick={() => setShowAddModal(true)} 
@@ -391,6 +489,15 @@ export default function ItemsPage() {
           )}
         </div>
       </div>
+
+      {/* Handle File Import */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv,.xlsx,.xls"
+        onChange={handleImport}
+        className="hidden"
+      />
 
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
@@ -611,6 +718,45 @@ export default function ItemsPage() {
             >
               Delete Item
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!importResults} onOpenChange={() => setImportResults(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Import Results</DialogTitle>
+            <DialogDescription>
+              Import process completed
+            </DialogDescription>
+          </DialogHeader>
+          {importResults && (
+            <div className="space-y-4">
+              <div className="flex justify-between">
+                <span>Successful:</span>
+                <span className="font-medium text-green-600">{importResults.results.success}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Failed:</span>
+                <span className="font-medium text-red-600">{importResults.results.failed}</span>
+              </div>
+              
+              {importResults.results.errors.length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-2">Errors:</h4>
+                  <div className="max-h-40 overflow-y-auto bg-gray-50 p-2 rounded text-sm">
+                    {importResults.results.errors.map((error: any, index: number) => (
+                      <div key={index} className="mb-1">
+                        Row {error.row}: {error.error}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setImportResults(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

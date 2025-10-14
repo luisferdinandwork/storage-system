@@ -82,24 +82,24 @@ export async function POST(
       await db.update(borrowRequests)
         .set({
           status: 'active',
-          notes: `Seeding decision reverted on ${new Date().toISOString()}. Reason: ${reason.trim()}`,
+          // notes: `Seeding decision reverted on ${new Date().toISOString()}. Reason: ${reason.trim()}`,
         })
         .where(eq(borrowRequests.id, metadata.borrowRequestId));
     }
     
     // Update clearance record
-    await db.update(itemClearances)
-      .set({
-        status: 'reverted',
-        metadata: {
-          ...metadata,
-          revertedBy: session.user.id,
-          revertedAt: new Date(),
-          revertReason: reason.trim(),
-          restoreQuantity,
-        },
-      })
-      .where(eq(itemClearances.id, id));
+    // await db.update(itemClearances)
+    //   .set({
+    //     status: 'reverted',
+    //     metadata: {
+    //       ...metadata,
+    //       revertedBy: session.user.id,
+    //       revertedAt: new Date(),
+    //       revertReason: reason.trim(),
+    //       restoreQuantity,
+    //     },
+    //   })
+    //   .where(eq(itemClearances.id, id));
     
     return NextResponse.json({
       message: 'Seeding decision reverted successfully',
