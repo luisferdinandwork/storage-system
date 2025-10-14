@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { db } from '@/lib/db';
 import { items, borrowRequests, users } from '@/lib/db/schema';
-import { eq, and, count, isNull } from 'drizzle-orm';
+import { eq, and, count, isNull, or } from 'drizzle-orm'; // Import 'or' from drizzle-orm
 import { Package, FileText, Users, TrendingUp } from 'lucide-react';
 
 export default async function Dashboard() {
@@ -17,10 +17,15 @@ export default async function Dashboard() {
   // Get counts for dashboard
   const totalItems = await db.select({ count: count() }).from(items);
   const totalUsers = await db.select({ count: count() }).from(users);
+  
+  // Fix: Count both pending_manager and pending_storage statuses
   const pendingRequests = await db
     .select({ count: count() })
     .from(borrowRequests)
-    .where(eq(borrowRequests.status, 'pending'));
+    .where(or(
+      eq(borrowRequests.status, 'pending_manager'),
+      eq(borrowRequests.status, 'pending_storage')
+    ));
   
   const activeBorrows = await db
     .select({ count: count() })
