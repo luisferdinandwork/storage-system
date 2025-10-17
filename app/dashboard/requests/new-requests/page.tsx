@@ -215,7 +215,7 @@ export default function NewBorrowRequestPage() {
       <MessageContainer messages={messages} onDismiss={dismissMessage} />
       
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">New Borrow Request</h1>
+        <h1 className="text-3xl font-bold tracking-tight">New Lending Request</h1>
         <p className="text-muted-foreground">
           Submit a request to borrow items for a 14-day period.
         </p>
@@ -223,7 +223,7 @@ export default function NewBorrowRequestPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Borrow Request Details</CardTitle>
+          <CardTitle>Lending Request Details</CardTitle>
           <CardDescription>
             Fill in the details for your borrow request.
           </CardDescription>

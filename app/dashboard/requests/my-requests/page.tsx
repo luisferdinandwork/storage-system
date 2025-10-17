@@ -250,7 +250,7 @@ export default function MyRequestsPage() {
       
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">My Ongoing Requests</h1>
+          <h1 className="text-2xl font-bold text-gray-900">My Lending Requests</h1>
           <p className="text-gray-600">View and manage your active borrow requests</p>
         </div>
         <Button onClick={() => window.location.href = '/dashboard/requests/new-requests'}>

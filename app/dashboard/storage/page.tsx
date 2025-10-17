@@ -418,7 +418,7 @@ export default function StorageManagementPage() {
       
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Storage Management</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Warehousing</h1>
           <p className="text-gray-600 mt-1">Manage item locations and approve new items</p>
         </div>
         <div className="flex items-center space-x-2">

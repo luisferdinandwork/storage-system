@@ -434,7 +434,7 @@ export default function ActiveLoansPage() {
       
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Active Loans</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Active Lending</h1>
           <p className="text-gray-600">View and manage currently borrowed items</p>
         </div>
         <div className="flex items-center space-x-2">

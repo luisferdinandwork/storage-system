@@ -271,7 +271,7 @@ export default function PendingApprovalsPage() {
       
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Pending Approvals</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Pending List</h1>
           <p className="text-gray-600">Review and approve borrow requests</p>
         </div>
       </div>
