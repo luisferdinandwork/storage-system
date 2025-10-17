@@ -1,8 +1,9 @@
+// app/api/item-requests/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { itemRequests, items, users, itemImages } from '@/lib/db/schema';
+import { itemRequests, items, users, itemImages, itemStock } from '@/lib/db/schema';
 import { eq, desc } from 'drizzle-orm';
 
 // GET /api/item-requests - List all item requests
@@ -18,11 +19,12 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status');
 
     // Build the query using Drizzle ORM
-    let query = db.query.itemRequests.findMany({
+    const requests = await db.query.itemRequests.findMany({
       with: {
         item: {
           with: {
             images: true,
+            stock: true,
             createdBy: {
               columns: {
                 id: true,
@@ -47,9 +49,6 @@ export async function GET(request: NextRequest) {
       },
       orderBy: [desc(itemRequests.requestedAt)],
     });
-
-    // Execute query
-    const requests = await query;
 
     // Filter by status if provided
     const filteredRequests = status 

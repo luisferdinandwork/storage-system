@@ -1,8 +1,9 @@
+// app/api/item-requests/[id]/reject/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { itemRequests, items } from '@/lib/db/schema';
+import { itemRequests, items, itemStock } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
 export async function POST(
@@ -35,6 +36,9 @@ export async function POST(
     // Get the item request using Drizzle query
     const itemRequest = await db.query.itemRequests.findFirst({
       where: eq(itemRequests.id, requestId),
+      with: {
+        item: true,
+      },
     });
 
     if (!itemRequest) {
@@ -63,9 +67,18 @@ export async function POST(
     await db
       .update(items)
       .set({
-        status: 'rejected', // Reset to pending so item master can fix and resubmit
+        status: 'rejected',
       })
       .where(eq(items.id, itemRequest.itemId));
+
+    // Update the item stock to set pending to 0 when item is rejected
+    await db
+      .update(itemStock)
+      .set({
+        pending: 0, // Set pending to 0 when item is rejected
+        updatedAt: new Date(),
+      })
+      .where(eq(itemStock.itemId, itemRequest.itemId));
 
     return NextResponse.json({ 
       message: 'Item rejected successfully',

@@ -25,6 +25,34 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ImagePlus, X, Upload, CheckCircle, AlertCircle } from 'lucide-react';
 
+// Import the Item interface from items-table.tsx to ensure consistency
+interface ItemImage {
+  id: string;
+  itemId: string;
+  fileName: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  altText: string | null;
+  isPrimary: boolean;
+  createdAt: string;
+}
+
+interface ItemStock {
+  pending: number;
+  id: string;
+  itemId: string;
+  inStorage: number;
+  onBorrow: number;
+  inClearance: number;
+  seeded: number;
+  location: string | null;
+  condition: string;
+  conditionNotes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface Item {
   id: string;
   productCode: string;
@@ -32,14 +60,11 @@ interface Item {
   brandCode: string;
   productDivision: string;
   productCategory: string;
-  inventory: number;
+  totalStock: number;
   period: string;
   season: string;
   unitOfMeasure: string;
-  location: string | null;
-  condition: string;
-  conditionNotes: string | null;
-  status: 'pending_approval' | 'approved' | 'available' | 'borrowed' | 'in_clearance' | 'rejected';
+  status: 'pending_approval' | 'approved' | 'rejected';
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -49,17 +74,12 @@ interface Item {
     id: string;
     name: string;
   };
-  images: {
+  approvedByUser?: {
     id: string;
-    itemId: string;
-    fileName: string;
-    originalName: string;
-    mimeType: string;
-    size: number;
-    altText: string | null;
-    isPrimary: boolean;
-    createdAt: string;
-  }[];
+    name: string;
+  };
+  images: ItemImage[];
+  stock: ItemStock | null;
 }
 
 interface EditItemModalProps {
@@ -102,12 +122,13 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
   const [formData, setFormData] = useState({
     productCode: '',
     description: '',
-    inventory: 0,
+    totalStock: 0,
     period: '',
     season: '',
     unitOfMeasure: 'PCS',
     condition: 'good',
     conditionNotes: '',
+    location: '',
   });
   const [images, setImages] = useState<UploadedImage[]>([]);
 
@@ -116,12 +137,13 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
       setFormData({
         productCode: item.productCode,
         description: item.description,
-        inventory: item.inventory,
+        totalStock: item.totalStock,
         period: item.period,
         season: item.season,
         unitOfMeasure: item.unitOfMeasure,
-        condition: item.condition,
-        conditionNotes: item.conditionNotes || '',
+        condition: item.stock?.condition || 'good',
+        conditionNotes: item.stock?.conditionNotes || '',
+        location: item.stock?.location || '',
       });
       
       // Convert existing images to the format expected by the form
@@ -148,7 +170,7 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'inventory' ? parseInt(value) || 0 : value,
+      [name]: name === 'totalStock' ? parseInt(value) || 0 : value,
     }));
     
     // If product code is changed, parse it
@@ -338,7 +360,15 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          ...formData,
+          productCode: formData.productCode,
+          description: formData.description,
+          totalStock: formData.totalStock,
+          period: formData.period,
+          season: formData.season,
+          unitOfMeasure: formData.unitOfMeasure,
+          condition: formData.condition,
+          conditionNotes: formData.conditionNotes,
+          location: formData.location,
           images: images,
         }),
       });
@@ -457,13 +487,13 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="inventory">Inventory</Label>
+              <Label htmlFor="totalStock">Total Stock</Label>
               <Input
-                id="inventory"
-                name="inventory"
+                id="totalStock"
+                name="totalStock"
                 type="number"
                 min="0"
-                value={formData.inventory}
+                value={formData.totalStock}
                 onChange={handleInputChange}
                 required
                 disabled={!canEditItem}
@@ -528,6 +558,23 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
                   <SelectItem value="good">Good</SelectItem>
                   <SelectItem value="fair">Fair</SelectItem>
                   <SelectItem value="poor">Poor</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="location">Storage Location</Label>
+              <Select 
+                value={formData.location} 
+                onValueChange={(value) => handleSelectChange('location', value)}
+                disabled={!canEditItem}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select location" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Storage 1">Storage 1</SelectItem>
+                  <SelectItem value="Storage 2">Storage 2</SelectItem>
+                  <SelectItem value="Storage 3">Storage 3</SelectItem>
                 </SelectContent>
               </Select>
             </div>

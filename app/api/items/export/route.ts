@@ -3,10 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { items, users } from '@/lib/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { items, users, itemStock } from '@/lib/db/schema';
+import { eq, and, inArray } from 'drizzle-orm';
 
-export async function GET(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     
@@ -14,14 +14,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { searchParams } = new URL(request.url);
-    const format = searchParams.get('format') || 'csv';
-    const statusFilter = searchParams.get('status');
-    const categoryFilter = searchParams.get('category');
-    const locationFilter = searchParams.get('location');
+    // Only allow superadmin and item-master to export items
+    const allowedRoles = ['superadmin', 'item-master'];
+    if (!allowedRoles.includes(session.user.role)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const body = await request.json();
+    const { itemIds, format = 'csv', statusFilter, categoryFilter, locationFilter } = body;
 
     // Build query with filters
     const conditions = [];
+    
+    // If specific item IDs are provided, filter by those
+    if (itemIds && itemIds.length > 0) {
+      conditions.push(inArray(items.id, itemIds));
+    }
     
     if (statusFilter && statusFilter !== 'all') {
       conditions.push(eq(items.status, statusFilter as any));
@@ -34,13 +42,13 @@ export async function GET(request: NextRequest) {
     if (locationFilter && locationFilter !== 'all') {
       if (locationFilter === '') {
         // Handle "Not Assigned" case
-        conditions.push(eq(items.location, null as any));
+        conditions.push(eq(itemStock.location, null as any));
       } else {
-        conditions.push(eq(items.location, locationFilter as any));
+        conditions.push(eq(itemStock.location, locationFilter as any));
       }
     }
 
-    // Fetch items with creator information
+    // Fetch items with creator information and stock data
     const itemsData = await db
       .select({
         id: items.id,
@@ -49,19 +57,23 @@ export async function GET(request: NextRequest) {
         brandCode: items.brandCode,
         productDivision: items.productDivision,
         productCategory: items.productCategory,
-        inventory: items.inventory,
+        totalStock: items.totalStock,
         period: items.period,
         season: items.season,
         unitOfMeasure: items.unitOfMeasure,
-        condition: items.condition,
-        conditionNotes: items.conditionNotes,
-        location: items.location,
         status: items.status,
         createdAt: items.createdAt,
         createdByName: users.name,
+        location: itemStock.location,
+        pending: itemStock.pending,
+        inStorage: itemStock.inStorage,
+        onBorrow: itemStock.onBorrow,
+        inClearance: itemStock.inClearance,
+        seeded: itemStock.seeded,
       })
       .from(items)
       .leftJoin(users, eq(items.createdBy, users.id))
+      .leftJoin(itemStock, eq(items.id, itemStock.itemId))
       .where(conditions.length > 0 ? and(...conditions) : undefined);
 
     if (format === 'csv') {
@@ -72,14 +84,17 @@ export async function GET(request: NextRequest) {
         'Brand Code',
         'Product Division',
         'Product Category',
-        'Inventory',
+        'Total Stock',
         'Period',
         'Season',
         'Unit of Measure',
-        'Condition',
-        'Condition Notes',
-        'Location',
         'Status',
+        'Location',
+        'Pending',
+        'In Storage',
+        'On Borrow',
+        'In Clearance',
+        'Seeded',
         'Created By',
         'Created At'
       ];
@@ -103,14 +118,17 @@ export async function GET(request: NextRequest) {
           escapeCsvField(item.brandCode),
           escapeCsvField(item.productDivision),
           escapeCsvField(item.productCategory),
-          escapeCsvField(item.inventory),
+          escapeCsvField(item.totalStock),
           escapeCsvField(item.period),
           escapeCsvField(item.season),
           escapeCsvField(item.unitOfMeasure),
-          escapeCsvField(item.condition),
-          escapeCsvField(item.conditionNotes),
-          escapeCsvField(item.location),
           escapeCsvField(item.status),
+          escapeCsvField(item.location),
+          escapeCsvField(item.pending),
+          escapeCsvField(item.inStorage),
+          escapeCsvField(item.onBorrow),
+          escapeCsvField(item.inClearance),
+          escapeCsvField(item.seeded),
           escapeCsvField(item.createdByName),
           escapeCsvField(new Date(item.createdAt).toISOString())
         ].join(','))
@@ -130,14 +148,17 @@ export async function GET(request: NextRequest) {
         'Brand Code',
         'Product Division',
         'Product Category',
-        'Inventory',
+        'Total Stock',
         'Period',
         'Season',
         'Unit of Measure',
-        'Condition',
-        'Condition Notes',
-        'Location',
         'Status',
+        'Location',
+        'Pending',
+        'In Storage',
+        'On Borrow',
+        'In Clearance',
+        'Seeded',
         'Created By',
         'Created At'
       ];
@@ -159,14 +180,17 @@ export async function GET(request: NextRequest) {
         item.brandCode,
         item.productDivision,
         item.productCategory,
-        item.inventory,
+        item.totalStock,
         item.period,
         item.season,
         item.unitOfMeasure,
-        item.condition,
-        item.conditionNotes || '',
-        item.location || '',
         item.status,
+        item.location || '',
+        item.pending || 0,
+        item.inStorage || 0,
+        item.onBorrow || 0,
+        item.inClearance || 0,
+        item.seeded || 0,
         item.createdByName || '',
         new Date(item.createdAt).toISOString()
       ]);

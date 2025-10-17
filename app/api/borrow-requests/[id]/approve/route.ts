@@ -1,10 +1,10 @@
+// app/api/borrow-requests/[id]/approve/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { borrowRequests, users, items } from '@/lib/db/schema';
+import { borrowRequests, borrowRequestItems, items, itemStock, stockMovements } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { sql } from 'drizzle-orm';
 
 export async function POST(
   request: NextRequest,
@@ -13,101 +13,138 @@ export async function POST(
   try {
     const session = await getServerSession(authOptions);
     
-    if (!session) {
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = await params;
+    const { id: requestId } = await params;
+    const { approvalType } = await request.json(); // 'manager' or 'storage'
+
+    if (!approvalType || !['manager', 'storage'].includes(approvalType)) {
+      return NextResponse.json(
+        { error: 'Invalid approval type' },
+        { status: 400 }
+      );
+    }
+
+    // Get the borrow request with items
+    const borrowRequest = await db.query.borrowRequests.findFirst({
+      where: eq(borrowRequests.id, requestId),
+      with: {
+        items: {
+          with: {
+            item: {
+              with: {
+                stock: true,
+              },
+            },
+          },
+        },
+        user: true,
+      },
+    });
+
+    if (!borrowRequest) {
+      return NextResponse.json({ error: 'Borrow request not found' }, { status: 404 });
+    }
+
+    // Check if user has permission to approve
+    const userRole = session.user.role;
+    const isManager = userRole === 'manager';
+    const isStorageMaster = ['storage-master', 'storage-master-manager', 'superadmin'].includes(userRole);
     
-    // Check if request exists
-    const requestData = await db.select()
-      .from(borrowRequests)
-      .where(eq(borrowRequests.id, id))
-      .limit(1);
-    
-    if (!requestData.length) {
-      return NextResponse.json({ error: 'Request not found' }, { status: 404 });
+    if (approvalType === 'manager' && !isManager && !isStorageMaster) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
     
-    const request = requestData[0];
+    if (approvalType === 'storage' && !isStorageMaster) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    // Check if the request is in the correct status for this approval
+    if (approvalType === 'manager' && borrowRequest.status !== 'pending_manager') {
+      return NextResponse.json(
+        { error: 'This request is not waiting for manager approval' },
+        { status: 400 }
+      );
+    }
     
-    const isManager = session.user.role === 'manager';
-    const isStorageMaster = session.user.role === 'storage-master' || session.user.role === 'storage-master-manager';
-    const isSuperAdmin = session.user.role === 'superadmin';
-    
-    // Check if user is authorized to approve this request
-    if (isManager) {
-      // Manager can only approve requests from users in their department
-      if (request.status !== 'pending_manager') {
-        return NextResponse.json({ error: 'Request is not in pending_manager status' }, { status: 400 });
-      }
-      
-      // Check if the request user is in the same department as the manager
-      const manager = await db.select({
-        departmentId: users.departmentId,
-      })
-      .from(users)
-      .where(eq(users.id, session.user.id))
-      .limit(1);
-      
-      if (!manager.length || !manager[0].departmentId) {
-        return NextResponse.json({ error: 'Manager department not found' }, { status: 400 });
-      }
-      
-      const requestUser = await db.select({
-        departmentId: users.departmentId,
-      })
-      .from(users)
-      .where(eq(users.id, request.userId))
-      .limit(1);
-      
-      if (!requestUser.length || requestUser[0].departmentId !== manager[0].departmentId) {
-        return NextResponse.json({ error: 'You can only approve requests from users in your department' }, { status: 403 });
-      }
-      
-      // Update manager approval
-      await db.update(borrowRequests)
-        .set({
-          managerApprovedBy: session.user.id,
-          managerApprovedAt: new Date(),
-          status: 'pending_storage',
-        })
-        .where(eq(borrowRequests.id, id));
-      
-      return NextResponse.json({ message: 'Manager approval recorded' });
-    } else if (isStorageMaster || isSuperAdmin) {
-      // Storage master can approve requests that are pending_storage
-      if (request.status !== 'pending_storage') {
-        return NextResponse.json({ error: 'Request is not in pending_storage status' }, { status: 400 });
-      }
-      
-      // Calculate due date (14 days from now)
-      const dueDate = new Date();
-      dueDate.setDate(dueDate.getDate() + 14);
-      
-      // Update storage approval and status to active
-      await db.update(borrowRequests)
-        .set({
-          storageApprovedBy: session.user.id,
-          storageApprovedAt: new Date(),
-          status: 'active',
-          dueDate,
-        })
-        .where(eq(borrowRequests.id, id));
-      
-      // Update item inventory (reduce by borrowed quantity)
-      await db.update(items)
-        .set({
-          inventory: sql`${items.inventory} - ${request.quantity}`,
-        })
-        .where(eq(items.id, request.itemId));
-      
-      return NextResponse.json({ message: 'Request approved and status updated to active' });
+    if (approvalType === 'storage' && borrowRequest.status !== 'pending_storage') {
+      return NextResponse.json(
+        { error: 'This request is not waiting for storage approval' },
+        { status: 400 }
+      );
+    }
+
+    // Update the borrow request
+    const updateData: any = {
+      updatedAt: new Date(),
+    };
+
+    if (approvalType === 'manager') {
+      updateData.managerApprovedBy = session.user.id;
+      updateData.managerApprovedAt = new Date();
+      updateData.status = 'pending_storage'; // Move to next approval step
     } else {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      updateData.storageApprovedBy = session.user.id;
+      updateData.storageApprovedAt = new Date();
+      updateData.status = 'active'; // Set to active instead of approved
+      
+      // Update stock and create stock movements
+      for (const requestItem of borrowRequest.items) {
+        const item = requestItem.item;
+        const stock = item.stock;
+        
+        if (!stock) {
+          console.error(`No stock record found for item ${item.id}`);
+          continue;
+        }
+        
+        // Update stock quantities
+        await db.update(itemStock)
+          .set({
+            inStorage: stock.inStorage - requestItem.quantity,
+            onBorrow: stock.onBorrow + requestItem.quantity,
+            updatedAt: new Date(),
+          })
+          .where(eq(itemStock.id, stock.id));
+        
+        // Create stock movement record
+        await db.insert(stockMovements).values({
+          itemId: item.id,
+          stockId: stock.id,
+          movementType: 'borrow',
+          quantity: requestItem.quantity,
+          fromState: 'storage',
+          toState: 'borrowed',
+          referenceId: borrowRequest.id,
+          referenceType: 'borrow_request',
+          performedBy: session.user.id,
+          notes: `Approved by ${approvalType}: ${borrowRequest.reason}`,
+        });
+        
+        // Update borrow request item status
+        await db.update(borrowRequestItems)
+          .set({
+            status: 'active',
+          })
+          .where(eq(borrowRequestItems.id, requestItem.id));
+      }
     }
+
+    await db.update(borrowRequests)
+      .set(updateData)
+      .where(eq(borrowRequests.id, requestId));
+
+    return NextResponse.json({
+      message: `Borrow request ${approvalType === 'manager' ? 'manager' : 'storage'} approved successfully`,
+      status: updateData.status,
+    });
   } catch (error) {
-    console.error('Error approving request:', error);
-    return NextResponse.json({ error: 'Failed to approve request' }, { status: 500 });
+    console.error('Failed to approve borrow request:', error);
+    return NextResponse.json(
+      { error: 'Failed to approve borrow request' },
+      { status: 500 }
+    );
   }
 }

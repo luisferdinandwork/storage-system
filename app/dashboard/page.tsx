@@ -32,7 +32,7 @@ export default async function Dashboard() {
     .from(borrowRequests)
     .where(and(
       eq(borrowRequests.status, 'approved'),
-      isNull(borrowRequests.returnedAt)
+      isNull(borrowRequests)
     ));
 
   const stats = [

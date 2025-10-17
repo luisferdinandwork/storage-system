@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { items } from '@/lib/db/schema';
+import { items, itemStock } from '@/lib/db/schema';
 import { parseProductCode } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
@@ -61,11 +61,10 @@ export async function POST(request: NextRequest) {
     const requiredHeaders = [
       'Product Code',
       'Description',
-      'Inventory',
+      'Total Stock',
       'Period',
       'Season',
-      'Unit of Measure',
-      'Condition'
+      'Unit of Measure'
     ];
     
     const missingHeaders = requiredHeaders.filter(header => !headers.includes(header));
@@ -88,7 +87,7 @@ export async function POST(request: NextRequest) {
     
     const productCodeIdx = getColumnIndex('Product Code');
     const descriptionIdx = getColumnIndex('Description');
-    const inventoryIdx = getColumnIndex('Inventory');
+    const totalStockIdx = getColumnIndex('Total Stock');
     const periodIdx = getColumnIndex('Period');
     const seasonIdx = getColumnIndex('Season');
     const unitIdx = getColumnIndex('Unit of Measure');
@@ -107,11 +106,11 @@ export async function POST(request: NextRequest) {
         // Extract data from row
         const productCode = row[productCodeIdx]?.trim();
         const description = row[descriptionIdx]?.trim();
-        const inventoryStr = row[inventoryIdx]?.trim();
+        const totalStockStr = row[totalStockIdx]?.trim();
         const period = row[periodIdx]?.trim();
         const season = row[seasonIdx]?.trim();
         const unitOfMeasure = row[unitIdx]?.trim();
-        const condition = row[conditionIdx]?.trim()?.toLowerCase();
+        const condition = conditionIdx >= 0 ? row[conditionIdx]?.trim()?.toLowerCase() : null;
         const conditionNotes = conditionNotesIdx >= 0 ? row[conditionNotesIdx]?.trim() : null;
         const location = locationIdx >= 0 ? row[locationIdx]?.trim() : null;
 
@@ -135,24 +134,24 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        if (!inventoryStr || isNaN(parseInt(inventoryStr))) {
+        if (!totalStockStr || isNaN(parseInt(totalStockStr))) {
           results.failed++;
           results.errors.push({
             row: i + 1,
             productCode,
-            error: 'Inventory must be a valid number'
+            error: 'Total Stock must be a valid number'
           });
           continue;
         }
 
-        const inventory = parseInt(inventoryStr);
+        const totalStock = parseInt(totalStockStr);
 
-        if (!period || !season || !unitOfMeasure || !condition) {
+        if (!period || !season || !unitOfMeasure) {
           results.failed++;
           results.errors.push({
             row: i + 1,
             productCode,
-            error: 'Missing required fields (Period, Season, Unit of Measure, or Condition)'
+            error: 'Missing required fields (Period, Season, Unit of Measure)'
           });
           continue;
         }
@@ -168,16 +167,18 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        // Validate condition
-        const validConditions = ['excellent', 'good', 'fair', 'poor'];
-        if (!validConditions.includes(condition)) {
-          results.failed++;
-          results.errors.push({
-            row: i + 1,
-            productCode,
-            error: `Condition must be one of: ${validConditions.join(', ')}`
-          });
-          continue;
+        // Validate condition if provided
+        if (condition) {
+          const validConditions = ['excellent', 'good', 'fair', 'poor'];
+          if (!validConditions.includes(condition)) {
+            results.failed++;
+            results.errors.push({
+              row: i + 1,
+              productCode,
+              error: `Condition must be one of: ${validConditions.join(', ')}`
+            });
+            continue;
+          }
         }
 
         // Validate location if provided
@@ -229,15 +230,25 @@ export async function POST(request: NextRequest) {
           brandCode: parsed.brandCode,
           productDivision: parsed.productDivision,
           productCategory: parsed.productCategory,
-          inventory,
+          totalStock,
           period,
           season,
           unitOfMeasure: unitOfMeasure as 'PCS' | 'PRS',
-          condition: condition as 'excellent' | 'good' | 'fair' | 'poor',
-          conditionNotes: conditionNotes || null,
-          location: location && location !== '' ? location as 'Storage 1' | 'Storage 2' | 'Storage 3' : null,
           status: 'pending_approval',
           createdBy: session.user.id,
+        });
+
+        // Create item stock record
+        await db.insert(itemStock).values({
+          itemId: (await db.select({ id: items.id }).from(items).where(eq(items.productCode, productCode)).limit(1))[0].id,
+          pending: 0,
+          inStorage: totalStock,
+          onBorrow: 0,
+          inClearance: 0,
+          seeded: 0,
+          location: location && location !== '' ? location as 'Storage 1' | 'Storage 2' | 'Storage 3' : null,
+          condition: condition as 'excellent' | 'good' | 'fair' | 'poor' || 'excellent',
+          conditionNotes: conditionNotes || null,
         });
 
         results.success++;

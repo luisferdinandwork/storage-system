@@ -30,7 +30,8 @@ import {
   Warehouse,
   Plus,
   MapPin,
-  BarChart3
+  BarChart3,
+  PlusIcon
 } from 'lucide-react';
 import { signOut, useSession } from 'next-auth/react';
 import {
@@ -63,61 +64,47 @@ const navigation = [
   
   // Storage Management - Storage Master and Storage Manager specific
   { 
-    name: 'Storage Management', 
+    name: 'Warehousing', 
     href: '/dashboard/storage', 
     icon: Warehouse, 
     roles: ['superadmin', 'storage-master', 'storage-manager'] 
   },
   { 
-    name: 'Item Locations', 
-    href: '/dashboard/storage/locations', 
+    name: 'Inventory Locations', 
+    href: '/dashboard/stock-locations', 
     icon: MapPin, 
     roles: ['superadmin', 'storage-master', 'storage-manager'] 
   },
-  
-  // Borrow Requests - different views for different roles
-  { 
-    name: 'My Borrow Requests', 
-    href: '/dashboard/requests/my-requests', 
-    icon: ClipboardList, 
-    roles: ['superadmin', 'manager', 'user'] 
-  },
-  { 
-    name: 'Pending Approvals', 
-    href: '/dashboard/requests/pending', 
-    icon: CheckSquare, 
-    roles: ['superadmin', 'storage-master', 'storage-manager', 'manager'] 
-  },
-  { 
-    name: 'Active Loans', 
-    href: '/dashboard/requests/active', 
-    icon: Truck, 
-    roles: ['superadmin', 'storage-master', 'storage-manager', 'manager', 'user'] 
-  },
-  { 
-    name: 'Return Requests', 
-    href: '/dashboard/requests/returns', 
-    icon: RefreshCw, 
-    roles: ['superadmin', 'storage-master', 'storage-manager', 'user'] 
-  },
-  { 
-    name: 'Overdue Items', 
-    href: '/dashboard/requests/overdue', 
-    icon: AlertCircle, 
-    roles: ['superadmin', 'storage-master', 'storage-manager', 'manager', 'user'] 
-  },
-  
-  // Inventory Management
   { 
     name: 'Inventory Clearance', 
     href: '/dashboard/clearance', 
     icon: Trash2, 
     roles: ['superadmin', 'storage-master', 'storage-manager'] 
   },
+  
+  // Lending Requests - different views for different roles
   { 
-    name: 'Clearance History', 
-    href: '/dashboard/clearance/history', 
-    icon: Archive, 
+    name: 'New Lending Requests', 
+    href: '/dashboard/requests/new-requests', 
+    icon: Plus, 
+    roles: ['superadmin', 'manager', 'user'] 
+  },
+  { 
+    name: 'My Lending Requests', 
+    href: '/dashboard/requests/my-requests', 
+    icon: ClipboardList, 
+    roles: ['superadmin', 'manager', 'user'] 
+  },
+  { 
+    name: 'Pending List', 
+    href: '/dashboard/requests/pending', 
+    icon: CheckSquare, 
+    roles: ['superadmin', 'storage-master', 'storage-manager', 'manager'] 
+  },
+  { 
+    name: 'Active Lending', 
+    href: '/dashboard/requests/active', 
+    icon: Truck, 
     roles: ['superadmin', 'storage-master', 'storage-manager'] 
   },
   
@@ -172,26 +159,26 @@ export function Sidebar({ userRole }: SidebarProps) {
       show: true
     },
     {
-      title: 'Storage',
+      title: 'Inventory Management',
       items: filteredNavigation.filter(item => 
-        ['Storage Management', 'Item Locations'].includes(item.name)
+        ['Warehousing', 'Inventory Locations', 'Inventory Clearance'].includes(item.name)
       ),
       show: userRole === 'storage-master' || userRole === 'storage-manager' || userRole === 'superadmin'
     },
     {
-      title: 'Borrow Management',
+      title: 'Lending Management',
       items: filteredNavigation.filter(item => 
-        ['My Borrow Requests', 'Pending Approvals', 'Active Loans', 'Return Requests', 'Overdue Items'].includes(item.name)
+        ['New Lending Requests','My Lending Requests', 'Pending List', 'Active Lending'].includes(item.name)
       ),
       show: true
     },
-    {
-      title: 'Inventory',
-      items: filteredNavigation.filter(item => 
-        ['Inventory Clearance', 'Clearance History'].includes(item.name)
-      ),
-      show: userRole === 'storage-master' || userRole === 'storage-manager' || userRole === 'superadmin'
-    },
+    // {
+    //   title: 'Inventory',
+    //   items: filteredNavigation.filter(item => 
+    //     ['Inventory Clearance', 'Clearance History'].includes(item.name)
+    //   ),
+    //   show: userRole === 'storage-master' || userRole === 'storage-manager' || userRole === 'superadmin'
+    // },
     {
       title: 'Administration',
       items: filteredNavigation.filter(item => 

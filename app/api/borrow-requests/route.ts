@@ -1,332 +1,238 @@
+// app/api/borrow-requests/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { borrowRequests, items, users, departments } from '@/lib/db/schema';
-import { eq, and, isNotNull } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/pg-core';
+import { borrowRequests, borrowRequestItems, items, itemStock, users, departments } from '@/lib/db/schema';
+import { eq, and, lt, gte, inArray } from 'drizzle-orm';
 
-export async function GET() {
-  try {
-    const session = await getServerSession(authOptions);
-    
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Create aliases for users table to avoid conflicts
-    const requestUser = alias(users, 'requestUser');
-    const managerUser = alias(users, 'managerUser');
-    const storageUser = alias(users, 'storageUser');
-    const returnApprovedUser = alias(users, 'returnApprovedUser');
-
-    let requests;
-    
-    if (session.user.role === 'user') {
-      // Users can only see their own requests
-      requests = await db.select({
-        id: borrowRequests.id,
-        item: {
-          id: items.id,
-          productCode: items.productCode,
-          description: items.description,
-          brandCode: items.brandCode,
-          productDivision: items.productDivision,
-          productCategory: items.productCategory,
-          inventory: items.inventory,
-          period: items.period,
-          season: items.season,
-          unitOfMeasure: items.unitOfMeasure,
-          condition: items.condition,
-          conditionNotes: items.conditionNotes,
-          status: items.status,
-          location: items.location,
-        },
-        user: {
-          id: requestUser.id,
-          name: requestUser.name,
-          email: requestUser.email,
-          role: requestUser.role,
-          departmentId: requestUser.departmentId,
-        },
-        quantity: borrowRequests.quantity,
-        requestedAt: borrowRequests.requestedAt,
-        startDate: borrowRequests.startDate,
-        endDate: borrowRequests.endDate,
-        reason: borrowRequests.reason,
-        status: borrowRequests.status,
-        managerApprovedBy: {
-          id: managerUser.id,
-          name: managerUser.name,
-        },
-        storageApprovedBy: {
-          id: storageUser.id,
-          name: storageUser.name,
-        },
-        managerApprovedAt: borrowRequests.managerApprovedAt,
-        storageApprovedAt: borrowRequests.storageApprovedAt,
-        managerRejectionReason: borrowRequests.managerRejectionReason,
-        storageRejectionReason: borrowRequests.storageRejectionReason,
-        dueDate: borrowRequests.dueDate,
-        returnedAt: borrowRequests.returnedAt,
-        returnCondition: borrowRequests.returnCondition,
-        returnNotes: borrowRequests.returnNotes,
-        receivedBy: {
-          id: returnApprovedUser.id,
-          name: returnApprovedUser.name,
-        },
-        receivedAt: borrowRequests.receivedAt,
-        receiveNotes: borrowRequests.receiveNotes,
-      })
-      .from(borrowRequests)
-      .leftJoin(items, eq(borrowRequests.itemId, items.id))
-      .leftJoin(requestUser, eq(borrowRequests.userId, requestUser.id))
-      .leftJoin(managerUser, eq(borrowRequests.managerApprovedBy, managerUser.id))
-      .leftJoin(storageUser, eq(borrowRequests.storageApprovedBy, storageUser.id))
-      .leftJoin(returnApprovedUser, eq(borrowRequests.receivedBy, returnApprovedUser.id))
-      .where(eq(borrowRequests.userId, session.user.id));
-    } else if (session.user.role === 'manager') {
-      // Managers can only see requests from users in their department
-      const manager = await db.select({
-        departmentId: users.departmentId,
-      })
-      .from(users)
-      .where(eq(users.id, session.user.id))
-      .limit(1);
-      
-      if (!manager.length || !manager[0].departmentId) {
-        return NextResponse.json({ error: 'Manager department not found' }, { status: 400 });
-      }
-      
-      const managerDepartmentId = manager[0].departmentId;
-      
-      requests = await db.select({
-        id: borrowRequests.id,
-        item: {
-          id: items.id,
-          productCode: items.productCode,
-          description: items.description,
-          brandCode: items.brandCode,
-          productDivision: items.productDivision,
-          productCategory: items.productCategory,
-          inventory: items.inventory,
-          period: items.period,
-          season: items.season,
-          unitOfMeasure: items.unitOfMeasure,
-          condition: items.condition,
-          conditionNotes: items.conditionNotes,
-          status: items.status,
-          location: items.location,
-        },
-        user: {
-          id: requestUser.id,
-          name: requestUser.name,
-          email: requestUser.email,
-          role: requestUser.role,
-          departmentId: requestUser.departmentId,
-        },
-        quantity: borrowRequests.quantity,
-        requestedAt: borrowRequests.requestedAt,
-        startDate: borrowRequests.startDate,
-        endDate: borrowRequests.endDate,
-        reason: borrowRequests.reason,
-        status: borrowRequests.status,
-        managerApprovedBy: {
-          id: managerUser.id,
-          name: managerUser.name,
-        },
-        storageApprovedBy: {
-          id: storageUser.id,
-          name: storageUser.name,
-        },
-        managerApprovedAt: borrowRequests.managerApprovedAt,
-        storageApprovedAt: borrowRequests.storageApprovedAt,
-        managerRejectionReason: borrowRequests.managerRejectionReason,
-        storageRejectionReason: borrowRequests.storageRejectionReason,
-        dueDate: borrowRequests.dueDate,
-        returnedAt: borrowRequests.returnedAt,
-        returnCondition: borrowRequests.returnCondition,
-        returnNotes: borrowRequests.returnNotes,
-        receivedBy: {
-          id: returnApprovedUser.id,
-          name: returnApprovedUser.name,
-        },
-        receivedAt: borrowRequests.receivedAt,
-        receiveNotes: borrowRequests.receiveNotes,
-      })
-      .from(borrowRequests)
-      .leftJoin(items, eq(borrowRequests.itemId, items.id))
-      .leftJoin(requestUser, eq(borrowRequests.userId, requestUser.id))
-      .leftJoin(managerUser, eq(borrowRequests.managerApprovedBy, managerUser.id))
-      .leftJoin(storageUser, eq(borrowRequests.storageApprovedBy, storageUser.id))
-      .leftJoin(returnApprovedUser, eq(borrowRequests.receivedBy, returnApprovedUser.id))
-      .where(eq(requestUser.departmentId, managerDepartmentId));
-    } else {
-      // Storage masters and superadmins can see all requests
-      requests = await db.select({
-        id: borrowRequests.id,
-        item: {
-          id: items.id,
-          productCode: items.productCode,
-          description: items.description,
-          brandCode: items.brandCode,
-          productDivision: items.productDivision,
-          productCategory: items.productCategory,
-          inventory: items.inventory,
-          period: items.period,
-          season: items.season,
-          unitOfMeasure: items.unitOfMeasure,
-          condition: items.condition,
-          conditionNotes: items.conditionNotes,
-          status: items.status,
-          location: items.location,
-        },
-        user: {
-          id: requestUser.id,
-          name: requestUser.name,
-          email: requestUser.email,
-          role: requestUser.role,
-          departmentId: requestUser.departmentId,
-        },
-        quantity: borrowRequests.quantity,
-        requestedAt: borrowRequests.requestedAt,
-        startDate: borrowRequests.startDate,
-        endDate: borrowRequests.endDate,
-        reason: borrowRequests.reason,
-        status: borrowRequests.status,
-        managerApprovedBy: {
-          id: managerUser.id,
-          name: managerUser.name,
-        },
-        storageApprovedBy: {
-          id: storageUser.id,
-          name: storageUser.name,
-        },
-        managerApprovedAt: borrowRequests.managerApprovedAt,
-        storageApprovedAt: borrowRequests.storageApprovedAt,
-        managerRejectionReason: borrowRequests.managerRejectionReason,
-        storageRejectionReason: borrowRequests.storageRejectionReason,
-        dueDate: borrowRequests.dueDate,
-        returnedAt: borrowRequests.returnedAt,
-        returnCondition: borrowRequests.returnCondition,
-        returnNotes: borrowRequests.returnNotes,
-        receivedBy: {
-          id: returnApprovedUser.id,
-          name: returnApprovedUser.name,
-        },
-        receivedAt: borrowRequests.receivedAt,
-        receiveNotes: borrowRequests.receiveNotes,
-      })
-      .from(borrowRequests)
-      .leftJoin(items, eq(borrowRequests.itemId, items.id))
-      .leftJoin(requestUser, eq(borrowRequests.userId, requestUser.id))
-      .leftJoin(managerUser, eq(borrowRequests.managerApprovedBy, managerUser.id))
-      .leftJoin(storageUser, eq(borrowRequests.storageApprovedBy, storageUser.id))
-      .leftJoin(returnApprovedUser, eq(borrowRequests.receivedBy, returnApprovedUser.id));
-    }
-    
-    // Fetch department information for each request
-    const requestsWithDepartments = await Promise.all(
-      requests.map(async (request) => {
-        if (request.user && request.user.departmentId) {
-          const department = await db.select({
-            id: departments.id,
-            name: departments.name,
-          })
-          .from(departments)
-          .where(eq(departments.id, request.user.departmentId))
-          .limit(1);
-          
-          return {
-            ...request,
-            user: {
-              ...request.user,
-              department: department.length ? department[0] : undefined,
-            },
-          };
-        }
-        return {
-          ...request,
-          user: {
-            ...request.user,
-            department: undefined,
-          },
-        };
-      })
-    );
-    
-    return NextResponse.json(requestsWithDepartments);
-  } catch (error) {
-    console.error('Error fetching requests:', error);
-    return NextResponse.json({ error: 'Failed to fetch requests' }, { status: 500 });
-  }
-}
-
+// POST /api/borrow-requests - Create a new borrow request
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     
-    if (!session) {
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { itemId, quantity, startDate, endDate, reason } = await request.json();
-    
-    if (!itemId || !quantity || !startDate || !endDate || !reason) {
-      return NextResponse.json({ error: 'All fields are required' }, { status: 400 });
+    const { 
+      items: requestedItems, 
+      startDate, 
+      endDate, 
+      reason 
+    } = await request.json();
+
+    // Validate input
+    if (!requestedItems || !Array.isArray(requestedItems) || requestedItems.length === 0) {
+      return NextResponse.json(
+        { error: 'At least one item must be requested' },
+        { status: 400 }
+      );
     }
 
-    // Check if the item exists and is available for borrowing
-    const item = await db.select().from(items).where(eq(items.id, itemId)).limit(1);
-    
-    if (!item.length) {
-      return NextResponse.json({ error: 'Item not found' }, { status: 404 });
+    if (!startDate || !endDate || !reason) {
+      return NextResponse.json(
+        { error: 'Start date, end date, and reason are required' },
+        { status: 400 }
+      );
     }
 
-    // Check if the item has been approved by storage master and has a location assigned
-    if (item[0].status !== 'available' || !item[0].location) {
-      return NextResponse.json({ 
-        error: 'Item is not available for borrowing. It must be approved by storage master and assigned a location.' 
-      }, { status: 400 });
-    }
-
-    // Check if the item has enough available quantity
-    if (item[0].inventory < quantity) {
-      return NextResponse.json({ error: 'Not enough items available' }, { status: 400 });
-    }
-
-    // Validate date range
+    // Validate dates
     const start = new Date(startDate);
     const end = new Date(endDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    if (start < today) {
-      return NextResponse.json({ error: 'Start date cannot be in the past' }, { status: 400 });
-    }
-    
-    if (end <= start) {
-      return NextResponse.json({ error: 'End date must be after start date' }, { status: 400 });
+    const now = new Date();
+
+    if (start < now) {
+      return NextResponse.json(
+        { error: 'Start date cannot be in the past' },
+        { status: 400 }
+      );
     }
 
-    // Determine the initial status based on user role
-    const isManager = session.user.role === 'manager';
-    const initialStatus = isManager ? 'pending_storage' : 'pending_manager';
+    if (end <= start) {
+      return NextResponse.json(
+        { error: 'End date must be after start date' },
+        { status: 400 }
+      );
+    }
+
+    // Get user information with department
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, session.user.id),
+      with: {
+        department: true,
+      },
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    // Check if all items exist and have sufficient stock
+    const itemIds = requestedItems.map(item => item.itemId);
+    
+    // For multiple items, we need to fetch them one by one or use inArray
+    const allDbItems = [];
+    for (const itemId of itemIds) {
+      const dbItem = await db.query.items.findFirst({
+        where: eq(items.id, itemId),
+        with: {
+          stock: true,
+        },
+      });
+      if (dbItem) allDbItems.push(dbItem);
+    }
+
+    if (allDbItems.length !== itemIds.length) {
+      return NextResponse.json(
+        { error: 'One or more items not found' },
+        { status: 404 }
+      );
+    }
+
+    // Check stock availability for each item
+    for (const requestedItem of requestedItems) {
+      const dbItem = allDbItems.find(item => item.id === requestedItem.itemId);
+      if (!dbItem?.stock || dbItem.stock.inStorage < requestedItem.quantity) {
+        return NextResponse.json(
+          { error: `Insufficient stock for item ${dbItem?.description || 'Unknown'}` },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Determine initial status based on user role
+    const userRole = session.user.role;
+    const initialStatus = userRole === 'user' ? 'pending_manager' : 'pending_storage';
 
     // Create the borrow request
-    const newRequest = await db.insert(borrowRequests).values({
-      itemId,
+    const [borrowRequest] = await db.insert(borrowRequests).values({
       userId: session.user.id,
-      quantity,
-      startDate: new Date(startDate),
-      endDate: new Date(endDate),
+      startDate: start,
+      endDate: end,
       reason,
       status: initialStatus,
     }).returning();
 
-    return NextResponse.json(newRequest[0], { status: 201 });
+    // Create borrow request items
+    for (const requestedItem of requestedItems) {
+      await db.insert(borrowRequestItems).values({
+        borrowRequestId: borrowRequest.id,
+        itemId: requestedItem.itemId,
+        quantity: requestedItem.quantity,
+        status: initialStatus,
+      });
+    }
+
+    return NextResponse.json({
+      message: 'Borrow request created successfully',
+      borrowRequest,
+    });
   } catch (error) {
-    console.error('Error creating request:', error);
-    return NextResponse.json({ error: 'Failed to create request' }, { status: 500 });
+    console.error('Failed to create borrow request:', error);
+    return NextResponse.json(
+      { error: 'Failed to create borrow request' },
+      { status: 500 }
+    );
+  }
+}
+
+// GET /api/borrow-requests - List borrow requests
+export async function GET(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const status = searchParams.get('status');
+    const userId = searchParams.get('userId');
+
+    // Get current user with department
+    const currentUser = await db.query.users.findFirst({
+      where: eq(users.id, session.user.id),
+      with: {
+        department: true,
+      },
+    });
+
+    if (!currentUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    // Build the query
+    const requests = await db.query.borrowRequests.findMany({
+      with: {
+        user: {
+          columns: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+          },
+          with: {
+            department: true,
+          },
+        },
+        items: {
+          with: {
+            item: {
+              with: {
+                images: true,
+              },
+            },
+          },
+        },
+        managerApprovedBy: {
+          columns: {
+            id: true,
+            name: true,
+          },
+        },
+        storageApprovedBy: {
+          columns: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: [borrowRequests.requestedAt],
+    });
+
+    // Filter results based on user role and query parameters
+    let filteredRequests = requests;
+    
+    // Regular users can only see their own requests
+    if (session.user.role === 'user') {
+      filteredRequests = filteredRequests.filter(req => req.userId === session.user.id);
+    }
+    // Managers can only see requests from their department
+    else if (session.user.role === 'manager') {
+      filteredRequests = filteredRequests.filter(req => 
+        req.user.department?.id === currentUser.department?.id
+      );
+    }
+    // Storage masters and superadmins can see all requests
+    // No additional filtering needed
+    
+    // Apply status filter if provided
+    if (status) {
+      filteredRequests = filteredRequests.filter(req => req.status === status);
+    }
+    
+    // Apply user filter if provided (only for managers and above)
+    if (userId && ['superadmin', 'storage-master', 'storage-master-manager', 'manager'].includes(session.user.role)) {
+      filteredRequests = filteredRequests.filter(req => req.userId === userId);
+    }
+
+    return NextResponse.json(filteredRequests);
+  } catch (error) {
+    console.error('Failed to fetch borrow requests:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch borrow requests' },
+      { status: 500 }
+    );
   }
 }

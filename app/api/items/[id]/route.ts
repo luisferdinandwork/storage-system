@@ -6,6 +6,7 @@ import { items, itemImages as itemImagesTable } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { unlink } from 'fs/promises';
 import { join } from 'path';
+import { itemStock } from '@/lib/db/schema';
 
 // PUT /api/items/[id] - Update a specific item
 export async function PUT(
@@ -29,16 +30,17 @@ export async function PUT(
     const { 
       productCode, 
       description, 
-      inventory, 
+      totalStock, 
       period, 
       season, 
       unitOfMeasure, 
       condition, 
       conditionNotes, 
+      location,
       images 
     } = body;
 
-    if (!productCode || !description || !period || !season || !unitOfMeasure || !condition) {
+    if (!productCode || !description || !period || !season || !unitOfMeasure) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
@@ -98,16 +100,31 @@ export async function PUT(
         brandCode: parsed.brandCode,
         productDivision: parsed.productDivision,
         productCategory: parsed.productCategory,
-        inventory: inventory || 0,
+        totalStock: totalStock || 0,  // Changed from inventory
         period,
         season,
         unitOfMeasure,
-        condition,
-        conditionNotes: conditionNotes || null,
+        // Removed: condition, conditionNotes
         updatedAt: new Date(),
       })
       .where(eq(items.id, itemId))
       .returning();
+
+    await db
+      .update(itemStock)
+      .set({
+        location: location || null,
+        condition: condition || 'good',
+        conditionNotes: conditionNotes || null,
+        updatedAt: new Date(),
+      })
+      .where(eq(itemStock.itemId, itemId));
+
+    // Fetch updated stock
+    const [updatedStock] = await db
+      .select()
+      .from(itemStock)
+      .where(eq(itemStock.itemId, itemId));
 
     // Delete existing image records from database
     await db.delete(itemImagesTable).where(eq(itemImagesTable.itemId, itemId));
@@ -130,7 +147,8 @@ export async function PUT(
 
     const response: any = { 
       ...updatedItem, 
-      images: newImages 
+      images: newImages,
+      stock: updatedStock, 
     };
 
     // Include warning if some old files couldn't be deleted
