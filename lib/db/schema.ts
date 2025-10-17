@@ -24,35 +24,60 @@ export const users = pgTable('users', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// Simplified Items table - only essential fields
+// Items table - Master item information only
 export const items = pgTable('items', {
   id: uuid('id').defaultRandom().primaryKey(),
   
-  // Manual input fields
+  // Product identification
   productCode: text('product_code').notNull().unique(),
   description: text('description').notNull(),
-  inventory: integer('inventory').notNull().default(0),
-  period: text('period').notNull(),
-  season: text('season').notNull(),
-  unitOfMeasure: text('unit_of_measure', { enum: ['PCS', 'PRS'] }).notNull().default('PCS'),
   
-  // Auto-generated fields (from productCode)
+  // Product metadata (auto-generated from productCode)
   brandCode: text('brand_code').notNull(),
   productDivision: text('product_division').notNull(),
   productCategory: text('product_category').notNull(),
   
-  // Status and condition fields
-  location: text('location', { enum: ['Storage 1', 'Storage 2', 'Storage 3'] }),
-  condition: text('condition', { enum: ['excellent', 'good', 'fair', 'poor'] }).notNull().default('good'),
-  conditionNotes: text('condition_notes'),
+  // Product details
+  period: text('period').notNull(),
+  season: text('season').notNull(),
+  unitOfMeasure: text('unit_of_measure', { enum: ['PCS', 'PRS'] }).notNull().default('PCS'),
+  
+  // Total stock across all states
+  totalStock: integer('total_stock').notNull().default(0),
+  
+  // Approval status for the item itself
   status: text('status', { 
-    enum: ['pending_approval', 'approved', 'available', 'borrowed', 'in_clearance', 'rejected'] 
+    enum: ['pending_approval', 'approved', 'rejected'] 
   }).notNull().default('pending_approval'),
   
   // Audit fields
   createdBy: uuid('created_by').references(() => users.id).notNull(),
   approvedBy: uuid('approved_by').references(() => users.id),
   approvedAt: timestamp('approved_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Stock table - Tracks where items are and in what state
+export const itemStock = pgTable('item_stock', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  itemId: uuid('item_id').references(() => items.id, { onDelete: 'cascade' }).notNull(),
+  
+  // Quantity tracking by state
+  pending: integer('pending').notNull().default(0),
+  inStorage: integer('in_storage').notNull().default(0),
+  onBorrow: integer('on_borrow').notNull().default(0),
+  inClearance: integer('in_clearance').notNull().default(0),
+  seeded: integer('seeded').notNull().default(0),
+  
+  // Storage location (only applies to items in storage)
+  location: text('location', { enum: ['Storage 1', 'Storage 2', 'Storage 3'] }),
+  
+  // Item condition
+  condition: text('condition', { enum: ['excellent', 'good', 'fair', 'poor'] }).notNull().default('good'),
+  conditionNotes: text('condition_notes'),
+  
+  // Timestamps
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -83,18 +108,16 @@ export const itemRequests = pgTable('item_requests', {
   notes: text('notes'),
 });
 
-// Borrow requests table
+// Borrow requests table - Updated to support multiple items
 export const borrowRequests = pgTable('borrow_requests', {
   id: uuid('id').defaultRandom().primaryKey(),
-  itemId: uuid('item_id').references(() => items.id, { onDelete: 'cascade' }).notNull(),
   userId: uuid('user_id').references(() => users.id).notNull(),
-  quantity: integer('quantity').notNull().default(1),
   requestedAt: timestamp('requested_at').defaultNow().notNull(),
   startDate: timestamp('start_date').notNull(),
   endDate: timestamp('end_date').notNull(),
   reason: text('reason').notNull(),
   status: text('status', { 
-    enum: ['pending_manager', 'pending_storage', 'approved', 'rejected', 'active', 'overdue', 'returned', 'pending_return', 'seeded', 'reverted'] 
+    enum: [ 'pending_manager', 'pending_storage', 'approved', 'rejected', 'active', 'complete', 'seeded', 'reverted'] 
   }).notNull().default('pending_manager'),
   
   // Manager approval fields
@@ -107,48 +130,80 @@ export const borrowRequests = pgTable('borrow_requests', {
   storageApprovedAt: timestamp('storage_approved_at'),
   storageRejectionReason: text('storage_rejection_reason'),
   
-  // Return fields
-  dueDate: timestamp('due_date'),
-  returnedAt: timestamp('returned_at'),
-  returnCondition: text('return_condition', { enum: ['excellent', 'good', 'fair', 'poor'] }),
-  returnNotes: text('return_notes'),
-  receivedBy: uuid('received_by').references(() => users.id),
-  receivedAt: timestamp('received_at'),
-  receiveNotes: text('receive_notes'),
+  // Completion/Seeding fields
+  completedAt: timestamp('completed_at'),
+  completedBy: uuid('completed_by').references(() => users.id),
+  seededAt: timestamp('seeded_at'),
+  seededBy: uuid('seeded_by').references(() => users.id),
+  revertedAt: timestamp('reverted_at'),
+  revertedBy: uuid('reverted_by').references(() => users.id),
+  notes: text('notes'),
 });
 
-// Return requests table
-export const returnRequests = pgTable('return_requests', {
+// Borrow request items table - Links items to borrow requests
+export const borrowRequestItems = pgTable('borrow_request_items', {
   id: uuid('id').defaultRandom().primaryKey(),
   borrowRequestId: uuid('borrow_request_id').references(() => borrowRequests.id, { onDelete: 'cascade' }).notNull(),
   itemId: uuid('item_id').references(() => items.id, { onDelete: 'cascade' }).notNull(),
-  userId: uuid('user_id').references(() => users.id).notNull(),
-  requestedAt: timestamp('requested_at').defaultNow().notNull(),
-  reason: text('reason').notNull(),
-  returnCondition: text('return_condition', { enum: ['excellent', 'good', 'fair', 'poor'] }).notNull(),
+  quantity: integer('quantity').notNull().default(1),
+  status: text('status', { 
+    enum: ['pending_manager', 'pending_storage', 'rejected', 'active', 'complete', 'seeded', 'reverted'] 
+  }).notNull().default('pending_manager'),
+  
+  // Return/Completion fields
+  returnCondition: text('return_condition', { enum: ['excellent', 'good', 'fair', 'poor'] }),
   returnNotes: text('return_notes'),
-  status: text('status', { enum: ['pending', 'approved', 'rejected'] }).notNull().default('pending'),
-  approvedBy: uuid('approved_by').references(() => users.id),
-  approvedAt: timestamp('approved_at'),
-  rejectionReason: text('rejection_reason'),
-  receivedBy: uuid('received_by').references(() => users.id),
-  receivedAt: timestamp('received_at'),
-  receiveNotes: text('receive_notes'),
+  completedAt: timestamp('completed_at'),
+  completedBy: uuid('completed_by').references(() => users.id),
+  seededAt: timestamp('seeded_at'),
+  seededBy: uuid('seeded_by').references(() => users.id),
+  revertedAt: timestamp('reverted_at'),
+  revertedBy: uuid('reverted_by').references(() => users.id),
+  
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
 // Item clearances table
 export const itemClearances = pgTable('item_clearances', {
   id: uuid('id').defaultRandom().primaryKey(),
   itemId: uuid('item_id').references(() => items.id, { onDelete: 'cascade' }).notNull(),
+  quantity: integer('quantity').notNull().default(1),
   requestedBy: uuid('requested_by').references(() => users.id).notNull(),
   requestedAt: timestamp('requested_at').defaultNow().notNull(),
   reason: text('reason').notNull(),
-  status: text('status', { enum: ['pending', 'approved', 'rejected'] }).notNull().default('pending'),
+  status: text('status', { enum: ['pending', 'approved', 'rejected', 'completed'] }).notNull().default('pending'),
   approvedBy: uuid('approved_by').references(() => users.id),
   approvedAt: timestamp('approved_at'),
   rejectionReason: text('rejection_reason'),
   clearedAt: timestamp('cleared_at'),
   metadata: jsonb('metadata').notNull(),
+});
+
+// Stock movements table - Audit trail for all stock changes
+export const stockMovements = pgTable('stock_movements', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  itemId: uuid('item_id').references(() => items.id, { onDelete: 'cascade' }).notNull(),
+  stockId: uuid('stock_id').references(() => itemStock.id, { onDelete: 'cascade' }).notNull(),
+  
+  // Movement details
+  movementType: text('movement_type', { 
+    enum: ['initial_stock', 'borrow', 'complete', 'clearance', 'seed', 'revert_seed', 'adjustment'] 
+  }).notNull(),
+  quantity: integer('quantity').notNull(),
+  
+  // State changes
+  fromState: text('from_state', { enum: ['storage', 'borrowed', 'clearance', 'seeded', 'none', 'pending'] }),
+  toState: text('to_state', { enum: ['storage', 'borrowed', 'clearance', 'seeded', 'none', 'pending'] }),
+  
+  // Reference to related entity
+  referenceId: uuid('reference_id'), // Could be borrowRequestId, borrowRequestItemId, clearanceId, etc.
+  referenceType: text('reference_type', { enum: ['borrow_request', 'borrow_request_item', 'clearance', 'manual'] }),
+  
+  // Audit
+  performedBy: uuid('performed_by').references(() => users.id).notNull(),
+  notes: text('notes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
 // Relations
@@ -165,11 +220,10 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   itemsApproved: many(items),
   itemRequests: many(itemRequests),
   borrowRequests: many(borrowRequests),
-  returnRequests: many(returnRequests),
   itemClearances: many(itemClearances),
+  stockMovements: many(stockMovements),
   managerApprovals: many(borrowRequests, { relationName: 'managerApproval' }),
   storageApprovals: many(borrowRequests, { relationName: 'storageApproval' }),
-  returnApprovals: many(returnRequests, { relationName: 'returnApproval' }),
   clearanceApprovals: many(itemClearances, { relationName: 'clearanceApproval' }),
 }));
 
@@ -182,14 +236,23 @@ export const itemsRelations = relations(items, ({ one, many }) => ({
     fields: [items.approvedBy],
     references: [users.id],
   }),
+  stock: one(itemStock, {
+    fields: [items.id],
+    references: [itemStock.itemId],
+  }),
   images: many(itemImages),
   itemRequests: many(itemRequests),
-  borrowRequests: many(borrowRequests),
-  returnRequests: many(returnRequests),
-  clearance: one(itemClearances, {
-    fields: [items.id],
-    references: [itemClearances.itemId],
+  borrowRequestItems: many(borrowRequestItems),
+  clearances: many(itemClearances),
+  stockMovements: many(stockMovements),
+}));
+
+export const itemStockRelations = relations(itemStock, ({ one, many }) => ({
+  item: one(items, {
+    fields: [itemStock.itemId],
+    references: [items.id],
   }),
+  movements: many(stockMovements),
 }));
 
 export const itemImagesRelations = relations(itemImages, ({ one }) => ({
@@ -214,15 +277,12 @@ export const itemRequestsRelations = relations(itemRequests, ({ one }) => ({
   }),
 }));
 
-export const borrowRequestsRelations = relations(borrowRequests, ({ one }) => ({
-  item: one(items, {
-    fields: [borrowRequests.itemId],
-    references: [items.id],
-  }),
+export const borrowRequestsRelations = relations(borrowRequests, ({ one, many }) => ({
   user: one(users, {
     fields: [borrowRequests.userId],
     references: [users.id],
   }),
+  items: many(borrowRequestItems),
   managerApprovedBy: one(users, {
     fields: [borrowRequests.managerApprovedBy],
     references: [users.id],
@@ -233,32 +293,39 @@ export const borrowRequestsRelations = relations(borrowRequests, ({ one }) => ({
     references: [users.id],
     relationName: 'storageApproval',
   }),
-  receivedBy: one(users, {
-    fields: [borrowRequests.receivedBy],
+  completedBy: one(users, {
+    fields: [borrowRequests.completedBy],
+    references: [users.id],
+  }),
+  seededBy: one(users, {
+    fields: [borrowRequests.seededBy],
+    references: [users.id],
+  }),
+  revertedBy: one(users, {
+    fields: [borrowRequests.revertedBy],
     references: [users.id],
   }),
 }));
 
-export const returnRequestsRelations = relations(returnRequests, ({ one }) => ({
+export const borrowRequestItemsRelations = relations(borrowRequestItems, ({ one }) => ({
   borrowRequest: one(borrowRequests, {
-    fields: [returnRequests.borrowRequestId],
+    fields: [borrowRequestItems.borrowRequestId],
     references: [borrowRequests.id],
   }),
   item: one(items, {
-    fields: [returnRequests.itemId],
+    fields: [borrowRequestItems.itemId],
     references: [items.id],
   }),
-  user: one(users, {
-    fields: [returnRequests.userId],
+  completedBy: one(users, {
+    fields: [borrowRequestItems.completedBy],
     references: [users.id],
   }),
-  approvedBy: one(users, {
-    fields: [returnRequests.approvedBy],
+  seededBy: one(users, {
+    fields: [borrowRequestItems.seededBy],
     references: [users.id],
-    relationName: 'returnApproval',
   }),
-  receivedBy: one(users, {
-    fields: [returnRequests.receivedBy],
+  revertedBy: one(users, {
+    fields: [borrowRequestItems.revertedBy],
     references: [users.id],
   }),
 }));
@@ -279,6 +346,21 @@ export const itemClearancesRelations = relations(itemClearances, ({ one }) => ({
   }),
 }));
 
+export const stockMovementsRelations = relations(stockMovements, ({ one }) => ({
+  item: one(items, {
+    fields: [stockMovements.itemId],
+    references: [items.id],
+  }),
+  stock: one(itemStock, {
+    fields: [stockMovements.stockId],
+    references: [itemStock.id],
+  }),
+  performedBy: one(users, {
+    fields: [stockMovements.performedBy],
+    references: [users.id],
+  }),
+}));
+
 // Type exports
 export type Department = typeof departments.$inferSelect;
 export type NewDepartment = typeof departments.$inferInsert;
@@ -289,6 +371,9 @@ export type NewUser = typeof users.$inferInsert;
 export type Item = typeof items.$inferSelect;
 export type NewItem = typeof items.$inferInsert;
 
+export type ItemStock = typeof itemStock.$inferSelect;
+export type NewItemStock = typeof itemStock.$inferInsert;
+
 export type ItemImage = typeof itemImages.$inferSelect;
 export type NewItemImage = typeof itemImages.$inferInsert;
 
@@ -298,24 +383,54 @@ export type NewItemRequest = typeof itemRequests.$inferInsert;
 export type BorrowRequest = typeof borrowRequests.$inferSelect;
 export type NewBorrowRequest = typeof borrowRequests.$inferInsert;
 
-export type ReturnRequest = typeof returnRequests.$inferSelect;
-export type NewReturnRequest = typeof returnRequests.$inferInsert;
+export type BorrowRequestItem = typeof borrowRequestItems.$inferSelect;
+export type NewBorrowRequestItem = typeof borrowRequestItems.$inferInsert;
 
 export type ItemClearance = typeof itemClearances.$inferSelect;
 export type NewItemClearance = typeof itemClearances.$inferInsert;
 
+export type StockMovement = typeof stockMovements.$inferSelect;
+export type NewStockMovement = typeof stockMovements.$inferInsert;
+
 export type UserRole = User['role'];
 export type ItemStatus = Item['status'];
-export type ItemCondition = Item['condition'];
-export type ItemLocation = Item['location'];
+export type ItemCondition = ItemStock['condition'];
+export type ItemLocation = ItemStock['location'];
 export type UnitOfMeasure = Item['unitOfMeasure'];
 export type BorrowRequestStatus = BorrowRequest['status'];
-export type ReturnRequestStatus = ReturnRequest['status'];
+export type BorrowRequestItemStatus = BorrowRequestItem['status'];
 export type ItemRequestStatus = ItemRequest['status'];
 export type ItemClearanceStatus = ItemClearance['status'];
+export type MovementType = StockMovement['movementType'];
+export type StockState = StockMovement['fromState'];
 
 // ============================================================================
-// PRODUCT CODE PARSER - Automatically generates BrandCode, Division, Category
+// STOCK MANAGEMENT HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Calculate available stock for borrowing
+ */
+export function getAvailableStock(stock: ItemStock): number {
+  return stock.inStorage;
+}
+
+/**
+ * Calculate total stock across all states
+ */
+export function getTotalStock(stock: ItemStock): number {
+  return stock.inStorage + stock.onBorrow + stock.inClearance + stock.seeded;
+}
+
+/**
+ * Check if sufficient stock is available for borrowing
+ */
+export function hasAvailableStock(stock: ItemStock, requestedQuantity: number): boolean {
+  return stock.inStorage >= requestedQuantity;
+}
+
+// ============================================================================
+// PRODUCT CODE PARSER (unchanged from original)
 // ============================================================================
 
 interface ProductCodeMapping {
@@ -329,7 +444,6 @@ interface ProductCodeMapping {
   rangeEnd: string;
 }
 
-// Product code mapping configuration
 const PRODUCT_CODE_MAPPINGS: ProductCodeMapping[] = [
   // PIERO Brand
   { brandCode: 'PIE', brandName: 'Piero', productDivision: '21', divisionName: 'Footwear', productCategory: '00', categoryName: 'Lifestyle', rangeStart: 'PIE210000001', rangeEnd: 'PIE210099999' },
@@ -427,20 +541,9 @@ interface ParsedProductCode {
   error?: string;
 }
 
-/**
- * Parse a product code and return its components
- * Product Code Format: XXX-YY-ZZ-NNNNN
- * Example: SPE120200001
- * - XXX (SPE) = Brand Code (3 characters)
- * - YY (12) = Product Division (2 digits)
- * - ZZ (02) = Product Category (2 digits)
- * - NNNNN (00001) = Sequence Number (5 digits)
- */
 export function parseProductCode(productCode: string): ParsedProductCode {
-  // Remove any spaces and convert to uppercase
   const cleanCode = productCode.trim().toUpperCase();
   
-  // Validate format: must be at least 12 characters (3+2+2+5)
   if (cleanCode.length !== 12) {
     return {
       brandCode: '',
@@ -455,13 +558,11 @@ export function parseProductCode(productCode: string): ParsedProductCode {
     };
   }
   
-  // Extract parts
   const brandCode = cleanCode.substring(0, 3);
   const division = cleanCode.substring(3, 5);
   const category = cleanCode.substring(5, 7);
   const sequence = cleanCode.substring(7, 12);
   
-  // Validate sequence is numeric
   if (!/^\d{5}$/.test(sequence)) {
     return {
       brandCode,
@@ -476,7 +577,6 @@ export function parseProductCode(productCode: string): ParsedProductCode {
     };
   }
   
-  // Find matching mapping
   const mapping = PRODUCT_CODE_MAPPINGS.find(
     m => m.brandCode === brandCode && 
          m.productDivision === division && 
@@ -497,7 +597,6 @@ export function parseProductCode(productCode: string): ParsedProductCode {
     };
   }
   
-  // Validate sequence is within range
   const seqNum = parseInt(sequence, 10);
   const rangeStart = parseInt(mapping.rangeStart.substring(7, 12), 10);
   const rangeEnd = parseInt(mapping.rangeEnd.substring(7, 12), 10);
@@ -528,9 +627,6 @@ export function parseProductCode(productCode: string): ParsedProductCode {
   };
 }
 
-/**
- * Validate if a product code is valid
- */
 export function validateProductCode(productCode: string): { isValid: boolean; error?: string } {
   const parsed = parseProductCode(productCode);
   return {
@@ -538,80 +634,3 @@ export function validateProductCode(productCode: string): { isValid: boolean; er
     error: parsed.error
   };
 }
-
-/**
- * Get the next available product code in a category
- * Useful for generating new product codes
- */
-export function getNextProductCode(
-  brandCode: string, 
-  division: string, 
-  category: string, 
-  lastSequence: number
-): string | null {
-  const mapping = PRODUCT_CODE_MAPPINGS.find(
-    m => m.brandCode === brandCode && 
-         m.productDivision === division && 
-         m.productCategory === category
-  );
-  
-  if (!mapping) {
-    return null;
-  }
-  
-  const rangeEnd = parseInt(mapping.rangeEnd.substring(7, 12), 10);
-  const nextSeq = lastSequence + 1;
-  
-  if (nextSeq > rangeEnd) {
-    return null; // Range exhausted
-  }
-  
-  const paddedSeq = nextSeq.toString().padStart(5, '0');
-  return `${brandCode}${division}${category}${paddedSeq}`;
-}
-
-/**
- * Get all available categories for a brand and division
- */
-export function getAvailableCategories(brandCode: string, division: string): ProductCodeMapping[] {
-  return PRODUCT_CODE_MAPPINGS.filter(
-    m => m.brandCode === brandCode && m.productDivision === division
-  );
-}
-
-/**
- * Get all divisions for a brand
- */
-export function getAvailableDivisions(brandCode: string): ProductCodeMapping[] {
-  const divisions = new Map<string, ProductCodeMapping>();
-  
-  PRODUCT_CODE_MAPPINGS.forEach(m => {
-    if (m.brandCode === brandCode && !divisions.has(m.productDivision)) {
-      divisions.set(m.productDivision, m);
-    }
-  });
-  
-  return Array.from(divisions.values());
-}
-
-/**
- * Example usage when creating a new item:
- * 
- * const productCode = "SPE120200001";
- * const parsed = parseProductCode(productCode);
- * 
- * if (parsed.isValid) {
- *   const newItem = {
- *     productCode: productCode,
- *     brandCode: parsed.brandCode,          // "SPE"
- *     productDivision: parsed.divisionName, // "Apparel"
- *     productCategory: parsed.categoryName, // "Futsal"
- *     description: "...",
- *     inventory: 10,
- *     period: "2025",
- *     season: "Spring",
- *     unitOfMeasure: "PCS",
- *     createdBy: userId
- *   };
- * }
- */

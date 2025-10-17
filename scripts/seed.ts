@@ -1,6 +1,9 @@
 import 'dotenv/config';
 import { db } from '../lib/db';
-import { users, items, departments, itemImages, itemRequests } from '../lib/db/schema';
+import { 
+  users, items, departments, itemImages, itemRequests, 
+  itemStock, borrowRequests, borrowRequestItems, itemClearances, stockMovements 
+} from '../lib/db/schema';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { parseProductCode } from '../lib/db/schema';
@@ -9,8 +12,13 @@ async function seed() {
   try {
     // Delete all existing data first (in correct order to respect foreign key constraints)
     console.log('Removing all existing data...');
+    await db.delete(stockMovements);
+    await db.delete(borrowRequestItems);
+    await db.delete(borrowRequests);
+    await db.delete(itemClearances);
     await db.delete(itemRequests);
     await db.delete(itemImages);
+    await db.delete(itemStock);
     await db.delete(items);
     await db.delete(users);
     await db.delete(departments);
@@ -117,152 +125,111 @@ async function seed() {
 
     console.log('Regular users created');
 
-    // Create 10 sports equipment items using the new schema format
+    // Create 5 sports equipment items (mix of Piero and Specs)
     console.log('Creating sports equipment items...');
     const itemsData = [
       {
-        productCode: 'SPE110000001',
-        description: 'TEMPO SHIPYARD/EGRET/DOESKIN Lifestyle Shoes',
-        inventory: 35,
+        productCode: 'PIE210000001', // Piero Lifestyle
+        description: 'PIERO Lifestyle Shoes - Classic Edition',
+        totalStock: 35,
         period: '24Q1',
         season: 'SS',
         unitOfMeasure: 'PRS' as const,
-        condition: 'excellent' as const,
-        conditionNotes: 'Brand new in box',
         status: 'pending_approval' as const,
         createdBy: itemMaster1.id,
+        stockData: {
+          inStorage: 35,
+          onBorrow: 0,
+          inClearance: 0,
+          seeded: 0,
+          location: 'Storage 1' as const,
+          condition: 'excellent' as const,
+          conditionNotes: 'Brand new in box',
+        }
       },
       {
-        productCode: 'SPE110100001',
-        description: 'TEMPO SHADED SPRUCE/EGRET/DOESKIN Football Shoes',
-        inventory: 2,
+        productCode: 'SPE110100001', // Specs Football
+        description: 'SPECS Football Shoes - Professional Edition',
+        totalStock: 2,
         period: '24Q1',
         season: 'SS',
         unitOfMeasure: 'PRS' as const,
-        condition: 'good' as const,
-        conditionNotes: 'Minor scuff marks on sole',
-        status: 'pending_approval' as const,
-        createdBy: itemMaster1.id,
-      },
-      {
-        productCode: 'SPE110200001',
-        description: 'TEMPO INDIA INK/EGRET/DOESKIN Futsal Shoes',
-        inventory: 67,
-        period: '24Q1',
-        season: 'SS',
-        unitOfMeasure: 'PRS' as const,
-        condition: 'good' as const,
-        conditionNotes: 'Display model, slight wear',
         status: 'approved' as const,
         approvedBy: storageMaster1.id,
         approvedAt: new Date(),
-        location: 'Storage 1' as const,
         createdBy: itemMaster1.id,
+        stockData: {
+          inStorage: 2,
+          onBorrow: 0,
+          inClearance: 0,
+          seeded: 0,
+          location: 'Storage 1' as const,
+          condition: 'good' as const,
+          conditionNotes: 'Minor scuff marks on sole',
+        }
       },
       {
-        productCode: 'SPE110300001',
-        description: 'TEMPO JUNGLE GREEN/INDIA INK/BRIGHT AQUA Street Soccer Shoes',
-        inventory: 1,
+        productCode: 'PIE210200001', // Piero Futsal
+        description: 'PIERO Futsal Shoes - Indoor Edition',
+        totalStock: 67,
         period: '24Q1',
         season: 'SS',
         unitOfMeasure: 'PRS' as const,
-        condition: 'fair' as const,
-        conditionNotes: 'Heel wear, needs replacement soon',
-        status: 'available' as const,
+        status: 'approved' as const,
         approvedBy: storageMaster1.id,
         approvedAt: new Date(),
-        location: 'Storage 2' as const,
         createdBy: itemMaster1.id,
+        stockData: {
+          inStorage: 67,
+          onBorrow: 0,
+          inClearance: 0,
+          seeded: 0,
+          location: 'Storage 1' as const,
+          condition: 'good' as const,
+          conditionNotes: 'Display model, slight wear',
+        }
       },
       {
-        productCode: 'SPE110400001',
-        description: '303_EARTHOVER FORGED IRON/PEARL CITY Running Shoes',
-        inventory: 2,
+        productCode: 'SPE110400001', // Specs Running
+        description: 'SPECS Running Shoes - Marathon Edition',
+        totalStock: 1,
         period: '24Q1',
         season: 'SS',
         unitOfMeasure: 'PRS' as const,
-        condition: 'excellent' as const,
-        conditionNotes: 'New collection',
-        status: 'available' as const,
+        status: 'approved' as const,
         approvedBy: storageMaster1.id,
         approvedAt: new Date(),
-        location: 'Storage 3' as const,
         createdBy: itemMaster1.id,
+        stockData: {
+          inStorage: 1,
+          onBorrow: 0,
+          inClearance: 0,
+          seeded: 0,
+          location: 'Storage 2' as const,
+          condition: 'fair' as const,
+          conditionNotes: 'Heel wear, needs replacement soon',
+        }
       },
       {
-        productCode: 'SPE110500001',
-        description: '303_EARTHOVER BLUE ODDYSEY/VANILLA ICE Training Shoes',
-        inventory: 2,
-        period: '24Q1',
-        season: 'SS',
-        unitOfMeasure: 'PRS' as const,
-        condition: 'good' as const,
-        conditionNotes: 'No original box',
-        status: 'borrowed' as const,
-        approvedBy: storageMaster1.id,
-        approvedAt: new Date(),
-        location: 'Storage 1' as const,
-        createdBy: itemMaster1.id,
-      },
-      {
-        productCode: 'SPE130000001',
-        description: 'SPORTS WATCH PROFESSIONAL',
-        inventory: 15,
+        productCode: 'PIE230000001', // Piero Accessories
+        description: 'PIERO Sports Watch - Professional Edition',
+        totalStock: 15,
         period: '24Q1',
         season: 'SS',
         unitOfMeasure: 'PCS' as const,
-        condition: 'excellent' as const,
-        conditionNotes: 'With original packaging',
-        status: 'available' as const,
+        status: 'approved' as const,
         approvedBy: storageMaster1.id,
         approvedAt: new Date(),
-        location: 'Storage 2' as const,
         createdBy: itemMaster1.id,
-      },
-      {
-        productCode: 'SPE140000001',
-        description: 'TENNIS RACKET PROFESSIONAL',
-        inventory: 8,
-        period: '24Q1',
-        season: 'SS',
-        unitOfMeasure: 'PCS' as const,
-        condition: 'good' as const,
-        conditionNotes: 'String tension needs adjustment',
-        status: 'available' as const,
-        approvedBy: storageMaster1.id,
-        approvedAt: new Date(),
-        location: 'Storage 3' as const,
-        createdBy: itemMaster1.id,
-      },
-      {
-        productCode: 'SPE120000001',
-        description: 'SPORTS JERSEY TEAM EDITION',
-        inventory: 25,
-        period: '24Q1',
-        season: 'SS',
-        unitOfMeasure: 'PCS' as const,
-        condition: 'good' as const,
-        conditionNotes: 'Minor fabric pilling',
-        status: 'available' as const,
-        approvedBy: storageMaster1.id,
-        approvedAt: new Date(),
-        location: 'Storage 1' as const,
-        createdBy: itemMaster1.id,
-      },
-      {
-        productCode: 'SPE120000002',
-        description: 'SPORTS SHORTS COMFORT FIT',
-        inventory: 30,
-        period: '24Q1',
-        season: 'SS',
-        unitOfMeasure: 'PCS' as const,
-        condition: 'excellent' as const,
-        conditionNotes: 'New with tags',
-        status: 'available' as const,
-        approvedBy: storageMaster1.id,
-        approvedAt: new Date(),
-        location: 'Storage 2' as const,
-        createdBy: itemMaster1.id,
+        stockData: {
+          inStorage: 15,
+          onBorrow: 0,
+          inClearance: 0,
+          seeded: 0,
+          location: 'Storage 2' as const,
+          condition: 'excellent' as const,
+          conditionNotes: 'With original packaging',
+        }
       }
     ];
 
@@ -275,16 +242,42 @@ async function seed() {
       }
       
       return {
-        ...item,
+        productCode: item.productCode,
+        description: item.description,
+        totalStock: item.totalStock,
+        period: item.period,
+        season: item.season,
+        unitOfMeasure: item.unitOfMeasure,
+        status: item.status,
+        approvedBy: item.approvedBy,
+        approvedAt: item.approvedAt,
+        createdBy: item.createdBy,
         brandCode: parsed.brandCode,
         productDivision: parsed.productDivision,
         productCategory: parsed.productCategory,
+        stockData: item.stockData
       };
     });
 
-    const createdItems = await db.insert(items).values(processedItems).returning();
+    // Create items and their stock records
+    const createdItems = [];
+    for (const itemData of processedItems) {
+      // Extract stock data to create separate record
+      const { stockData, ...itemFields } = itemData;
+      
+      // Create item
+      const [createdItem] = await db.insert(items).values(itemFields).returning();
+      
+      // Create item stock
+      await db.insert(itemStock).values({
+        itemId: createdItem.id,
+        ...stockData
+      });
+      
+      createdItems.push(createdItem);
+    }
 
-    console.log('Items created successfully');
+    console.log('Items and stock records created successfully');
 
     // Create item images (using placeholder URLs since we're not actually uploading files)
     console.log('Creating item images...');
@@ -327,6 +320,184 @@ async function seed() {
       }
     }
     console.log('Item requests created successfully');
+
+    // Create some sample borrow requests with multiple items
+    console.log('Creating borrow requests...');
+    const approvedItems = createdItems.filter(item => item.status === 'approved');
+    
+    // Create a borrow request with multiple items
+    if (approvedItems.length >= 2) {
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 5); // Started 5 days ago
+      
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + 5); // Ends in 5 days
+      
+      // Create borrow request
+      const [borrowRequest] = await db.insert(borrowRequests).values({
+        userId: sportsUser1.id,
+        startDate,
+        endDate,
+        reason: 'For sports event demonstration',
+        status: 'approved',
+        managerApprovedBy: sportsManager.id,
+        managerApprovedAt: new Date(startDate.getTime() + 86400000), // Next day
+        storageApprovedBy: storageMaster1.id,
+        storageApprovedAt: new Date(startDate.getTime() + 172800000), // 2 days later
+      }).returning();
+      
+      // Add items to the borrow request
+      for (let i = 0; i < Math.min(2, approvedItems.length); i++) {
+        const item = approvedItems[i];
+        
+        // Create borrow request item
+        await db.insert(borrowRequestItems).values({
+          borrowRequestId: borrowRequest.id,
+          itemId: item.id,
+          quantity: 1,
+          status: 'active',
+        });
+        
+        // Update stock to reflect borrowed item
+        const [stock] = await db.select().from(itemStock).where(eq(itemStock.itemId, item.id));
+        await db.update(itemStock)
+          .set({
+            inStorage: stock.inStorage - 1,
+            onBorrow: stock.onBorrow + 1
+          })
+          .where(eq(itemStock.itemId, item.id));
+        
+        // Create stock movement record
+        await db.insert(stockMovements).values({
+          itemId: item.id,
+          stockId: stock.id,
+          movementType: 'borrow',
+          quantity: 1,
+          fromState: 'storage',
+          toState: 'borrowed',
+          referenceId: borrowRequest.id,
+          referenceType: 'borrow_request',
+          performedBy: storageMaster1.id,
+          notes: 'Item borrowed for sports event',
+        });
+      }
+    }
+    
+    // Create a pending borrow request with multiple items
+    if (approvedItems.length > 2) {
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() + 2); // Starts in 2 days
+      
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + 7); // Ends in 7 days
+      
+      // Create borrow request
+      const [pendingBorrowRequest] = await db.insert(borrowRequests).values({
+        userId: sportsUser2.id,
+        startDate,
+        endDate,
+        reason: 'For training session',
+        status: 'pending_manager',
+      }).returning();
+      
+      // Add items to the pending borrow request
+      for (let i = 2; i < Math.min(4, approvedItems.length); i++) {
+        const item = approvedItems[i];
+        
+        // Create borrow request item
+        await db.insert(borrowRequestItems).values({
+          borrowRequestId: pendingBorrowRequest.id,
+          itemId: item.id,
+          quantity: 1,
+          status: 'pending_manager',
+        });
+      }
+    }
+    
+    // Create a borrow request with a completed item
+    if (approvedItems.length > 3) {
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 10); // Started 10 days ago
+      
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() - 2); // Ended 2 days ago
+      
+      // Create borrow request
+      const [completedBorrowRequest] = await db.insert(borrowRequests).values({
+        userId: sportsUser1.id,
+        startDate,
+        endDate,
+        reason: 'For sports competition',
+        status: 'complete',
+        managerApprovedBy: sportsManager.id,
+        managerApprovedAt: new Date(startDate.getTime() + 86400000), // Next day
+        storageApprovedBy: storageMaster1.id,
+        storageApprovedAt: new Date(startDate.getTime() + 172800000), // 2 days later
+        completedAt: new Date(),
+        completedBy: storageMaster1.id,
+      }).returning();
+      
+      // Add item to the completed borrow request
+      const item = approvedItems[3];
+      
+      // Create borrow request item
+      await db.insert(borrowRequestItems).values({
+        borrowRequestId: completedBorrowRequest.id,
+        itemId: item.id,
+        quantity: 1,
+        status: 'complete',
+        returnCondition: 'good',
+        returnNotes: 'Item used for 8 days, in good condition',
+        completedAt: new Date(),
+        completedBy: storageMaster1.id,
+      });
+      
+      // Update stock to reflect returned item
+      const [stock] = await db.select().from(itemStock).where(eq(itemStock.itemId, item.id));
+      await db.update(itemStock)
+        .set({
+          inStorage: stock.inStorage + 1,
+          onBorrow: stock.onBorrow - 1
+        })
+        .where(eq(itemStock.itemId, item.id));
+      
+      // Create stock movement record for completion
+      await db.insert(stockMovements).values({
+        itemId: item.id,
+        stockId: stock.id,
+        movementType: 'complete',
+        quantity: 1,
+        fromState: 'borrowed',
+        toState: 'storage',
+        referenceId: completedBorrowRequest.id,
+        referenceType: 'borrow_request',
+        performedBy: storageMaster1.id,
+        notes: 'Item returned after competition',
+      });
+    }
+    
+    console.log('Borrow requests created successfully');
+
+    // Create an item clearance
+    console.log('Creating item clearances...');
+    if (approvedItems.length > 0) {
+      const item = approvedItems[0];
+      
+      // Get the stock record
+      const [stock] = await db.select().from(itemStock).where(eq(itemStock.itemId, item.id));
+      
+      // Create clearance request
+      const [clearanceRequest] = await db.insert(itemClearances).values({
+        itemId: item.id,
+        quantity: 1,
+        requestedBy: storageMaster1.id,
+        reason: 'Item damaged beyond repair',
+        status: 'pending',
+        metadata: { damageType: 'sole separation', repairCost: 0 },
+      }).returning();
+      
+      console.log('Item clearance created successfully');
+    }
 
     console.log('Seed data created successfully');
     console.log('\nLogin credentials:');

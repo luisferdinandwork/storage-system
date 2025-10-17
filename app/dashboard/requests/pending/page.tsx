@@ -1,4 +1,3 @@
-// app/dashboard/requests/pending/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -39,7 +38,6 @@ import {
   XCircle, 
   Eye, 
   Calendar,
-  MapPin,
   User,
   Clock
 } from 'lucide-react';
@@ -47,16 +45,22 @@ import { cn } from '@/lib/utils';
 
 interface BorrowRequest {
   id: string;
-  item: {
+  items: Array<{
     id: string;
-    productCode: string;
-    description: string;
-    brandCode: string;
-    productDivision: string;
-    productCategory: string;
-    condition: string;
-    location: string | null;
-  };
+    item: {
+      id: string;
+      productCode: string;
+      description: string;
+      images: Array<{
+        id: string;
+        fileName: string;
+        altText: string | null;
+        isPrimary: boolean;
+      }>;
+    };
+    quantity: number;
+    status: string;
+  }>;
   user: {
     id: string;
     name: string;
@@ -67,7 +71,6 @@ interface BorrowRequest {
       name: string;
     };
   };
-  quantity: number;
   requestedAt: string;
   startDate: string;
   endDate: string;
@@ -96,6 +99,7 @@ export default function PendingApprovalsPage() {
   const [selectedRequest, setSelectedRequest] = useState<BorrowRequest | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [approvalType, setApprovalType] = useState<'manager' | 'storage'>('manager');
 
   useEffect(() => {
     fetchRequests();
@@ -129,13 +133,29 @@ export default function PendingApprovalsPage() {
     }
   };
 
-  const handleApprove = async () => {
+  const handleApprove = async (request: BorrowRequest, type: 'manager' | 'storage') => {
+    setSelectedRequest(request);
+    setApprovalType(type);
+    setShowApproveModal(true);
+  };
+
+  const handleReject = async (request: BorrowRequest, type: 'manager' | 'storage') => {
+    setSelectedRequest(request);
+    setApprovalType(type);
+    setShowRejectModal(true);
+  };
+
+  const confirmApprove = async () => {
     if (!selectedRequest) return;
 
     setIsProcessing(true);
     try {
       const response = await fetch(`/api/borrow-requests/${selectedRequest.id}/approve`, {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ approvalType }),
       });
 
       if (response.ok) {
@@ -154,7 +174,7 @@ export default function PendingApprovalsPage() {
     }
   };
 
-  const handleReject = async () => {
+  const confirmReject = async () => {
     if (!selectedRequest || !rejectionReason.trim()) return;
 
     setIsProcessing(true);
@@ -164,7 +184,10 @@ export default function PendingApprovalsPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ reason: rejectionReason }),
+        body: JSON.stringify({ 
+          reason: rejectionReason.trim(),
+          rejectionType: approvalType 
+        }),
       });
 
       if (response.ok) {
@@ -185,9 +208,11 @@ export default function PendingApprovalsPage() {
   };
 
   const filteredRequests = requests.filter(request => {
-    const matchesSearch = request.item.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         request.item.productCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         request.user.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = request.items.some(reqItem => 
+      reqItem.item.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      reqItem.item.productCode.toLowerCase().includes(searchTerm.toLowerCase())
+    ) || request.user.name.toLowerCase().includes(searchTerm.toLowerCase());
+    
     const matchesStatus = statusFilter === 'all' || request.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -205,49 +230,40 @@ export default function PendingApprovalsPage() {
     }
   };
 
-  const getCategoryBadge = (category: string) => {
-    switch (category) {
-      case '00':
-        return <Badge variant="outline" className="bg-blue-100 text-blue-800">Lifestyle</Badge>;
-      case '01':
-        return <Badge variant="outline" className="bg-green-100 text-green-800">Football</Badge>;
-      case '02':
-        return <Badge variant="outline" className="bg-purple-100 text-purple-800">Futsal</Badge>;
-      case '03':
-        return <Badge variant="outline" className="bg-indigo-100 text-indigo-800">Street Soccer</Badge>;
-      case '04':
-        return <Badge variant="outline" className="bg-yellow-100 text-yellow-800">Running</Badge>;
-      case '05':
-        return <Badge variant="outline" className="bg-pink-100 text-pink-800">Training</Badge>;
-      case '06':
-        return <Badge variant="outline" className="bg-orange-100 text-orange-800">Volley</Badge>;
-      case '08':
-        return <Badge variant="outline" className="bg-teal-100 text-teal-800">Badminton</Badge>;
-      case '09':
-        return <Badge variant="outline" className="bg-cyan-100 text-cyan-800">Tennis</Badge>;
-      case '10':
-        return <Badge variant="outline" className="bg-lime-100 text-lime-800">Basketball</Badge>;
-      case '12':
-        return <Badge variant="outline" className="bg-amber-100 text-amber-800">Skateboard</Badge>;
-      case '14':
-        return <Badge variant="outline" className="bg-emerald-100 text-emerald-800">Swimming</Badge>;
-      case '17':
-        return <Badge variant="outline" className="bg-slate-100 text-slate-800">Back to school</Badge>;
-      default:
-        return <Badge variant="outline">{category}</Badge>;
-    }
+  const getPrimaryImage = (images: any[]) => {
+    const primaryImage = images.find(img => img.isPrimary);
+    return primaryImage || images[0];
   };
 
-  const getBrandBadge = (brandCode: string) => {
-    switch (brandCode) {
-      case 'PIE':
-        return <Badge variant="outline" className="bg-red-100 text-red-800">Piero</Badge>;
-      case 'SPE':
-        return <Badge variant="outline" className="bg-blue-100 text-blue-800">Specs</Badge>;
-      default:
-        return <Badge variant="outline">{brandCode}</Badge>;
+  const getApprovalActions = (request: BorrowRequest) => {
+    const userRole = session?.user?.role;
+    if (!userRole) return null;
+    
+    const actions = [];
+    
+    if (userRole === 'superadmin') {
+      if (request.status === 'pending_manager') {
+        actions.push({ type: 'manager' as const, label: 'Approve (M)' });
+      }
+      if (request.status === 'pending_storage') {
+        actions.push({ type: 'storage' as const, label: 'Approve (S)' });
+      }
+    } else if (userRole === 'manager' && request.status === 'pending_manager') {
+      actions.push({ type: 'manager' as const, label: 'Approve' });
+    } else if (['storage-master', 'storage-master-manager'].includes(userRole) && request.status === 'pending_storage') {
+      actions.push({ type: 'storage' as const, label: 'Approve' });
     }
+    
+    return actions.length > 0 ? actions : null;
   };
+
+  if (isLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center">
+        <div className="text-gray-600">Loading requests...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -255,24 +271,13 @@ export default function PendingApprovalsPage() {
       
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Pending Approvals</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Pending List</h1>
           <p className="text-gray-600">Review and approve borrow requests</p>
-        </div>
-        <div className="flex items-center space-x-2">
-          <Badge variant="outline" className="bg-yellow-100 text-yellow-800">
-            {requests.filter(r => r.status === 'pending_manager').length} Manager Pending
-          </Badge>
-          <Badge variant="outline" className="bg-blue-100 text-blue-800">
-            {requests.filter(r => r.status === 'pending_storage').length} Storage Pending
-          </Badge>
-          <Badge variant="outline" className="bg-orange-100 text-orange-800">
-            {requests.filter(r => r.status === 'pending_extension').length} Extensions
-          </Badge>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
+      <div className="flex gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
           <Input
@@ -282,17 +287,16 @@ export default function PendingApprovalsPage() {
             className="pl-10"
           />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-full sm:w-48">
-            <SelectValue placeholder="Filter by status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="pending_manager">Pending Manager</SelectItem>
-            <SelectItem value="pending_storage">Pending Storage</SelectItem>
-            <SelectItem value="pending_extension">Extension Request</SelectItem>
-          </SelectContent>
-        </Select>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+        >
+          <option value="all">All Status</option>
+          <option value="pending_manager">Pending Manager</option>
+          <option value="pending_storage">Pending Storage</option>
+          <option value="pending_extension">Extension Request</option>
+        </select>
       </div>
 
       {/* Requests Table */}
@@ -300,83 +304,97 @@ export default function PendingApprovalsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Item</TableHead>
-              <TableHead>Requested By</TableHead>
+              <TableHead>Items</TableHead>
               <TableHead>Quantity</TableHead>
+              <TableHead>Requested By</TableHead>
+              <TableHead>Reason</TableHead>
               <TableHead>Period</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Actions</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredRequests.map((request) => (
-              <TableRow key={request.id}>
-                <TableCell>
-                  <div className="flex flex-col">
-                    <div className="font-medium">{request.item.description}</div>
-                    <div className="text-sm text-gray-500">{request.item.productCode}</div>
-                    <div className="flex items-center space-x-2 mt-1">
-                      {getBrandBadge(request.item.brandCode)}
-                      {getCategoryBadge(request.item.productCategory)}
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-col">
-                    <div className="font-medium">{request.user.name}</div>
-                    <div className="text-sm text-gray-500">{request.user.email}</div>
-                    <div className="text-xs text-gray-400 capitalize">{request.user.role.replace('-', ' ')}</div>
-                    {request.user.department && (
-                      <div className="text-xs text-gray-400">{request.user.department.name}</div>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell>{request.quantity}</TableCell>
-                <TableCell>
-                  <div className="text-sm">
-                    <div>{new Date(request.startDate).toLocaleDateString()}</div>
-                    <div className="text-gray-500">to {new Date(request.endDate).toLocaleDateString()}</div>
-                  </div>
-                </TableCell>
-                <TableCell>{getStatusBadge(request.status)}</TableCell>
-                <TableCell>
-                  <div className="flex space-x-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setSelectedRequest(request);
-                        setShowDetailsModal(true);
-                      }}
-                    >
-                      <Eye className="h-4 w-4 mr-1" />
-                      Details
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        setSelectedRequest(request);
-                        setShowApproveModal(true);
-                      }}
-                    >
-                      <CheckCircle className="h-4 w-4 mr-1" />
-                      Approve
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => {
-                        setSelectedRequest(request);
-                        setShowRejectModal(true);
-                      }}
-                    >
-                      <XCircle className="h-4 w-4 mr-1" />
-                      Reject
-                    </Button>
-                  </div>
+            {filteredRequests.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center text-gray-500 py-8">
+                  No pending requests found
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              filteredRequests.map((request) => (
+                <TableRow key={request.id}>
+                  <TableCell>
+                    <div className="space-y-2">
+                      {request.items.map((reqItem) => (
+                        <div key={reqItem.id} className="flex items-center space-x-3">
+                          {reqItem.item.images && reqItem.item.images.length > 0 && (
+                            <div className="w-10 h-10 rounded-md overflow-hidden flex-shrink-0">
+                              <img
+                                src={getPrimaryImage(reqItem.item.images).fileName ? `/uploads/${getPrimaryImage(reqItem.item.images).fileName}` : '/placeholder.jpg'}
+                                alt={getPrimaryImage(reqItem.item.images).altText || reqItem.item.description}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <div className="font-bold text-sm">{reqItem.item.productCode}</div>
+                            <div className="text-sm text-gray-600 truncate">{reqItem.item.description}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {request.items.map((reqItem) => (
+                      <div key={reqItem.id} className="text-sm">{reqItem.quantity}</div>
+                    ))}
+                  </TableCell>
+                  <TableCell className="text-sm">{request.user.name}</TableCell>
+                  <TableCell>
+                    <div className="max-w-xs truncate text-sm" title={request.reason}>
+                      {request.reason}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    <div>{new Date(request.startDate).toLocaleDateString()}</div>
+                    <div className="text-gray-500">to {new Date(request.endDate).toLocaleDateString()}</div>
+                  </TableCell>
+                  <TableCell>{getStatusBadge(request.status)}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end space-x-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setSelectedRequest(request);
+                          setShowDetailsModal(true);
+                        }}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      {getApprovalActions(request)?.map((action) => (
+                        <div key={action.type} className="flex space-x-1">
+                          <Button
+                            size="sm"
+                            onClick={() => handleApprove(request, action.type)}
+                            className="bg-green-600 hover:bg-green-700"
+                          >
+                            <CheckCircle className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handleReject(request, action.type)}
+                          >
+                            <XCircle className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </div>
@@ -389,30 +407,45 @@ export default function PendingApprovalsPage() {
           </DialogHeader>
           {selectedRequest && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <Label>Item</Label>
-                  <p className="font-medium">{selectedRequest.item.description}</p>
-                  <p className="text-sm text-gray-500">{selectedRequest.item.productCode}</p>
+                  <span className="font-medium">Requested By:</span> {selectedRequest.user.name}
                 </div>
                 <div>
-                  <Label>Requested By</Label>
-                  <p className="font-medium">{selectedRequest.user.name}</p>
-                  <p className="text-sm text-gray-500">{selectedRequest.user.email}</p>
+                  <span className="font-medium">Status:</span> {getStatusBadge(selectedRequest.status)}
                 </div>
                 <div>
-                  <Label>Quantity</Label>
-                  <p className="font-medium">{selectedRequest.quantity}</p>
+                  <span className="font-medium">Period:</span> {new Date(selectedRequest.startDate).toLocaleDateString()} - {new Date(selectedRequest.endDate).toLocaleDateString()}
                 </div>
                 <div>
-                  <Label>Period</Label>
-                  <p className="text-sm">
-                    {new Date(selectedRequest.startDate).toLocaleDateString()} - {new Date(selectedRequest.endDate).toLocaleDateString()}
-                  </p>
+                  <span className="font-medium">Requested At:</span> {new Date(selectedRequest.requestedAt).toLocaleDateString()}
                 </div>
-                <div className="col-span-2">
-                  <Label>Reason</Label>
-                  <p className="text-sm">{selectedRequest.reason}</p>
+              </div>
+              <div>
+                <span className="font-medium">Reason:</span>
+                <p className="text-sm text-gray-600 mt-1">{selectedRequest.reason}</p>
+              </div>
+              <div>
+                <span className="font-medium">Items:</span>
+                <div className="mt-2 space-y-2">
+                  {selectedRequest.items.map((reqItem) => (
+                    <div key={reqItem.id} className="flex items-center space-x-3 p-2 border rounded">
+                      {reqItem.item.images && reqItem.item.images.length > 0 && (
+                        <div className="w-12 h-12 rounded-md overflow-hidden">
+                          <img
+                            src={getPrimaryImage(reqItem.item.images).fileName ? `/uploads/${getPrimaryImage(reqItem.item.images).fileName}` : '/placeholder.jpg'}
+                            alt={reqItem.item.description}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      )}
+                      <div>
+                        <div className="font-bold">{reqItem.item.productCode}</div>
+                        <div className="text-sm text-gray-600">{reqItem.item.description}</div>
+                        <div className="text-xs text-gray-500">Quantity: {reqItem.quantity}</div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -425,19 +458,23 @@ export default function PendingApprovalsPage() {
 
       {/* Approve Modal */}
       <Dialog open={showApproveModal} onOpenChange={setShowApproveModal}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Approve Request</DialogTitle>
             <DialogDescription>
-              Are you sure you want to approve this request?
+              Are you sure you want to approve this request as {approvalType === 'manager' ? 'Manager' : 'Storage Master'}?
             </DialogDescription>
           </DialogHeader>
           {selectedRequest && (
             <div className="space-y-4">
               <div className="bg-gray-50 p-4 rounded-md">
-                <h4 className="font-medium">{selectedRequest.item.description}</h4>
-                <p className="text-sm text-gray-600">Requested by: {selectedRequest.user.name}</p>
-                <p className="text-sm text-gray-600">Quantity: {selectedRequest.quantity}</p>
+                <h4 className="font-medium">Request Details</h4>
+                <p className="text-sm text-gray-600 mt-1">
+                  {selectedRequest.items.length} item(s) requested by {selectedRequest.user.name}
+                </p>
+                <p className="text-sm text-gray-600">
+                  Period: {new Date(selectedRequest.startDate).toLocaleDateString()} - {new Date(selectedRequest.endDate).toLocaleDateString()}
+                </p>
               </div>
             </div>
           )}
@@ -445,8 +482,12 @@ export default function PendingApprovalsPage() {
             <Button variant="outline" onClick={() => setShowApproveModal(false)}>
               Cancel
             </Button>
-            <Button onClick={handleApprove} disabled={isProcessing}>
-              {isProcessing ? 'Approving...' : 'Approve'}
+            <Button 
+              onClick={confirmApprove}
+              disabled={isProcessing}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {isProcessing ? 'Processing...' : 'Approve'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -454,21 +495,24 @@ export default function PendingApprovalsPage() {
 
       {/* Reject Modal */}
       <Dialog open={showRejectModal} onOpenChange={setShowRejectModal}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Reject Request</DialogTitle>
             <DialogDescription>
-              Please provide a reason for rejection
+              Please provide a reason for rejecting this request
             </DialogDescription>
           </DialogHeader>
           {selectedRequest && (
             <div className="space-y-4">
               <div className="bg-gray-50 p-4 rounded-md">
-                <h4 className="font-medium">{selectedRequest.item.description}</h4>
-                <p className="text-sm text-gray-600">Requested by: {selectedRequest.user.name}</p>
+                <h4 className="font-medium">Request Details</h4>
+                <p className="text-sm text-gray-600 mt-1">
+                  {selectedRequest.items.length} item(s) requested by {selectedRequest.user.name}
+                </p>
               </div>
+              
               <div>
-                <Label htmlFor="rejectionReason">Rejection Reason</Label>
+                <Label htmlFor="rejectionReason">Rejection Reason *</Label>
                 <Textarea
                   id="rejectionReason"
                   value={rejectionReason}
@@ -484,11 +528,11 @@ export default function PendingApprovalsPage() {
               Cancel
             </Button>
             <Button 
-              variant="destructive" 
-              onClick={handleReject} 
+              variant="destructive"
+              onClick={confirmReject}
               disabled={isProcessing || !rejectionReason.trim()}
             >
-              {isProcessing ? 'Rejecting...' : 'Reject'}
+              {isProcessing ? 'Processing...' : 'Reject'}
             </Button>
           </DialogFooter>
         </DialogContent>

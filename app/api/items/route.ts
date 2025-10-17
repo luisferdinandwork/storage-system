@@ -1,9 +1,11 @@
+// app/api/items/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { db } from '@/lib/db';
-import { items, users, itemImages, itemRequests } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { db } from '@/lib/db/';
+import { items, users, itemImages, itemRequests, stockMovements } from '@/lib/db/schema';
+import { eq, and, or } from 'drizzle-orm';
+import { itemStock } from '@/lib/db/schema';
 
 // GET /api/items - List items with their images
 export async function GET(request: NextRequest) {
@@ -26,13 +28,10 @@ export async function GET(request: NextRequest) {
         brandCode: items.brandCode,
         productDivision: items.productDivision,
         productCategory: items.productCategory,
-        inventory: items.inventory,
+        totalStock: items.totalStock,
         period: items.period,
         season: items.season,
         unitOfMeasure: items.unitOfMeasure,
-        location: items.location,
-        condition: items.condition,
-        conditionNotes: items.conditionNotes,
         status: items.status,
         createdBy: items.createdBy,
         createdAt: items.createdAt,
@@ -43,9 +42,24 @@ export async function GET(request: NextRequest) {
           id: users.id,
           name: users.name,
         },
+        stock: {
+          id: itemStock.id,
+          itemId: itemStock.itemId,
+          pending: itemStock.pending,
+          inStorage: itemStock.inStorage,
+          onBorrow: itemStock.onBorrow,
+          inClearance: itemStock.inClearance,
+          seeded: itemStock.seeded,
+          location: itemStock.location,
+          condition: itemStock.condition,
+          conditionNotes: itemStock.conditionNotes,
+          createdAt: itemStock.createdAt,
+          updatedAt: itemStock.updatedAt,
+        },
       })
       .from(items)
-      .leftJoin(users, eq(items.createdBy, users.id));
+      .leftJoin(users, eq(items.createdBy, users.id))
+      .leftJoin(itemStock, eq(items.id, itemStock.itemId));
 
     // Apply status filter if specified
     let itemsData;
@@ -54,6 +68,19 @@ export async function GET(request: NextRequest) {
     } else {
       itemsData = await query;
     }
+
+    // Filter items that have stock in pending, inStorage, or onBorrow
+    // Exclude items that ONLY have stock in clearance or seeded
+    const filteredItems = itemsData.filter(item => {
+      if (!item.stock) return false;
+      
+      const { pending, inStorage, onBorrow, inClearance, seeded } = item.stock;
+      
+      // Show item if it has any stock in pending, inStorage, or onBorrow
+      const hasVisibleStock = pending > 0 || inStorage > 0 || onBorrow > 0;
+      
+      return hasVisibleStock;
+    });
 
     // Fetch all images
     const allImages = await db
@@ -70,9 +97,26 @@ export async function GET(request: NextRequest) {
     }
 
     // Combine items with their images
-    const itemsWithImages = itemsData.map(item => ({
-      ...item,
+    const itemsWithImages = filteredItems.map(item => ({
+      id: item.id,
+      productCode: item.productCode,
+      description: item.description,
+      brandCode: item.brandCode,
+      productDivision: item.productDivision,
+      productCategory: item.productCategory,
+      totalStock: item.totalStock,
+      period: item.period,
+      season: item.season,
+      unitOfMeasure: item.unitOfMeasure,
+      status: item.status,
+      createdBy: item.createdBy,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+      approvedBy: item.approvedBy,
+      approvedAt: item.approvedAt,
+      createdByUser: item.createdByUser,
       images: imagesByItemId[item.id] || [],
+      stock: item.stock,
     }));
 
     return NextResponse.json(itemsWithImages);
@@ -104,17 +148,18 @@ export async function POST(request: NextRequest) {
     const { 
       productCode, 
       description, 
-      inventory, 
+      totalStock, 
       period, 
       season, 
       unitOfMeasure,
       condition,
       conditionNotes,
+      location,
       images: imageData 
     } = body;
 
     // Validate required fields
-    if (!productCode || !description || !period || !season || !unitOfMeasure || !condition) {
+    if (!productCode || !description || !period || !season || !unitOfMeasure) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
@@ -148,25 +193,52 @@ export async function POST(request: NextRequest) {
 
     // Create the item with pending_approval status
     const [newItem] = await db
-      .insert(items)
+    .insert(items)
+    .values({
+      productCode,
+      description,
+      brandCode: parsed.brandCode,
+      productDivision: parsed.productDivision,
+      productCategory: parsed.productCategory,
+      totalStock: totalStock || 0,
+      period,
+      season,
+      unitOfMeasure,
+      status: 'pending_approval',
+      createdBy: session.user.id,
+    })
+    .returning();
+    
+  // Create initial stock record
+  const [newStock] = await db
+    .insert(itemStock)
+    .values({
+      itemId: newItem.id,
+      pending: totalStock || 0,
+      onBorrow: 0,
+      inClearance: 0,
+      seeded: 0,
+      location: location || null,
+      condition: condition || 'good',
+      conditionNotes: conditionNotes || null,
+    })
+    .returning();
+
+  // Record initial stock movement
+  if (totalStock && totalStock > 0) {
+    await db
+      .insert(stockMovements)
       .values({
-        productCode,
-        description,
-        brandCode: parsed.brandCode,
-        productDivision: parsed.productDivision,
-        productCategory: parsed.productCategory,
-        inventory: inventory || 0,
-        period,
-        season,
-        unitOfMeasure,
-        condition,
-        conditionNotes: conditionNotes || null,
-        status: 'pending_approval',
-        createdBy: session.user.id,
-        approvedBy: null,
-        approvedAt: null,
-      })
-      .returning();
+        itemId: newItem.id,
+        stockId: newStock.id,
+        movementType: 'initial_stock',
+        quantity: totalStock,
+        fromState: 'none',
+        toState: 'pending',
+        performedBy: session.user.id,
+        notes: 'Initial stock creation - pending approval',
+      });
+  }
 
     // Create item request for approval workflow
     await db
@@ -201,6 +273,7 @@ export async function POST(request: NextRequest) {
       { 
         ...newItem, 
         images: newImages,
+        stock: newStock,
       },
       { status: 201 }
     );

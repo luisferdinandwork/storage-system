@@ -39,6 +39,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { MessageContainer } from '@/components/ui/message';
+import { Checkbox } from '@/components/ui/checkbox';
 
 import { useMessages } from '@/hooks/use-messages';
 import { 
@@ -53,7 +54,8 @@ import {
   Clock,
   Warehouse,
   ArrowRight,
-  Image
+  Image,
+  CheckSquare
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UniversalBadge } from '@/components/ui/universal-badge';
@@ -65,14 +67,11 @@ interface Item {
   brandCode: string;
   productDivision: string;
   productCategory: string;
-  inventory: number;
+  totalStock: number;
   period: string;
   season: string;
   unitOfMeasure: string;
-  location: string | null;
-  condition: string;
-  conditionNotes: string | null;
-  status: 'pending_approval' | 'approved' | 'available' | 'borrowed' | 'in_clearance' | 'rejected';
+  status: 'pending_approval' | 'approved' | 'rejected';
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -81,6 +80,20 @@ interface Item {
   createdByUser?: {
     id: string;
     name: string;
+  };
+  stock?: {
+    id: string;
+    itemId: string;
+    pending: number;
+    inStorage: number;
+    onBorrow: number;
+    inClearance: number;
+    seeded: number;
+    location: string | null;
+    condition: string;
+    conditionNotes: string | null;
+    createdAt: string;
+    updatedAt: string;
   };
   images: {
     id: string;
@@ -131,10 +144,14 @@ export default function StorageManagementPage() {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
+  const [showBulkApproveModal, setShowBulkApproveModal] = useState(false);
+  const [bulkRejectionReason, setBulkRejectionReason] = useState('')
   const [selectedLocation, setSelectedLocation] = useState<string>('Storage 1');
   const [rejectionReason, setRejectionReason] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'all'>('pending');
+  const [selectedRequestIds, setSelectedRequestIds] = useState<string[]>([]);
+  const [selectAll, setSelectAll] = useState(false);
 
   useEffect(() => {
     fetchItems();
@@ -237,6 +254,83 @@ export default function StorageManagementPage() {
     }
   };
 
+  const handleBulkApprove = async (requestIds: string[], location: string) => {
+    if (requestIds.length === 0) {
+      addMessage('warning', 'Please select at least one item to approve', 'Missing Information');
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const response = await fetch('/api/item-requests/bulk-approve', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ requestIds, location }),
+      });
+
+      if (response.ok) {
+        setShowBulkApproveModal(false);
+        setSelectedRequestIds([]);
+        setSelectAll(false);
+        setSelectedLocation('Storage 1');
+        fetchItems();
+        fetchItemRequests();
+        addMessage('success', `${requestIds.length} items approved and stored successfully`, 'Success');
+      } else {
+        const errorData = await response.json();
+        addMessage('error', errorData.error || 'Failed to approve items', 'Error');
+      }
+    } catch (error) {
+      console.error('Failed to approve items:', error);
+      addMessage('error', 'Failed to approve items', 'Error');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleBulkReject = async (requestIds: string[], reason: string) => {
+    if (requestIds.length === 0) {
+      addMessage('warning', 'Please select at least one item to reject', 'Missing Information');
+      return;
+    }
+
+    if (!reason.trim()) {
+      addMessage('warning', 'Please provide a reason for rejection', 'Missing Information');
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const response = await fetch('/api/item-requests/bulk-reject', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ requestIds, reason }),
+      });
+
+      if (response.ok) {
+        setShowRejectModal(false);
+        setSelectedRequestIds([]);
+        setSelectAll(false);
+        setBulkRejectionReason('');
+        fetchItems();
+        fetchItemRequests();
+        addMessage('success', `${requestIds.length} items rejected successfully`, 'Success');
+      } else {
+        const errorData = await response.json();
+        addMessage('error', errorData.error || 'Failed to reject items', 'Error');
+      }
+    } catch (error) {
+      console.error('Failed to reject items:', error);
+      addMessage('error', 'Failed to reject items', 'Error');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleViewDetails = (item: Item) => {
     setSelectedItem(item);
     setShowDetailsModal(true);
@@ -254,11 +348,37 @@ export default function StorageManagementPage() {
     setShowRejectModal(true);
   };
 
+  const handleOpenBulkApproveModal = () => {
+    if (selectedRequestIds.length === 0) {
+      addMessage('warning', 'Please select at least one item to approve', 'Missing Information');
+      return;
+    }
+    setShowBulkApproveModal(true);
+  };
+
+  const handleSelectRequest = (requestId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedRequestIds(prev => [...prev, requestId]);
+    } else {
+      setSelectedRequestIds(prev => prev.filter(id => id !== requestId));
+    }
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    setSelectAll(checked);
+    if (checked) {
+      const pendingRequestIds = pendingRequests.map(req => req.id);
+      setSelectedRequestIds(pendingRequestIds);
+    } else {
+      setSelectedRequestIds([]);
+    }
+  };
+
   const filteredRequests = itemRequests.filter(request => {
     const matchesSearch = request.item.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
                          request.item.productCode.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || request.status === statusFilter;
-    const matchesLocation = locationFilter === 'all' || request.item.location === locationFilter;
+    const matchesLocation = locationFilter === 'all' || request.item.stock?.location === locationFilter;
     
     return matchesSearch && matchesStatus && matchesLocation;
   });
@@ -272,10 +392,14 @@ export default function StorageManagementPage() {
   const userRole = session?.user?.role;
   const canManageStorage = userRole === 'storage-master' || userRole === 'storage-master-manager' || userRole === 'superadmin';
 
-  const getStockStatus = (inventory: number) => {
-    if (inventory === 0) {
+  const getStockStatus = (stock?: { inStorage: number; onBorrow: number; inClearance: number; seeded: number }) => {
+    if (!stock) return <UniversalBadge type="status" value="no_stock" />;
+    
+    const totalStock = stock.inStorage + stock.onBorrow + stock.inClearance + stock.seeded;
+    
+    if (totalStock === 0) {
       return <UniversalBadge type="status" value="out_of_stock" />;
-    } else if (inventory < 5) {
+    } else if (stock.inStorage < 5) {
       return <UniversalBadge type="status" value="low_stock" />;
     } else {
       return <UniversalBadge type="status" value="in_stock" />;
@@ -294,7 +418,7 @@ export default function StorageManagementPage() {
       
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Storage Management</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Warehousing</h1>
           <p className="text-gray-600 mt-1">Manage item locations and approve new items</p>
         </div>
         <div className="flex items-center space-x-2">
@@ -380,6 +504,50 @@ export default function StorageManagementPage() {
         </div>
       </div>
 
+      {/* Bulk Actions */}
+      {activeTab === 'pending' && pendingRequests.length > 0 && canManageStorage && (
+        <div className="flex items-center justify-between bg-gray-50 p-3 rounded-md">
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="select-all"
+              checked={selectAll}
+              onCheckedChange={handleSelectAll}
+            />
+            <Label htmlFor="select-all">Select All ({pendingRequests.length})</Label>
+            {selectedRequestIds.length > 0 && (
+              <span className="text-sm text-gray-500">
+                {selectedRequestIds.length} selected
+              </span>
+            )}
+          </div>
+          <div className="flex space-x-2">
+            <Button
+              onClick={handleOpenBulkApproveModal}
+              disabled={selectedRequestIds.length === 0}
+              className="flex items-center space-x-2"
+            >
+              <CheckSquare className="h-4 w-4" />
+              <span>Bulk Approve</span>
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedRequestIds.length === 0) {
+                  addMessage('warning', 'Please select at least one item to reject', 'Missing Information');
+                  return;
+                }
+                setShowRejectModal(true);
+              }}
+              disabled={selectedRequestIds.length === 0}
+              variant="destructive"
+              className="flex items-center space-x-2"
+            >
+              <XCircle className="h-4 w-4" />
+              <span>Bulk Reject</span>
+            </Button>
+          </div>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
@@ -389,10 +557,19 @@ export default function StorageManagementPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                {activeTab === 'pending' && canManageStorage && (
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={selectAll}
+                      onCheckedChange={handleSelectAll}
+                      aria-label="Select all"
+                    />
+                  </TableHead>
+                )}
                 <TableHead>Item</TableHead>
                 <TableHead>Product Code</TableHead>
                 <TableHead>Category</TableHead>
-                <TableHead>Inventory</TableHead>
+                <TableHead>Stock</TableHead>
                 <TableHead>Condition</TableHead>
                 <TableHead>Location</TableHead>
                 <TableHead>Status</TableHead>
@@ -404,6 +581,15 @@ export default function StorageManagementPage() {
             <TableBody>
               {displayRequests.map((request) => (
                 <TableRow key={request.id}>
+                  {activeTab === 'pending' && canManageStorage && (
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedRequestIds.includes(request.id)}
+                        onCheckedChange={(checked) => handleSelectRequest(request.id, checked as boolean)}
+                        aria-label={`Select ${request.item.description}`}
+                      />
+                    </TableCell>
+                  )}
                   <TableCell>
                     <div className="flex items-center space-x-3">
                       {request.item.images && request.item.images.length > 0 && (
@@ -430,15 +616,24 @@ export default function StorageManagementPage() {
                     <UniversalBadge type="category" value={request.item.productCategory} />
                   </TableCell>
                   <TableCell>
-                    <div className="flex justify-center">
-                      <span className="font-medium">{request.item.inventory}</span>
+                    <div className="flex flex-col items-center">
+                      <span className="font-medium">{request.item.totalStock}</span>
+                      {request.item.stock && (
+                        <div className="text-xs text-gray-500">
+                          In Storage: {request.item.stock.inStorage}
+                        </div>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell>
-                    <UniversalBadge type="condition" value={request.item.condition} />
+                    {request.item.stock && (
+                      <UniversalBadge type="condition" value={request.item.stock.condition} />
+                    )}
                   </TableCell>
                   <TableCell>
-                    <UniversalBadge type="location" value={request.item.location || ''} />
+                    {request.item.stock && (
+                      <UniversalBadge type="location" value={request.item.stock.location || ''} />
+                    )}
                   </TableCell>
                   <TableCell>
                     <UniversalBadge type="status" value={request.status} />
@@ -497,7 +692,7 @@ export default function StorageManagementPage() {
                         {request.status === 'approved' && (
                           <DropdownMenuItem className="text-gray-600">
                             <MapPin className="mr-2 h-4 w-4" />
-                            Location: {request.item.location || 'Not Assigned'}
+                            Location: {request.item.stock?.location || 'Not Assigned'}
                           </DropdownMenuItem>
                         )}
                       </DropdownMenuContent>
@@ -586,8 +781,8 @@ export default function StorageManagementPage() {
                   </div>
                 </div>
                 <div>
-                  <Label>Inventory</Label>
-                  <p>{selectedItem.inventory}</p>
+                  <Label>Total Stock</Label>
+                  <p>{selectedItem.totalStock}</p>
                 </div>
                 <div>
                   <Label>Period</Label>
@@ -601,24 +796,53 @@ export default function StorageManagementPage() {
                   <Label>Unit of Measure</Label>
                   <UniversalBadge type="unit" value={selectedItem.unitOfMeasure} />
                 </div>
-                <div>
-                  <Label>Condition</Label>
-                  <div className="flex items-center space-x-2">
-                    <UniversalBadge type="condition" value={selectedItem.condition} />
-                    <span>{selectedItem.condition}</span>
-                  </div>
-                </div>
-                <div>
-                  <Label>Location</Label>
-                  <UniversalBadge type="location" value={selectedItem.location || ''} />
-                </div>
+                {selectedItem.stock && (
+                  <>
+                    <div>
+                      <Label>Condition</Label>
+                      <div className="flex items-center space-x-2">
+                        <UniversalBadge type="condition" value={selectedItem.stock.condition} />
+                        <span>{selectedItem.stock.condition}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Location</Label>
+                      <UniversalBadge type="location" value={selectedItem.stock.location || ''} />
+                    </div>
+                    <div className="col-span-2">
+                      <Label>Condition Notes</Label>
+                      <p>{selectedItem.stock.conditionNotes || 'N/A'}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <Label>Stock Details</Label>
+                      <div className="grid grid-cols-4 gap-2 mt-1">
+                        <div className="bg-gray-50 p-2 rounded text-center">
+                          <p className="text-xs text-gray-500">In Storage</p>
+                          <p className="font-medium">{selectedItem.stock.inStorage}</p>
+                        </div>
+                        <div className="bg-gray-50 p-2 rounded text-center">
+                          <p className="text-xs text-gray-500">On Borrow</p>
+                          <p className="font-medium">{selectedItem.stock.onBorrow}</p>
+                        </div>
+                        <div className="bg-gray-50 p-2 rounded text-center">
+                          <p className="text-xs text-gray-500">In Clearance</p>
+                          <p className="font-medium">{selectedItem.stock.inClearance}</p>
+                        </div>
+                        <div className="bg-gray-50 p-2 rounded text-center">
+                          <p className="text-xs text-gray-500">Seeded</p>
+                          <p className="font-medium">{selectedItem.stock.seeded}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
                 <div>
                   <Label>Status</Label>
                   <UniversalBadge type="status" value={selectedItem.status} />
                 </div>
-                <div className="col-span-2">
-                  <Label>Condition Notes</Label>
-                  <p>{selectedItem.conditionNotes || 'N/A'}</p>
+                <div>
+                  <Label>Created At</Label>
+                  <p>{new Date(selectedItem.createdAt).toLocaleDateString()}</p>
                 </div>
               </div>
             </div>
@@ -640,7 +864,7 @@ export default function StorageManagementPage() {
               <div className="bg-gray-50 p-4 rounded-md">
                 <h4 className="font-medium">{selectedItem.description}</h4>
                 <p className="text-sm text-gray-600">Product Code: {selectedItem.productCode}</p>
-                <p className="text-sm text-gray-600">Inventory: {selectedItem.inventory} units</p>
+                <p className="text-sm text-gray-600">Total Stock: {selectedItem.totalStock} units</p>
               </div>
               
               <div>
@@ -667,6 +891,90 @@ export default function StorageManagementPage() {
               disabled={isProcessing}
             >
               {isProcessing ? 'Processing...' : 'Approve & Store'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Approve Modal */}
+      <Dialog open={showBulkApproveModal} onOpenChange={setShowBulkApproveModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Bulk Approve & Store Items</DialogTitle>
+            <DialogDescription>
+              Select a storage location for {selectedRequestIds.length} items
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-gray-50 p-4 rounded-md">
+              <h4 className="font-medium">Items to Approve</h4>
+              <p className="text-sm text-gray-600">{selectedRequestIds.length} items selected</p>
+            </div>
+            
+            <div>
+              <Label htmlFor="bulk-location">Storage Location</Label>
+              <Select value={selectedLocation} onValueChange={setSelectedLocation}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select storage location" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Storage 1">Storage 1</SelectItem>
+                  <SelectItem value="Storage 2">Storage 2</SelectItem>
+                  <SelectItem value="Storage 3">Storage 3</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBulkApproveModal(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => handleBulkApprove(selectedRequestIds, selectedLocation)}
+              disabled={isProcessing}
+            >
+              {isProcessing ? 'Processing...' : `Approve ${selectedRequestIds.length} Items`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Reject Modal */}
+      <Dialog open={showRejectModal} onOpenChange={setShowRejectModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Bulk Reject Items</DialogTitle>
+            <DialogDescription>
+              Please provide a reason for rejecting {selectedRequestIds.length} items
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-gray-50 p-4 rounded-md">
+              <h4 className="font-medium">Items to Reject</h4>
+              <p className="text-sm text-gray-600">{selectedRequestIds.length} items selected</p>
+            </div>
+            
+            <div>
+              <Label htmlFor="bulk-rejection-reason">Rejection Reason *</Label>
+              <Textarea
+                id="bulk-rejection-reason"
+                value={bulkRejectionReason}
+                onChange={(e) => setBulkRejectionReason(e.target.value)}
+                placeholder="Enter reason for rejection..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRejectModal(false)}>
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={() => handleBulkReject(selectedRequestIds, bulkRejectionReason)}
+              disabled={isProcessing || !bulkRejectionReason.trim()}
+            >
+              {isProcessing ? 'Processing...' : `Reject ${selectedRequestIds.length} Items`}
             </Button>
           </DialogFooter>
         </DialogContent>

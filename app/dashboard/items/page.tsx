@@ -1,92 +1,33 @@
+// app/dashboard/items/page.tsx
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Package, Plus, Search, Filter, MoreHorizontal, Edit, Image, Columns, Trash2, Upload, Download } from 'lucide-react';
+import { Package, Plus, Search, Filter, Columns, Upload, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AddItemModal } from '@/components/items/add-item-modal';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { MessageContainer } from '@/components/ui/message';
 import { useMessages } from '@/hooks/use-messages';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import React from 'react';
-import ColumnSelectorModal from '@/components/items/ColumnSelectorModal';
-import { UniversalBadge } from '@/components/ui/universal-badge';
-import { EditItemModal } from '@/components/items/edit-item-modal';
-
-interface ItemImage {
-  id: string;
-  itemId: string;
-  fileName: string;
-  originalName: string;
-  mimeType: string;
-  size: number;
-  altText: string | null;
-  isPrimary: boolean;
-  createdAt: string;
-}
-
-interface Item {
-  id: string;
-  productCode: string;
-  description: string;
-  brandCode: string;
-  productDivision: string;
-  productCategory: string;
-  inventory: number;
-  period: string;
-  season: string;
-  unitOfMeasure: string;
-  location: string | null;
-  condition: string;
-  conditionNotes: string | null;
-  status: 'pending_approval' | 'approved' | 'available' | 'borrowed' | 'in_clearance' | 'rejected';
-  createdBy: string;
-  createdAt: string;
-  updatedAt: string;
-  approvedBy: string | null;
-  approvedAt: string | null;
-  createdByUser?: {
-    id: string;
-    name: string;
-  };
-  images: ItemImage[];
-}
+import { ItemsTable } from '@/components/items/items-table';
+import { ColumnSelector } from '@/components/items/column-selector';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DialogHeader, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@radix-ui/react-dialog';
+import { useExportItems } from '@/hooks/use-export-items';
 
 // Define all possible columns
 const ALL_COLUMNS = [
   { id: 'item', label: 'Item', defaultVisible: true },
-  { id: 'productCode', label: 'Product Code', defaultVisible: true },
+  { id: 'brandCode', label: 'Brand', defaultVisible: true },
+  { id: 'productDivision', label: 'Division', defaultVisible: true },
   { id: 'category', label: 'Category', defaultVisible: true },
   { id: 'unit', label: 'Unit', defaultVisible: true },
-  { id: 'condition', label: 'Condition', defaultVisible: false },
-  { id: 'location', label: 'Location', defaultVisible: false },
-  { id: 'inventory', label: 'Inventory', defaultVisible: true },
-  { id: 'createdBy', label: 'Created By', defaultVisible: false },
+  { id: 'condition', label: 'Condition', defaultVisible: true },
+  { id: 'location', label: 'Location', defaultVisible: true },
+  { id: 'createdBy', label: 'Created By', defaultVisible: true },
+  { id: 'stock', label: 'Stock', defaultVisible: true },
   { id: 'status', label: 'Status', defaultVisible: true },
   { id: 'actions', label: 'Actions', defaultVisible: true },
 ];
@@ -94,7 +35,7 @@ const ALL_COLUMNS = [
 export default function ItemsPage() {
   const { data: session } = useSession();
   const { messages, addMessage, dismissMessage } = useMessages();
-  const [items, setItems] = useState<Item[]>([]);
+  const [items, setItems] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [locationFilter, setLocationFilter] = useState<string>('all');
@@ -103,22 +44,20 @@ export default function ItemsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [removingItemId, setRemovingItemId] = useState<string | null>(null);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editingItem, setEditingItem] = useState<Item | null>(null);
-  const [selectedImage, setSelectedImage] = useState<ItemImage | null>(null);
-  const [showImageModal, setShowImageModal] = useState(false);
   const [showColumnSelector, setShowColumnSelector] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<string[]>(
     ALL_COLUMNS.filter(col => col.defaultVisible).map(col => col.id)
   );
   const [showFilterPanel, setShowFilterPanel] = useState(false);
-  const [showInlineAdd, setShowInlineAdd] = useState(false);
-  const [inlineAddRowIndex, setInlineAddRowIndex] = useState<number>(-1);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importResults, setImportResults] = useState<any>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Use the export hook
+  const { exportItems, isExporting } = useExportItems();
 
   useEffect(() => {
     fetchItems();
@@ -130,6 +69,7 @@ export default function ItemsPage() {
       if (response.ok) {
         const data = await response.json();
         setItems(data);
+        setCurrentPage(1); // Reset to first page when items change
       } else {
         addMessage('error', 'Failed to fetch items', 'Error');
       }
@@ -141,6 +81,12 @@ export default function ItemsPage() {
     }
   };
 
+  const handleAddItemSuccess = () => {
+    setShowAddModal(false);
+    fetchItems();
+    addMessage('success', 'Item added successfully', 'Success');
+  };
+
   const handleRemoveItem = async (itemId: string) => {
     try {
       const response = await fetch(`/api/items/${itemId}`, {
@@ -148,7 +94,6 @@ export default function ItemsPage() {
       });
 
       if (response.ok) {
-        setRemovingItemId(null);
         fetchItems();
         addMessage('success', 'Item deleted successfully', 'Success');
       } else {
@@ -161,25 +106,6 @@ export default function ItemsPage() {
     }
   };
 
-  const handleAddItemSuccess = () => {
-    setShowAddModal(false);
-    setShowInlineAdd(false);
-    setInlineAddRowIndex(-1);
-    fetchItems();
-    addMessage('success', 'Item added successfully', 'Success');
-  };
-
-  const handleEditItemSuccess = () => {
-    setShowEditModal(false);
-    fetchItems();
-    addMessage('success', 'Item updated successfully', 'Success');
-  };
-
-  const handleViewImage = (image: ItemImage) => {
-    setSelectedImage(image);
-    setShowImageModal(true);
-  };
-
   const toggleColumnVisibility = (columnId: string) => {
     setVisibleColumns(prev => {
       if (prev.includes(columnId)) {
@@ -190,23 +116,35 @@ export default function ItemsPage() {
     });
   };
 
-  const handleExport = (format: 'csv' | 'excel') => {
-    const params = new URLSearchParams();
-    params.append('format', format);
+  const handleResetColumns = () => {
+    setVisibleColumns(
+      ALL_COLUMNS.filter(col => col.defaultVisible).map(col => col.id)
+    );
+  };
+
+  const handleExport = async (format: 'csv' | 'excel') => {
+    // Get filtered item IDs based on current filters
+    const filteredItemIds = filteredItems.map(item => item.id);
     
-    // Add current filters to export
-    if (statusFilter !== 'all') params.append('status', statusFilter);
-    if (categoryFilter !== 'all') params.append('category', categoryFilter);
-    if (locationFilter !== 'all') params.append('location', locationFilter);
-    
-    window.open(`/api/items/export?${params.toString()}`);
+    // Export the filtered items
+    await exportItems(filteredItemIds, format);
+  };
+
+  const handleExportAll = async (format: 'csv' | 'excel') => {
+    // Export all items
+    await exportItems([], format);
   };
 
   const handleDownloadTemplate = (format: 'csv' | 'excel') => {
-      window.open(`/api/items/import/template?format=${format}`);
-    };
+    window.open(`/api/items/import/template?format=${format}`);
+  };
 
-    const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleEditItem = () => {
+    fetchItems(); // Refetch items after edit
+    addMessage('success', 'Item updated successfully', 'Success');
+  };
+
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -253,173 +191,40 @@ export default function ItemsPage() {
     const matchesSearch = item.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
                        item.productCode.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilter === 'all' || item.productCategory === categoryFilter;
-    const matchesLocation = locationFilter === 'all' || item.location === locationFilter;
+    const matchesLocation = locationFilter === 'all' || item.stock?.location === locationFilter;
     const matchesUnit = unitFilter === 'all' || item.unitOfMeasure === unitFilter;
-    const matchesCondition = conditionFilter === 'all' || item.condition === conditionFilter;
+    const matchesCondition = conditionFilter === 'all' || item.stock?.condition === conditionFilter;
     const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
 
     return matchesSearch && matchesCategory && matchesLocation && matchesUnit && matchesCondition && matchesStatus;
   });
 
+  // Calculate pagination
+  const totalItems = filteredItems.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedItems = filteredItems.slice(startIndex, endIndex);
+
   const userRole = session?.user?.role;
   const isSuperAdmin = userRole === 'superadmin';
   const isItemMaster = userRole === 'item-master';
-  const isStorageMaster = userRole === 'storage-master';
-  const isStorageManager = userRole === 'storage-master-manager';
-  const isManager = userRole === 'manager';
-  const isUser = userRole === 'user';
   
   const canAddItem = isSuperAdmin || isItemMaster;
   const canEditItem = isSuperAdmin || isItemMaster;
   const canDeleteItem = isSuperAdmin;
-  const canViewItems = true; 
+  const canExportItems = isSuperAdmin || isItemMaster;
 
-  const handleEditItem = (item: Item) => {
-    setEditingItem(item);
-    setShowEditModal(true);
-  };
-
-  const handleResetColumns = () => {
-    setVisibleColumns(
-      ALL_COLUMNS.filter(col => col.defaultVisible).map(col => col.id)
-    );
-  };
-
-  const getPrimaryImage = (images: ItemImage[]) => {
-    const primaryImage = images.find(img => img.isPrimary);
-    return primaryImage || images[0];
-  };
-
-  const renderTableCell = (item: Item, columnId: string) => {
-    switch (columnId) {
-      case 'item':
-        return (
-          <TableCell key={`item-${item.id}`}>
-            <div className="flex items-center space-x-3">
-              {item.images.length > 0 && (
-                <div 
-                  className="w-12 h-12 rounded-md overflow-hidden cursor-pointer flex-shrink-0"
-                  onClick={() => handleViewImage(getPrimaryImage(item.images))}
-                >
-                  <img 
-                    src={getPrimaryImage(item.images).fileName ? `/uploads/${getPrimaryImage(item.images).fileName}` : '/placeholder.jpg'} 
-                    alt={getPrimaryImage(item.images).altText || item.description}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              )}
-              <div className="flex flex-col space-y-1 min-w-0">
-                <div className="font-medium truncate">{item.description}</div>
-                <div className="flex items-center space-x-2 text-sm text-gray-500">
-                  <UniversalBadge type="brand" value={item.brandCode} />
-                  <span>/</span>
-                  <UniversalBadge type="division" value={item.productDivision} />
-                </div>
-              </div>
-            </div>
-          </TableCell>
-        );
-      case 'productCode':
-        return (
-          <TableCell key={`productCode-${item.id}`}>
-            <div className="font-mono text-sm">{item.productCode}</div>
-          </TableCell>
-        );
-      case 'category':
-        return (
-          <TableCell key={`category-${item.id}`}>
-            <UniversalBadge type="category" value={item.productCategory} />
-          </TableCell>
-        );
-      case 'unit':
-        return (
-          <TableCell key={`unit-${item.id}`}>
-            <UniversalBadge type="unit" value={item.unitOfMeasure} />
-          </TableCell>
-        );
-      case 'condition':
-        return (
-          <TableCell key={`condition-${item.id}`}>
-            <UniversalBadge type="condition" value={item.condition} />
-          </TableCell>
-        );
-      case 'location':
-        return (
-          <TableCell key={`location-${item.id}`}>
-            <UniversalBadge type="location" value={item.location || ''} />
-          </TableCell>
-        );
-      case 'inventory':
-        return (
-          <TableCell key={`inventory-${item.id}`}>
-            <div className="flex justify-center">
-              <div className="font-medium">{item.inventory}</div>
-            </div>
-          </TableCell>
-        );
-      case 'createdBy':
-        return (
-          <TableCell key={`createdBy-${item.id}`}>
-            <div className="text-sm">
-              {item.createdByUser?.name || 'Unknown'}
-            </div>
-          </TableCell>
-        );
-      case 'status':
-        return (
-          <TableCell key={`status-${item.id}`}>
-            <UniversalBadge type="status" value={item.status} />
-          </TableCell>
-        );
-      case 'actions':
-        return (
-          <TableCell key={`actions-${item.id}`} className="text-right">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-8 w-8 p-0">
-                  <span className="sr-only">Open menu</span>
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                <DropdownMenuItem>View Details</DropdownMenuItem>
-                
-                {item.images.length > 0 && (
-                  <DropdownMenuItem onClick={() => handleViewImage(getPrimaryImage(item.images))}>
-                    <Image className="mr-2 h-4 w-4" />
-                    View Images
-                  </DropdownMenuItem>
-                )}
-                
-                {canEditItem && (
-                  <DropdownMenuItem
-                    onClick={() => handleEditItem(item)}
-                  >
-                    <Edit className="mr-2 h-4 w-4" />
-                    Edit
-                  </DropdownMenuItem>
-                )}
-                
-                {canDeleteItem && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => setRemovingItemId(item.id)}
-                      className="text-red-600"
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </TableCell>
-        );
-      default:
-        return null;
+  // Custom action for borrowing items (example)
+  const renderBorrowAction = (item: any) => {
+    if (item.status === 'available' && item.stock?.location) {
+      return (
+        <DropdownMenuItem>
+          Borrow Item
+        </DropdownMenuItem>
+      );
     }
+    return null;
   };
 
   return (
@@ -440,18 +245,18 @@ export default function ItemsPage() {
           
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline">
+              <Button variant="outline" disabled={isExporting}>
                 <Download className="mr-2 h-4 w-4" />
-                Export
+                Export All
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Export Format</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => handleExport('csv')}>
-                Export as CSV
+              <DropdownMenuItem onClick={() => handleExportAll('csv')} disabled={isExporting}>
+                Export All as CSV
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExport('excel')}>
-                Export as Excel
+              <DropdownMenuItem onClick={() => handleExportAll('excel')} disabled={isExporting}>
+                Export All as Excel
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -527,7 +332,10 @@ export default function ItemsPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
               <select
                 value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
+                onChange={(e) => {
+                  setCategoryFilter(e.target.value);
+                  setCurrentPage(1); // Reset to first page when filter changes
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
                 <option value="all">All Categories</option>
@@ -550,7 +358,10 @@ export default function ItemsPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
               <select
                 value={locationFilter}
-                onChange={(e) => setLocationFilter(e.target.value)}
+                onChange={(e) => {
+                  setLocationFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
                 <option value="all">All Locations</option>
@@ -564,7 +375,10 @@ export default function ItemsPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
               <select
                 value={unitFilter}
-                onChange={(e) => setUnitFilter(e.target.value)}
+                onChange={(e) => {
+                  setUnitFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
                 <option value="all">All Units</option>
@@ -576,7 +390,10 @@ export default function ItemsPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">Condition</label>
               <select
                 value={conditionFilter}
-                onChange={(e) => setConditionFilter(e.target.value)}
+                onChange={(e) => {
+                  setConditionFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
                 <option value="all">All Conditions</option>
@@ -590,7 +407,10 @@ export default function ItemsPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
                 <option value="all">All Status</option>
@@ -606,59 +426,30 @@ export default function ItemsPage() {
         </div>
       )}
 
-      {isLoading ? (
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
-        </div>
-      ) : (
-        <div className="border rounded-md overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {visibleColumns
-                  .filter(col => col !== 'actions')
-                  .map(columnId => {
-                    const column = ALL_COLUMNS.find(col => col.id === columnId);
-                    return column ? <TableHead key={columnId}>{column.label}</TableHead> : null;
-                  })}
-                {visibleColumns.includes('actions') && (
-                  <TableHead key="actions" className="text-right">Actions</TableHead>
-                )}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredItems.map((item, index) => (
-                <React.Fragment key={item.id}>
-                  <TableRow>
-                    {visibleColumns
-                      .filter(col => col !== 'actions')
-                      .map(columnId => (
-                        <React.Fragment key={`${item.id}-${columnId}`}>
-                          {renderTableCell(item, columnId)}
-                        </React.Fragment>
-                      ))}
-                    {visibleColumns.includes('actions') && (
-                      <React.Fragment key={`${item.id}-actions`}>
-                        {renderTableCell(item, 'actions')}
-                      </React.Fragment>
-                    )}
-                  </TableRow>
-                </React.Fragment>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-
-      {!isLoading && filteredItems.length === 0 && (
-        <div className="text-center py-12">
-          <Package className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No items found</h3>
-          <p className="mt-1 text-sm text-gray-500">
-            {searchTerm || categoryFilter !== 'all' || locationFilter !== 'all' || unitFilter !== 'all' || conditionFilter !== 'all' || statusFilter !== 'all' ? 'Try adjusting your search or filters' : 'Get started by adding a new item'}
-          </p>
-        </div>
-      )}
+      {/* Items Table */}
+      <ItemsTable
+        items={paginatedItems}
+        columns={ALL_COLUMNS}
+        visibleColumns={visibleColumns}
+        isLoading={isLoading}
+        onEditItem={handleEditItem}
+        emptyMessage="No items found"
+        emptyDescription="Try adjusting your search or filters"
+        onDeleteItem={canDeleteItem ? handleRemoveItem : undefined}
+        canEditItem={canEditItem}
+        canDeleteItem={canDeleteItem}
+        canExportItems={canExportItems}
+        showActions={true}
+        customActions={renderBorrowAction}
+        onExportItems={exportItems}
+        isExporting={isExporting}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        itemsPerPage={itemsPerPage}
+        onPageChange={setCurrentPage}
+        onItemsPerPageChange={setItemsPerPage}
+        totalItems={totalItems}
+      />
 
       {/* Add Item Modal */}
       <AddItemModal
@@ -667,61 +458,17 @@ export default function ItemsPage() {
         onSuccess={handleAddItemSuccess}
       />
 
-      {/* Edit Item Modal */}
-      <EditItemModal
-        isOpen={showEditModal}
-        onClose={() => setShowEditModal(false)}
-        onSuccess={handleEditItemSuccess}
-        item={editingItem}
+      {/* Column Selector Modal */}
+      <ColumnSelector
+        isOpen={showColumnSelector}
+        onClose={() => setShowColumnSelector(false)}
+        columns={ALL_COLUMNS}
+        visibleColumns={visibleColumns}
+        onToggleColumn={toggleColumnVisibility}
+        onResetColumns={handleResetColumns}
       />
 
-      {/* Image Modal */}
-      <Dialog open={showImageModal} onOpenChange={setShowImageModal}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Item Image</DialogTitle>
-            <DialogDescription>
-              {selectedImage?.altText || 'Item image'}
-            </DialogDescription>
-          </DialogHeader>
-          {selectedImage && (
-            <div className="flex justify-center">
-              <img 
-                src={selectedImage.fileName ? `/uploads/${selectedImage.fileName}` : '/placeholder.jpg'} 
-                alt={selectedImage.altText || 'Item image'}
-                className="max-w-full max-h-96 object-contain"
-              />
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={removingItemId !== null} onOpenChange={() => setRemovingItemId(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Item</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this item? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setRemovingItemId(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => removingItemId && handleRemoveItem(removingItemId)}
-            >
-              Delete Item
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
+      {/* Import Results Modal */}
       <Dialog open={!!importResults} onOpenChange={() => setImportResults(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -760,15 +507,6 @@ export default function ItemsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <ColumnSelectorModal
-        isOpen={showColumnSelector}
-        onClose={() => setShowColumnSelector(false)}
-        columns={ALL_COLUMNS}
-        visibleColumns={visibleColumns}
-        onToggleColumn={toggleColumnVisibility}
-        onResetColumns={handleResetColumns}
-      />
     </div>
   );
 }

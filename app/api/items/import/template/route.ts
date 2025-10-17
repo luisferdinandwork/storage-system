@@ -1,8 +1,22 @@
 // app/api/items/import/template/route.ts
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Only allow superadmin and item-master to access the template
+    const allowedRoles = ['superadmin', 'item-master'];
+    if (!allowedRoles.includes(session.user.role)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const { searchParams } = new URL(request.url);
     const format = searchParams.get('format') || 'csv';
 
@@ -10,7 +24,7 @@ export async function GET(request: NextRequest) {
     const headers = [
       'Product Code',
       'Description',
-      'Inventory',
+      'Total Stock',
       'Period',
       'Season',
       'Unit of Measure',
@@ -218,7 +232,7 @@ export async function GET(request: NextRequest) {
                   Detailed item description (e.g., "TEMPO SHIPYARD/EGRET/DOESKIN Lifestyle Shoes")
                 </li>
                 <li>
-                  <strong>Inventory *</strong><br>
+                  <strong>Total Stock *</strong><br>
                   Number of items in stock (must be a whole number)
                 </li>
                 <li>

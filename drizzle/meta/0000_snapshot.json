@@ -1,9 +1,183 @@
 {
-  "id": "254ba73b-4497-4577-a15d-20e0efa72ddb",
+  "id": "f93ede9e-0793-4922-99b1-49865b06c900",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
+    "public.borrow_request_items": {
+      "name": "borrow_request_items",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "borrow_request_id": {
+          "name": "borrow_request_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "return_condition": {
+          "name": "return_condition",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "return_notes": {
+          "name": "return_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "completed_by": {
+          "name": "completed_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "seeded_at": {
+          "name": "seeded_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "seeded_by": {
+          "name": "seeded_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reverted_at": {
+          "name": "reverted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reverted_by": {
+          "name": "reverted_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "borrow_request_items_borrow_request_id_borrow_requests_id_fk": {
+          "name": "borrow_request_items_borrow_request_id_borrow_requests_id_fk",
+          "tableFrom": "borrow_request_items",
+          "tableTo": "borrow_requests",
+          "columnsFrom": [
+            "borrow_request_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "borrow_request_items_item_id_items_id_fk": {
+          "name": "borrow_request_items_item_id_items_id_fk",
+          "tableFrom": "borrow_request_items",
+          "tableTo": "items",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "borrow_request_items_completed_by_users_id_fk": {
+          "name": "borrow_request_items_completed_by_users_id_fk",
+          "tableFrom": "borrow_request_items",
+          "tableTo": "users",
+          "columnsFrom": [
+            "completed_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "borrow_request_items_seeded_by_users_id_fk": {
+          "name": "borrow_request_items_seeded_by_users_id_fk",
+          "tableFrom": "borrow_request_items",
+          "tableTo": "users",
+          "columnsFrom": [
+            "seeded_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "borrow_request_items_reverted_by_users_id_fk": {
+          "name": "borrow_request_items_reverted_by_users_id_fk",
+          "tableFrom": "borrow_request_items",
+          "tableTo": "users",
+          "columnsFrom": [
+            "reverted_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.borrow_requests": {
       "name": "borrow_requests",
       "schema": "",
@@ -15,24 +189,11 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "item_id": {
-          "name": "item_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "user_id": {
           "name": "user_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
-        },
-        "quantity": {
-          "name": "quantity",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
         },
         "requested_at": {
           "name": "requested_at",
@@ -102,44 +263,44 @@
           "primaryKey": false,
           "notNull": false
         },
-        "due_date": {
-          "name": "due_date",
+        "completed_at": {
+          "name": "completed_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false
         },
-        "returned_at": {
-          "name": "returned_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "return_condition": {
-          "name": "return_condition",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "return_notes": {
-          "name": "return_notes",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "received_by": {
-          "name": "received_by",
+        "completed_by": {
+          "name": "completed_by",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
-        "received_at": {
-          "name": "received_at",
+        "seeded_at": {
+          "name": "seeded_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false
         },
-        "receive_notes": {
-          "name": "receive_notes",
+        "seeded_by": {
+          "name": "seeded_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reverted_at": {
+          "name": "reverted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reverted_by": {
+          "name": "reverted_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -147,19 +308,6 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "borrow_requests_item_id_items_id_fk": {
-          "name": "borrow_requests_item_id_items_id_fk",
-          "tableFrom": "borrow_requests",
-          "tableTo": "items",
-          "columnsFrom": [
-            "item_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
         "borrow_requests_user_id_users_id_fk": {
           "name": "borrow_requests_user_id_users_id_fk",
           "tableFrom": "borrow_requests",
@@ -199,12 +347,38 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "borrow_requests_received_by_users_id_fk": {
-          "name": "borrow_requests_received_by_users_id_fk",
+        "borrow_requests_completed_by_users_id_fk": {
+          "name": "borrow_requests_completed_by_users_id_fk",
           "tableFrom": "borrow_requests",
           "tableTo": "users",
           "columnsFrom": [
-            "received_by"
+            "completed_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "borrow_requests_seeded_by_users_id_fk": {
+          "name": "borrow_requests_seeded_by_users_id_fk",
+          "tableFrom": "borrow_requests",
+          "tableTo": "users",
+          "columnsFrom": [
+            "seeded_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "borrow_requests_reverted_by_users_id_fk": {
+          "name": "borrow_requests_reverted_by_users_id_fk",
+          "tableFrom": "borrow_requests",
+          "tableTo": "users",
+          "columnsFrom": [
+            "reverted_by"
           ],
           "columnsTo": [
             "id"
@@ -281,6 +455,13 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
         },
         "requested_by": {
           "name": "requested_by",
@@ -581,6 +762,114 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.item_stock": {
+      "name": "item_stock",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pending": {
+          "name": "pending",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "in_storage": {
+          "name": "in_storage",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "on_borrow": {
+          "name": "on_borrow",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "in_clearance": {
+          "name": "in_clearance",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "seeded": {
+          "name": "seeded",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "location": {
+          "name": "location",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "condition": {
+          "name": "condition",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'good'"
+        },
+        "condition_notes": {
+          "name": "condition_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "item_stock_item_id_items_id_fk": {
+          "name": "item_stock_item_id_items_id_fk",
+          "tableFrom": "item_stock",
+          "tableTo": "items",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.items": {
       "name": "items",
       "schema": "",
@@ -604,12 +893,23 @@
           "primaryKey": false,
           "notNull": true
         },
-        "inventory": {
-          "name": "inventory",
-          "type": "integer",
+        "brand_code": {
+          "name": "brand_code",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": true
+        },
+        "product_division": {
+          "name": "product_division",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "product_category": {
+          "name": "product_category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
         },
         "period": {
           "name": "period",
@@ -630,42 +930,12 @@
           "notNull": true,
           "default": "'PCS'"
         },
-        "brand_code": {
-          "name": "brand_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "product_division": {
-          "name": "product_division",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "product_category": {
-          "name": "product_category",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "location": {
-          "name": "location",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "condition": {
-          "name": "condition",
-          "type": "text",
+        "total_stock": {
+          "name": "total_stock",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "default": "'good'"
-        },
-        "condition_notes": {
-          "name": "condition_notes",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
+          "default": 0
         },
         "status": {
           "name": "status",
@@ -750,8 +1020,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.return_requests": {
-      "name": "return_requests",
+    "public.stock_movements": {
+      "name": "stock_movements",
       "schema": "",
       "columns": {
         "id": {
@@ -761,111 +1031,79 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "borrow_request_id": {
-          "name": "borrow_request_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "item_id": {
           "name": "item_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "user_id": {
-          "name": "user_id",
+        "stock_id": {
+          "name": "stock_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "requested_at": {
-          "name": "requested_at",
+        "movement_type": {
+          "name": "movement_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "from_state": {
+          "name": "from_state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "to_state": {
+          "name": "to_state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reference_id": {
+          "name": "reference_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reference_type": {
+          "name": "reference_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "performed_by": {
+          "name": "performed_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "return_condition": {
-          "name": "return_condition",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "return_notes": {
-          "name": "return_notes",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "approved_by": {
-          "name": "approved_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "approved_at": {
-          "name": "approved_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "rejection_reason": {
-          "name": "rejection_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "received_by": {
-          "name": "received_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "received_at": {
-          "name": "received_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "receive_notes": {
-          "name": "receive_notes",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {},
       "foreignKeys": {
-        "return_requests_borrow_request_id_borrow_requests_id_fk": {
-          "name": "return_requests_borrow_request_id_borrow_requests_id_fk",
-          "tableFrom": "return_requests",
-          "tableTo": "borrow_requests",
-          "columnsFrom": [
-            "borrow_request_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "return_requests_item_id_items_id_fk": {
-          "name": "return_requests_item_id_items_id_fk",
-          "tableFrom": "return_requests",
+        "stock_movements_item_id_items_id_fk": {
+          "name": "stock_movements_item_id_items_id_fk",
+          "tableFrom": "stock_movements",
           "tableTo": "items",
           "columnsFrom": [
             "item_id"
@@ -876,38 +1114,25 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "return_requests_user_id_users_id_fk": {
-          "name": "return_requests_user_id_users_id_fk",
-          "tableFrom": "return_requests",
-          "tableTo": "users",
+        "stock_movements_stock_id_item_stock_id_fk": {
+          "name": "stock_movements_stock_id_item_stock_id_fk",
+          "tableFrom": "stock_movements",
+          "tableTo": "item_stock",
           "columnsFrom": [
-            "user_id"
+            "stock_id"
           ],
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
+          "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "return_requests_approved_by_users_id_fk": {
-          "name": "return_requests_approved_by_users_id_fk",
-          "tableFrom": "return_requests",
+        "stock_movements_performed_by_users_id_fk": {
+          "name": "stock_movements_performed_by_users_id_fk",
+          "tableFrom": "stock_movements",
           "tableTo": "users",
           "columnsFrom": [
-            "approved_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "return_requests_received_by_users_id_fk": {
-          "name": "return_requests_received_by_users_id_fk",
-          "tableFrom": "return_requests",
-          "tableTo": "users",
-          "columnsFrom": [
-            "received_by"
+            "performed_by"
           ],
           "columnsTo": [
             "id"

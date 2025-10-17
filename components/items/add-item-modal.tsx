@@ -62,7 +62,7 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
   const [formData, setFormData] = useState({
     productCode: '',
     description: '',
-    inventory: 0,
+    totalStock: 0,
     period: '',
     season: '',
     unitOfMeasure: 'PCS',
@@ -76,7 +76,7 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
       setFormData({
         productCode: '',
         description: '',
-        inventory: 0,
+        totalStock: 0,
         period: '',
         season: '',
         unitOfMeasure: 'PCS',
@@ -94,7 +94,7 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'inventory' ? parseInt(value) || 0 : value,
+      [name]: name === 'totalStock' ? parseInt(value) || 0 : value,
     }));
     
     // If product code is changed, parse it
@@ -282,7 +282,14 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          ...formData,
+          productCode: formData.productCode,
+          description: formData.description,
+          totalStock: formData.totalStock,
+          period: formData.period,
+          season: formData.season,
+          unitOfMeasure: formData.unitOfMeasure,
+          condition: formData.condition,
+          conditionNotes: formData.conditionNotes,
           images: images,
         }),
       });
@@ -372,13 +379,13 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="inventory">Inventory</Label>
+              <Label htmlFor="totalStock">Total Stock</Label>
               <Input
-                id="inventory"
-                name="inventory"
+                id="totalStock"
+                name="totalStock"
                 type="number"
                 min="0"
-                value={formData.inventory}
+                value={formData.totalStock}
                 onChange={handleInputChange}
                 required
               />

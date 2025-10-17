@@ -15,6 +15,8 @@ async function resetDatabase() {
     await sql`DROP TABLE IF EXISTS items CASCADE`;
     await sql`DROP TABLE IF EXISTS users CASCADE`;
     await sql`DROP TABLE IF EXISTS departments CASCADE`;
+    await sql`DROP TABLE IF EXISTS item_stock CASCADE`;
+    await sql`DROP TABLE IF EXISTS stock_movements CASCADE`
     
     console.log('All tables dropped successfully');
     console.log('Database reset successfully. Please run "npm run db:generate" and "npm run db:migrate" to create the new schema.');
