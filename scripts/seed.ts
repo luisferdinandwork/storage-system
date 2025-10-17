@@ -409,7 +409,7 @@ async function seed() {
           borrowRequestId: pendingBorrowRequest.id,
           itemId: item.id,
           quantity: 1,
-          status: 'pending',
+          status: 'pending_manager',
         });
       }
     }
