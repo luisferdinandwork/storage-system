@@ -4,9 +4,41 @@ import {
   users, items, departments, itemImages, itemRequests, 
   itemStock, borrowRequests, borrowRequestItems, itemClearances, stockMovements 
 } from '../lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { parseProductCode } from '../lib/db/schema';
+
+// Helper function to generate the next borrow request ID
+async function generateBorrowRequestId(): Promise<string> {
+  const prefix = 'BRW-';
+  const padding = 5;
+
+  // Find the most recent request to get the last ID
+  const lastRequest = await db.query.borrowRequests.findFirst({
+    orderBy: [desc(borrowRequests.requestedAt)],
+    columns: {
+      id: true,
+    },
+  });
+
+  let nextNumber = 1; // Default to 1 if no requests exist
+
+  if (lastRequest && lastRequest.id) {
+    // Extract the numeric part, e.g., "BRW-00010" -> "00010"
+    const lastNumberStr = lastRequest.id.split('-')[1];
+    if (lastNumberStr) {
+      // Convert to number and increment
+      const lastNumber = parseInt(lastNumberStr, 10);
+      if (!isNaN(lastNumber)) {
+        nextNumber = lastNumber + 1;
+      }
+    }
+  }
+
+  // Pad the number with leading zeros and prepend the prefix
+  const nextNumberStr = String(nextNumber).padStart(padding, '0');
+  return `${prefix}${nextNumberStr}`;
+}
 
 async function seed() {
   try {
@@ -333,8 +365,12 @@ async function seed() {
       const endDate = new Date();
       endDate.setDate(endDate.getDate() + 5); // Ends in 5 days
       
+      // Generate custom ID for the borrow request
+      const borrowRequestId = await generateBorrowRequestId();
+      
       // Create borrow request
       const [borrowRequest] = await db.insert(borrowRequests).values({
+        id: borrowRequestId, // Use the generated custom ID
         userId: sportsUser1.id,
         startDate,
         endDate,
@@ -352,7 +388,7 @@ async function seed() {
         
         // Create borrow request item
         await db.insert(borrowRequestItems).values({
-          borrowRequestId: borrowRequest.id,
+          borrowRequestId: borrowRequest.id, // Use the custom ID
           itemId: item.id,
           quantity: 1,
           status: 'active',
@@ -375,7 +411,7 @@ async function seed() {
           quantity: 1,
           fromState: 'storage',
           toState: 'borrowed',
-          referenceId: borrowRequest.id,
+          referenceId: borrowRequest.id, // Use the custom ID
           referenceType: 'borrow_request',
           performedBy: storageMaster1.id,
           notes: 'Item borrowed for sports event',
@@ -391,8 +427,12 @@ async function seed() {
       const endDate = new Date();
       endDate.setDate(endDate.getDate() + 7); // Ends in 7 days
       
+      // Generate custom ID for the borrow request
+      const pendingBorrowRequestId = await generateBorrowRequestId();
+      
       // Create borrow request
       const [pendingBorrowRequest] = await db.insert(borrowRequests).values({
+        id: pendingBorrowRequestId, // Use the generated custom ID
         userId: sportsUser2.id,
         startDate,
         endDate,
@@ -406,7 +446,7 @@ async function seed() {
         
         // Create borrow request item
         await db.insert(borrowRequestItems).values({
-          borrowRequestId: pendingBorrowRequest.id,
+          borrowRequestId: pendingBorrowRequest.id, // Use the custom ID
           itemId: item.id,
           quantity: 1,
           status: 'pending_manager',
@@ -422,8 +462,12 @@ async function seed() {
       const endDate = new Date();
       endDate.setDate(endDate.getDate() - 2); // Ended 2 days ago
       
+      // Generate custom ID for the borrow request
+      const completedBorrowRequestId = await generateBorrowRequestId();
+      
       // Create borrow request
       const [completedBorrowRequest] = await db.insert(borrowRequests).values({
+        id: completedBorrowRequestId, // Use the generated custom ID
         userId: sportsUser1.id,
         startDate,
         endDate,
@@ -442,7 +486,7 @@ async function seed() {
       
       // Create borrow request item
       await db.insert(borrowRequestItems).values({
-        borrowRequestId: completedBorrowRequest.id,
+        borrowRequestId: completedBorrowRequest.id, // Use the custom ID
         itemId: item.id,
         quantity: 1,
         status: 'complete',
@@ -469,7 +513,7 @@ async function seed() {
         quantity: 1,
         fromState: 'borrowed',
         toState: 'storage',
-        referenceId: completedBorrowRequest.id,
+        referenceId: completedBorrowRequest.id, // Use the custom ID
         referenceType: 'borrow_request',
         performedBy: storageMaster1.id,
         notes: 'Item returned after competition',

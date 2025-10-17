@@ -4,7 +4,35 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { borrowRequests, borrowRequestItems, items, itemStock, users, departments } from '@/lib/db/schema';
-import { eq, and, lt, gte, inArray } from 'drizzle-orm';
+import { eq, and, lt, gte, inArray, desc } from 'drizzle-orm';
+
+// Helper function to generate the next BRW ID
+async function generateBorrowRequestId(): Promise<string> {
+  // Get the latest borrow request with BRW prefix
+  const latestRequest = await db.query.borrowRequests.findFirst({
+    where: (borrowRequests, { like }) => like(borrowRequests.id, 'BRW-%'),
+    orderBy: [desc(borrowRequests.id)],
+    columns: {
+      id: true,
+    },
+  });
+
+  let nextNumber = 1;
+  
+  if (latestRequest && latestRequest.id) {
+    // Extract numeric part from BRW-00000
+    const numericPart = latestRequest.id.substring(4);
+    const currentNumber = parseInt(numericPart, 10);
+    
+    if (!isNaN(currentNumber)) {
+      nextNumber = currentNumber + 1;
+    }
+  }
+
+  // Format with leading zeros (5 digits)
+  const formattedNumber = nextNumber.toString().padStart(5, '0');
+  return `BRW-${formattedNumber}`;
+}
 
 // POST /api/borrow-requests - Create a new borrow request
 export async function POST(request: NextRequest) {
@@ -101,12 +129,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Generate the BRW ID
+    const borrowRequestId = await generateBorrowRequestId();
+
     // Determine initial status based on user role
     const userRole = session.user.role;
     const initialStatus = userRole === 'user' ? 'pending_manager' : 'pending_storage';
 
     // Create the borrow request
     const [borrowRequest] = await db.insert(borrowRequests).values({
+      id: borrowRequestId, // Use the generated ID
       userId: session.user.id,
       startDate: start,
       endDate: end,
@@ -117,7 +149,7 @@ export async function POST(request: NextRequest) {
     // Create borrow request items
     for (const requestedItem of requestedItems) {
       await db.insert(borrowRequestItems).values({
-        borrowRequestId: borrowRequest.id,
+        borrowRequestId: borrowRequestId, // Use the generated ID
         itemId: requestedItem.itemId,
         quantity: requestedItem.quantity,
         status: initialStatus,

@@ -1,5 +1,6 @@
 import { pgTable, text, timestamp, boolean, uuid, integer, jsonb } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
+import { varchar } from 'drizzle-orm/pg-core';
 
 // Departments table
 export const departments = pgTable('departments', {
@@ -110,7 +111,7 @@ export const itemRequests = pgTable('item_requests', {
 
 // Borrow requests table - Updated to support multiple items
 export const borrowRequests = pgTable('borrow_requests', {
-  id: uuid('id').defaultRandom().primaryKey(),
+  id: varchar('id', { length: 10 }).primaryKey(),
   userId: uuid('user_id').references(() => users.id).notNull(),
   requestedAt: timestamp('requested_at').defaultNow().notNull(),
   startDate: timestamp('start_date').notNull(),
@@ -143,7 +144,7 @@ export const borrowRequests = pgTable('borrow_requests', {
 // Borrow request items table - Links items to borrow requests
 export const borrowRequestItems = pgTable('borrow_request_items', {
   id: uuid('id').defaultRandom().primaryKey(),
-  borrowRequestId: uuid('borrow_request_id').references(() => borrowRequests.id, { onDelete: 'cascade' }).notNull(),
+  borrowRequestId: varchar('borrow_request_id', { length: 10 }).references(() => borrowRequests.id, { onDelete: 'cascade' }).notNull(), // Changed from uuid to varchar
   itemId: uuid('item_id').references(() => items.id, { onDelete: 'cascade' }).notNull(),
   quantity: integer('quantity').notNull().default(1),
   status: text('status', { 
@@ -197,7 +198,7 @@ export const stockMovements = pgTable('stock_movements', {
   toState: text('to_state', { enum: ['storage', 'borrowed', 'clearance', 'seeded', 'none', 'pending'] }),
   
   // Reference to related entity
-  referenceId: uuid('reference_id'), // Could be borrowRequestId, borrowRequestItemId, clearanceId, etc.
+  referenceId: varchar('reference_id', { length: 10 }), // Changed from uuid to varchar to accommodate borrow request IDs
   referenceType: text('reference_type', { enum: ['borrow_request', 'borrow_request_item', 'clearance', 'manual'] }),
   
   // Audit

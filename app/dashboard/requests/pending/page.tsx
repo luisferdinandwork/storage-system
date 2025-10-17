@@ -42,6 +42,7 @@ import {
   Clock
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatDate } from '@/lib/utils';
 
 interface BorrowRequest {
   id: string;
@@ -100,6 +101,22 @@ export default function PendingApprovalsPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
   const [approvalType, setApprovalType] = useState<'manager' | 'storage'>('manager');
+
+  // Helper functions to calculate days left and determine color
+  const calculateDaysLeft = (endDate: string): number => {
+    const end = new Date(endDate);
+    const today = new Date();
+    const diffTime = end.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
+  const getDaysLeftColor = (daysLeft: number): string => {
+    if (daysLeft < 0) return 'text-gray-600';
+    if (daysLeft <= 3) return 'text-red-600 font-semibold';
+    if (daysLeft <= 7) return 'text-orange-600 font-semibold';
+    return 'text-green-600';
+  };
 
   useEffect(() => {
     fetchRequests();
@@ -304,11 +321,13 @@ export default function PendingApprovalsPage() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>ID</TableHead>
               <TableHead>Items</TableHead>
               <TableHead>Quantity</TableHead>
               <TableHead>Requested By</TableHead>
               <TableHead>Reason</TableHead>
-              <TableHead>Period</TableHead>
+              <TableHead>Start Date</TableHead>
+              <TableHead>Days Left</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -316,84 +335,93 @@ export default function PendingApprovalsPage() {
           <TableBody>
             {filteredRequests.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-gray-500 py-8">
+                <TableCell colSpan={8} className="text-center text-gray-500 py-8">
                   No pending requests found
                 </TableCell>
               </TableRow>
             ) : (
-              filteredRequests.map((request) => (
-                <TableRow key={request.id}>
-                  <TableCell>
-                    <div className="space-y-2">
-                      {request.items.map((reqItem) => (
-                        <div key={reqItem.id} className="flex items-center space-x-3">
-                          {reqItem.item.images && reqItem.item.images.length > 0 && (
-                            <div className="w-10 h-10 rounded-md overflow-hidden flex-shrink-0">
-                              <img
-                                src={getPrimaryImage(reqItem.item.images).fileName ? `/uploads/${getPrimaryImage(reqItem.item.images).fileName}` : '/placeholder.jpg'}
-                                alt={getPrimaryImage(reqItem.item.images).altText || reqItem.item.description}
-                                className="w-full h-full object-cover"
-                              />
+              filteredRequests.map((request) => {
+                const daysLeft = calculateDaysLeft(request.endDate);
+                return (
+                  <TableRow key={request.id}>
+                    <TableCell className="font-medium">{request.id}</TableCell>
+                    <TableCell>
+                      <div className="space-y-2">
+                        {request.items.map((reqItem) => (
+                          <div key={reqItem.id} className="flex items-center space-x-3">
+                            {reqItem.item.images && reqItem.item.images.length > 0 && (
+                              <div className="w-10 h-10 rounded-md overflow-hidden flex-shrink-0">
+                                <img
+                                  src={getPrimaryImage(reqItem.item.images).fileName ? `/uploads/${getPrimaryImage(reqItem.item.images).fileName}` : '/placeholder.jpg'}
+                                  alt={getPrimaryImage(reqItem.item.images).altText || reqItem.item.description}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <div className="font-bold text-sm">{reqItem.item.productCode}</div>
+                              <div className="text-sm text-gray-600 truncate">{reqItem.item.description}</div>
                             </div>
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <div className="font-bold text-sm">{reqItem.item.productCode}</div>
-                            <div className="text-sm text-gray-600 truncate">{reqItem.item.description}</div>
                           </div>
-                        </div>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {request.items.map((reqItem) => (
+                        <div key={reqItem.id} className="text-sm">{reqItem.quantity}</div>
                       ))}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {request.items.map((reqItem) => (
-                      <div key={reqItem.id} className="text-sm">{reqItem.quantity}</div>
-                    ))}
-                  </TableCell>
-                  <TableCell className="text-sm">{request.user.name}</TableCell>
-                  <TableCell>
-                    <div className="max-w-xs truncate text-sm" title={request.reason}>
-                      {request.reason}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    <div>{new Date(request.startDate).toLocaleDateString()}</div>
-                    <div className="text-gray-500">to {new Date(request.endDate).toLocaleDateString()}</div>
-                  </TableCell>
-                  <TableCell>{getStatusBadge(request.status)}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end space-x-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setSelectedRequest(request);
-                          setShowDetailsModal(true);
-                        }}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      {getApprovalActions(request)?.map((action) => (
-                        <div key={action.type} className="flex space-x-1">
-                          <Button
-                            size="sm"
-                            onClick={() => handleApprove(request, action.type)}
-                            className="bg-green-600 hover:bg-green-700"
-                          >
-                            <CheckCircle className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => handleReject(request, action.type)}
-                          >
-                            <XCircle className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
+                    </TableCell>
+                    <TableCell className="text-sm">{request.user.name}</TableCell>
+                    <TableCell>
+                      <div className="max-w-xs truncate text-sm" title={request.reason}>
+                        {request.reason}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {new Date(request.startDate).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>
+                      <div className={`text-sm font-medium ${getDaysLeftColor(daysLeft)}`}>
+                        {daysLeft < 0 ? `Ended (${Math.abs(daysLeft)} days ago)` : `${daysLeft} day${daysLeft !== 1 ? 's' : ''}`}
+                      </div>
+                      <div className="text-xs text-gray-500">End: {formatDate(request.endDate, { format: 'short' })}</div>
+                    </TableCell>
+                    <TableCell>{getStatusBadge(request.status)}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end space-x-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setSelectedRequest(request);
+                            setShowDetailsModal(true);
+                          }}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        {getApprovalActions(request)?.map((action) => (
+                          <div key={action.type} className="flex space-x-1">
+                            <Button
+                              size="sm"
+                              onClick={() => handleApprove(request, action.type)}
+                              className="bg-green-600 hover:bg-green-700"
+                            >
+                              <CheckCircle className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleReject(request, action.type)}
+                            >
+                              <XCircle className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
@@ -415,10 +443,22 @@ export default function PendingApprovalsPage() {
                   <span className="font-medium">Status:</span> {getStatusBadge(selectedRequest.status)}
                 </div>
                 <div>
-                  <span className="font-medium">Period:</span> {new Date(selectedRequest.startDate).toLocaleDateString()} - {new Date(selectedRequest.endDate).toLocaleDateString()}
+                  <span className="font-medium">Start Date:</span> {new Date(selectedRequest.startDate).toLocaleDateString()}
+                </div>
+                <div>
+                  <span className="font-medium">Days Left:</span> 
+                  <span className={`ml-2 ${getDaysLeftColor(calculateDaysLeft(selectedRequest.endDate))}`}>
+                    {(() => {
+                      const daysLeft = calculateDaysLeft(selectedRequest.endDate);
+                      return daysLeft < 0 ? `Ended (${Math.abs(daysLeft)} days ago)` : `${daysLeft} day${daysLeft !== 1 ? 's' : ''}`;
+                    })()}
+                  </span>
                 </div>
                 <div>
                   <span className="font-medium">Requested At:</span> {new Date(selectedRequest.requestedAt).toLocaleDateString()}
+                </div>
+                <div>
+                  <span className="font-medium">End Date:</span> {new Date(selectedRequest.endDate).toLocaleDateString()}
                 </div>
               </div>
               <div>

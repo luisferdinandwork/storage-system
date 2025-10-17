@@ -1,5 +1,5 @@
 {
-  "id": "f93ede9e-0793-4922-99b1-49865b06c900",
+  "id": "47314d82-7b1a-434c-a051-144252a9bc0d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -17,7 +17,7 @@
         },
         "borrow_request_id": {
           "name": "borrow_request_id",
-          "type": "uuid",
+          "type": "varchar(10)",
           "primaryKey": false,
           "notNull": true
         },
@@ -39,7 +39,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'pending'"
+          "default": "'pending_manager'"
         },
         "return_condition": {
           "name": "return_condition",
@@ -184,10 +184,9 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "uuid",
+          "type": "varchar(10)",
           "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
+          "notNull": true
         },
         "user_id": {
           "name": "user_id",
@@ -1069,7 +1068,7 @@
         },
         "reference_id": {
           "name": "reference_id",
-          "type": "uuid",
+          "type": "varchar(10)",
           "primaryKey": false,
           "notNull": false
         },
