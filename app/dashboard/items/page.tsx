@@ -5,7 +5,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Package, Plus, Search, Filter, Columns, Upload, Download, Trash2 } from 'lucide-react';
+import { Package, Plus, Search, Filter, Columns, Upload, Download, Trash2, Archive } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AddItemModal } from '@/components/items/add-item-modal';
 import { MessageContainer } from '@/components/ui/message';
@@ -13,9 +13,9 @@ import { useMessages } from '@/hooks/use-messages';
 import { ItemsTable } from '@/components/items/items-table';
 import { ColumnSelector } from '@/components/items/column-selector';
 import { BulkDeleteDialog } from '@/components/items/bulk-delete-dialog';
+import { BulkClearanceDialog, BulkClearanceItem } from '@/components/items/bulk-clearance-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { DialogHeader, DialogFooter } from '@/components/ui/dialog';
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@radix-ui/react-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useExportItems } from '@/hooks/use-export-items';
 
 // Define all possible columns
@@ -59,6 +59,9 @@ export default function ItemsPage() {
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [isBulkClearing, setIsBulkClearing] = useState(false);
+  const [showBulkClearanceDialog, setShowBulkClearanceDialog] = useState(false);
+  const [selectedItemsForClearance, setSelectedItemsForClearance] = useState<BulkClearanceItem[]>([]);
   
   // Use the export hook
   const { exportItems, isExporting } = useExportItems();
@@ -84,6 +87,26 @@ export default function ItemsPage() {
       setIsLoading(false);
     }
   };
+
+  // Prepare selected items for clearance dialog
+  useEffect(() => {
+    const clearanceItems = selectedItems
+      .map(itemId => {
+        const item = items.find(i => i.id === itemId);
+        if (!item || !item.stock) return null;
+        
+        return {
+          itemId: item.id,
+          productCode: item.productCode,
+          description: item.description,
+          availableStock: item.stock.pending + item.stock.inStorage,
+          quantity: item.stock.pending + item.stock.inStorage,
+        };
+      })
+      .filter((item): item is BulkClearanceItem => item !== null);
+    
+    setSelectedItemsForClearance(clearanceItems);
+  }, [selectedItems, items]);
 
   const handleAddItemSuccess = () => {
     setShowAddModal(false);
@@ -138,6 +161,44 @@ export default function ItemsPage() {
       addMessage('error', 'Failed to delete items', 'Error');
     } finally {
       setIsBulkDeleting(false);
+    }
+  };
+
+  const handleBulkClearance = async (clearanceItems: BulkClearanceItem[], reason: string) => {
+    setIsBulkClearing(true);
+    try {
+      const response = await fetch('/api/items/bulk-clearance', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          items: clearanceItems,
+          reason 
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        fetchItems();
+        setSelectedItems([]);
+        setShowBulkClearanceDialog(false);
+        addMessage('success', `${result.results.length} items moved to clearance successfully`, 'Success');
+        
+        if (result.errors && result.errors.length > 0) {
+          result.errors.forEach((error: any) => {
+            addMessage('error', `Error with item: ${error.error}`, 'Error');
+          });
+        }
+      } else {
+        const error = await response.json();
+        addMessage('error', error.error || 'Failed to move items to clearance', 'Error');
+      }
+    } catch (error) {
+      console.error('Failed to move items to clearance:', error);
+      addMessage('error', 'Failed to move items to clearance', 'Error');
+    } finally {
+      setIsBulkClearing(false);
     }
   };
 
@@ -256,6 +317,7 @@ export default function ItemsPage() {
   const canEditItem = isSuperAdmin || isItemMaster;
   const canDeleteItem = isSuperAdmin;
   const canExportItems = isSuperAdmin || isItemMaster;
+  const canClearance = isSuperAdmin || isItemMaster;
 
   // Custom action for borrowing items (example)
   const renderBorrowAction = (item: any) => {
@@ -322,6 +384,18 @@ export default function ItemsPage() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          
+          {/* Bulk Clearance Button - Only for SuperAdmin and ItemMaster */}
+          {canClearance && (
+            <Button 
+              variant="outline" 
+              disabled={selectedItems.length === 0 || isBulkClearing}
+              onClick={() => setShowBulkClearanceDialog(true)}
+            >
+              <Archive className="mr-2 h-4 w-4" />
+              Move to Clearance ({selectedItems.length})
+            </Button>
+          )}
           
           {/* Bulk Delete Button - Only for SuperAdmin */}
           {canDeleteItem && (
@@ -513,10 +587,12 @@ export default function ItemsPage() {
         onDeleteItem={canDeleteItem ? handleRemoveItem : undefined}
         canEditItem={canEditItem}
         canDeleteItem={canDeleteItem}
+        canClearanceItems={canClearance}
         canExportItems={canExportItems}
         showActions={true}
         customActions={renderBorrowAction}
         onExportItems={exportItems}
+        onClearanceItems={(itemIds) => setShowBulkClearanceDialog(true)}
         isExporting={isExporting}
         currentPage={currentPage}
         totalPages={totalPages}
@@ -592,6 +668,15 @@ export default function ItemsPage() {
         selectedItemsCount={selectedItems.length}
         onConfirm={handleBulkDelete}
         isDeleting={isBulkDeleting}
+      />
+
+      {/* Bulk Clearance Dialog Component */}
+      <BulkClearanceDialog
+        open={showBulkClearanceDialog}
+        onOpenChange={setShowBulkClearanceDialog}
+        selectedItems={selectedItemsForClearance}
+        onConfirm={handleBulkClearance}
+        isProcessing={isBulkClearing}
       />
     </div>
   );

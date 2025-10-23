@@ -33,7 +33,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { MoreHorizontal, Edit, Image, Trash2, Eye, Package, Download, FileDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { MoreHorizontal, Edit, Image, Trash2, Eye, Package, Download, FileDown, ChevronLeft, ChevronRight, Archive } from 'lucide-react';
 import { UniversalBadge } from '@/components/ui/universal-badge';
 import { EditItemModal } from '@/components/items/edit-item-modal';
 import React from 'react';
@@ -115,10 +115,12 @@ interface ItemsTableProps {
   onApproveItem?: (itemId: string) => void;
   onRejectItem?: (itemId: string) => void;
   onExportItems?: (itemIds: string[]) => void;
+  onClearanceItems?: (itemIds: string[]) => void; // New prop for clearance
   canEditItem?: boolean;
   canDeleteItem?: boolean;
   canApproveItem?: boolean;
   canExportItems?: boolean;
+  canClearanceItems?: boolean; // New prop for clearance permission
   showActions?: boolean;
   customActions?: (item: Item) => React.ReactNode;
   renderCustomCell?: (item: Item, columnId: string) => React.ReactNode;
@@ -147,10 +149,12 @@ export function ItemsTable({
   onApproveItem,
   onRejectItem,
   onExportItems,
+  onClearanceItems, // Add the new prop
   canEditItem = false,
   canDeleteItem = false,
   canApproveItem = false,
   canExportItems = false,
+  canClearanceItems = false, // Add the new prop
   showActions = true,
   customActions,
   renderCustomCell,
@@ -550,6 +554,23 @@ export function ItemsTable({
                     >
                       <Download className="mr-2 h-4 w-4" />
                       Export
+                    </DropdownMenuItem>
+                  </>
+                )}
+                
+                {canClearanceItems && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => {
+                        if (onClearanceItems) {
+                          onClearanceItems([item.id]);
+                        }
+                      }}
+                      className="text-orange-600"
+                    >
+                      <Archive className="mr-2 h-4 w-4" />
+                      Move to Clearance
                     </DropdownMenuItem>
                   </>
                 )}
