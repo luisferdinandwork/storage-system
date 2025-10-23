@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { items, itemStock } from '@/lib/db/schema';
+import { items, itemStock, itemRequests, stockMovements } from '@/lib/db/schema'; // Added itemRequests and stockMovements
 import { parseProductCode } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
@@ -223,8 +223,8 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        // Create the item
-        await db.insert(items).values({
+        // Create the item with pending_approval status
+        const [newItem] = await db.insert(items).values({
           productCode,
           description,
           brandCode: parsed.brandCode,
@@ -236,20 +236,42 @@ export async function POST(request: NextRequest) {
           unitOfMeasure: unitOfMeasure as 'PCS' | 'PRS',
           status: 'pending_approval',
           createdBy: session.user.id,
-        });
+        }).returning();
 
-        // Create item stock record
-        await db.insert(itemStock).values({
-          itemId: (await db.select({ id: items.id }).from(items).where(eq(items.productCode, productCode)).limit(1))[0].id,
-          pending: 0,
-          inStorage: totalStock,
+        // Create item stock record with initial stock in pending state
+        const [newStock] = await db.insert(itemStock).values({
+          itemId: newItem.id,
+          pending: totalStock, // Set initial stock as pending
+          inStorage: 0,       // Not in storage until approved
           onBorrow: 0,
           inClearance: 0,
           seeded: 0,
           location: location && location !== '' ? location as 'Storage 1' | 'Storage 2' | 'Storage 3' : null,
-          condition: condition as 'excellent' | 'good' | 'fair' | 'poor' || 'excellent',
+          condition: condition as 'excellent' | 'good' | 'fair' | 'poor' || 'good', // Default to 'good' if not provided
           conditionNotes: conditionNotes || null,
+        }).returning();
+
+        // Create item request for approval workflow
+        await db.insert(itemRequests).values({
+          itemId: newItem.id,
+          requestedBy: session.user.id,
+          status: 'pending',
+          notes: 'Item imported, awaiting approval from Storage Master',
         });
+
+        // Record initial stock movement if totalStock > 0
+        if (totalStock > 0) {
+          await db.insert(stockMovements).values({
+            itemId: newItem.id,
+            stockId: newStock.id,
+            movementType: 'initial_stock',
+            quantity: totalStock,
+            fromState: 'none',
+            toState: 'pending',
+            performedBy: session.user.id,
+            notes: 'Initial stock from import - pending approval',
+          });
+        }
 
         results.success++;
       } catch (error) {
@@ -275,10 +297,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/**
- * Parse CSV content into rows
- * Handles quoted fields containing commas, newlines, and quotes
- */
+// parseCsv function remains unchanged
 function parseCsv(content: string): string[][] {
   const rows: string[][] = [];
   let currentRow: string[] = [];

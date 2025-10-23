@@ -5,7 +5,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Package, Plus, Search, Filter, Columns, Upload, Download } from 'lucide-react';
+import { Package, Plus, Search, Filter, Columns, Upload, Download, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AddItemModal } from '@/components/items/add-item-modal';
 import { MessageContainer } from '@/components/ui/message';
@@ -55,6 +55,9 @@ export default function ItemsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   
   // Use the export hook
   const { exportItems, isExporting } = useExportItems();
@@ -106,6 +109,37 @@ export default function ItemsPage() {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedItems.length === 0) return;
+    
+    setIsBulkDeleting(true);
+    try {
+      const response = await fetch('/api/items/bulk-delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ itemIds: selectedItems }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        fetchItems();
+        setSelectedItems([]);
+        setShowBulkDeleteDialog(false);
+        addMessage('success', `${result.deletedCount} items deleted successfully`, 'Success');
+      } else {
+        const error = await response.json();
+        addMessage('error', error.error || 'Failed to delete items', 'Error');
+      }
+    } catch (error) {
+      console.error('Failed to bulk delete items:', error);
+      addMessage('error', 'Failed to delete items', 'Error');
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
   const toggleColumnVisibility = (columnId: string) => {
     setVisibleColumns(prev => {
       if (prev.includes(columnId)) {
@@ -133,6 +167,13 @@ export default function ItemsPage() {
   const handleExportAll = async (format: 'csv' | 'excel') => {
     // Export all items
     await exportItems([], format);
+  };
+
+  const handleExportSelected = async (format: 'csv' | 'excel') => {
+    // Export selected items
+    await exportItems(selectedItems, format);
+    // Clear selection after export
+    setSelectedItems([]);
   };
 
   const handleDownloadTemplate = (format: 'csv' | 'excel') => {
@@ -243,6 +284,7 @@ export default function ItemsPage() {
             Columns
           </Button>
           
+          {/* Export All Button */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" disabled={isExporting}>
@@ -260,6 +302,38 @@ export default function ItemsPage() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          
+          {/* Export Selected Button */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" disabled={selectedItems.length === 0 || isExporting}>
+                <Download className="mr-2 h-4 w-4" />
+                Export Selected ({selectedItems.length})
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Export Format</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => handleExportSelected('csv')} disabled={isExporting}>
+                Export Selected as CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExportSelected('excel')} disabled={isExporting}>
+                Export Selected as Excel
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          
+          {/* Bulk Delete Button - Only for SuperAdmin */}
+          {canDeleteItem && (
+            <Button 
+              variant="outline" 
+              disabled={selectedItems.length === 0 || isBulkDeleting}
+              onClick={() => setShowBulkDeleteDialog(true)}
+              className="text-red-600 hover:text-red-700"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete Selected ({selectedItems.length})
+            </Button>
+          )}
           
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -449,6 +523,8 @@ export default function ItemsPage() {
         onPageChange={setCurrentPage}
         onItemsPerPageChange={setItemsPerPage}
         totalItems={totalItems}
+        selectedItems={selectedItems}
+        onSelectionChange={setSelectedItems}
       />
 
       {/* Add Item Modal */}
@@ -504,6 +580,26 @@ export default function ItemsPage() {
           )}
           <DialogFooter>
             <Button onClick={() => setImportResults(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <Dialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Bulk Delete Items</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete {selectedItems.length} items? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBulkDeleteDialog(false)} disabled={isBulkDeleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleBulkDelete} disabled={isBulkDeleting}>
+              {isBulkDeleting ? 'Deleting...' : 'Delete Items'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

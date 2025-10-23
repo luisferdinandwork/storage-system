@@ -4,7 +4,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db/';
 import { items, users, itemImages, itemRequests, stockMovements } from '@/lib/db/schema';
-import { eq, and, or } from 'drizzle-orm';
+import { eq, and, or, desc } from 'drizzle-orm';
 import { itemStock } from '@/lib/db/schema';
 
 // GET /api/items - List items with their images
@@ -59,7 +59,8 @@ export async function GET(request: NextRequest) {
       })
       .from(items)
       .leftJoin(users, eq(items.createdBy, users.id))
-      .leftJoin(itemStock, eq(items.id, itemStock.itemId));
+      .leftJoin(itemStock, eq(items.id, itemStock.itemId))
+      .orderBy(desc(items.updatedAt));
 
     // Apply status filter if specified
     let itemsData;
@@ -284,4 +285,8 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+function orderBy(arg0: any) {
+  throw new Error('Function not implemented.');
 }
