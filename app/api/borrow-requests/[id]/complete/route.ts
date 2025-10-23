@@ -76,6 +76,7 @@ export async function POST(
     }
 
     const now = new Date();
+    let hasCompletedItems = false;
 
     // Update each borrow request item
     for (const itemCompletion of itemsCompletion) {
@@ -99,6 +100,8 @@ export async function POST(
       }
 
       if (itemCompletion.status === 'complete') {
+        hasCompletedItems = true;
+        
         // Return the item to storage
         await db.update(borrowRequestItems)
           .set({
@@ -191,6 +194,15 @@ export async function POST(
           status: 'complete',
           completedAt: now,
           completedBy: session.user.id,
+          // Update end date to today's date if any items were marked as complete
+          endDate: hasCompletedItems ? now : borrowRequest.endDate,
+        })
+        .where(eq(borrowRequests.id, borrowRequestId));
+    } else if (hasCompletedItems) {
+      // Even if not all items are completed, update the end date if any items were marked as complete
+      await db.update(borrowRequests)
+        .set({
+          endDate: now,
         })
         .where(eq(borrowRequests.id, borrowRequestId));
     }
@@ -200,6 +212,7 @@ export async function POST(
       borrowRequestId,
       borrowRequestStatus: allItemsCompleted ? 'complete' : 'active',
       itemsProcessed: itemsCompletion.length,
+      endDateUpdated: hasCompletedItems,
     });
   } catch (error) {
     console.error('Error completing borrow request:', error);

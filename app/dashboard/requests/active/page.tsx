@@ -47,7 +47,9 @@ import {
   PackageX
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatDate } from '@/lib/utils';
 import React from 'react';
+import { borrowRequests } from '@/lib/db/schema';
 
 interface BorrowRequestItem {
   id: string;
@@ -163,6 +165,22 @@ export default function ActiveLoansPage() {
   const [completeAllNotes, setCompleteAllNotes] = useState('');
   const [seedAllReason, setSeedAllReason] = useState('');
   const [seedAllNotes, setSeedAllNotes] = useState('');
+
+  // Helper functions to calculate days left and determine color
+  const calculateDaysLeft = (endDate: string): number => {
+    const end = new Date(endDate);
+    const today = new Date();
+    const diffTime = end.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
+  const getDaysLeftColor = (daysLeft: number): string => {
+    if (daysLeft < 0) return 'text-gray-600';
+    if (daysLeft <= 3) return 'text-red-600 font-semibold';
+    if (daysLeft <= 7) return 'text-orange-600 font-semibold';
+    return 'text-green-600';
+  };
 
   useEffect(() => {
     fetchRequests();
@@ -420,6 +438,12 @@ export default function ActiveLoansPage() {
     }
   };
 
+  // Helper function to get the primary image or first image
+  const getPrimaryImage = (images: any[]) => {
+    if (!images || images.length === 0) return null;
+    return images.find(img => img.isPrimary) || images[0];
+  };
+
   const canSeedItem = session?.user?.role === 'storage-master' || 
                      session?.user?.role === 'storage-master-manager' || 
                      session?.user?.role === 'superadmin';
@@ -475,105 +499,99 @@ export default function ActiveLoansPage() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>ID</TableHead>
               <TableHead>Items</TableHead>
               <TableHead>Borrowed By</TableHead>
-              <TableHead>Period</TableHead>
-              <TableHead>Due Date</TableHead>
+              <TableHead>Start Date</TableHead>
+              <TableHead>Days Left</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredGroupedRequests.map((grouped) => (
-              <TableRow key={grouped.borrowRequest.id}>
-                <TableCell>
-                  <div>
-                    <div className="font-medium">
-                      {grouped.items.length} item{grouped.items.length > 1 ? 's' : ''}
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      {grouped.items[0].item.description}
-                      {grouped.items.length > 1 && ` +${grouped.items.length - 1} more`}
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-col">
-                    <div className="font-medium">{grouped.borrowRequest.user.name}</div>
-                    <div className="text-xs text-gray-400 capitalize">
-                      {grouped.borrowRequest.user.role.replace('-', ' ')}
-                    </div>
-                    {grouped.borrowRequest.user.department && (
-                      <div className="text-xs text-gray-400">
-                        {grouped.borrowRequest.user.department.name}
+            {filteredGroupedRequests.map((grouped) => {
+              const daysLeft = calculateDaysLeft(grouped.borrowRequest.endDate);
+              return (
+                <TableRow key={grouped.borrowRequest.id}>
+                  <TableCell className="font-medium">{grouped.borrowRequest.id}</TableCell>
+                  <TableCell>
+                    <div>
+                      <div className="font-medium">
+                        {grouped.items.length} item{grouped.items.length > 1 ? 's' : ''}
                       </div>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="text-sm">
-                    <div>{new Date(grouped.borrowRequest.startDate).toLocaleDateString()}</div>
-                    <div className="text-gray-500">to {new Date(grouped.borrowRequest.endDate).toLocaleDateString()}</div>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="text-sm">
-                    {grouped.isOverdue ? (
-                      <span className="text-red-600 font-medium flex items-center">
-                        <AlertTriangle className="h-4 w-4 mr-1" />
-                        {new Date(grouped.borrowRequest.endDate).toLocaleDateString()}
-                      </span>
-                    ) : (
-                      <span>{new Date(grouped.borrowRequest.endDate).toLocaleDateString()}</span>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  {getStatusBadge(grouped.isOverdue)}
-                </TableCell>
-                <TableCell>
-                  <div className="flex space-x-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setSelectedRequest(grouped);
-                        setShowDetailsModal(true);
-                      }}
-                    >
-                      <Eye className="h-4 w-4 mr-1" />
-                      Details
-                    </Button>
-                    {canCompleteItem && (
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <div className="font-medium">{grouped.borrowRequest.user.name}</div>
+                      <div className="text-xs text-gray-400 capitalize">
+                        {grouped.borrowRequest.user.role.replace('-', ' ')}
+                      </div>
+                      {grouped.borrowRequest.user.department && (
+                        <div className="text-xs text-gray-400">
+                          {grouped.borrowRequest.user.department.name}
+                        </div>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-sm">
+                      {new Date(grouped.borrowRequest.startDate).toLocaleDateString()}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className={`text-sm font-medium ${getDaysLeftColor(daysLeft)}`}>
+                      {daysLeft < 0 ? `Ended (${Math.abs(daysLeft)} days ago)` : `${daysLeft} day${daysLeft !== 1 ? 's' : ''}`}
+                    </div>
+                    <div className="text-xs text-gray-500">End: {formatDate(grouped.borrowRequest.endDate, { format: 'short' })}</div>
+                  </TableCell>
+                  <TableCell>
+                    {getStatusBadge(grouped.isOverdue)}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex space-x-2">
                       <Button
                         size="sm"
-                        variant="default"
+                        variant="outline"
                         onClick={() => {
                           setSelectedRequest(grouped);
-                          setShowCompleteAllModal(true);
+                          setShowDetailsModal(true);
                         }}
                       >
-                        <CheckCircle className="h-4 w-4 mr-1" />
-                        Complete All
+                        <Eye className="h-4 w-4 mr-1" />
+                        Details
                       </Button>
-                    )}
-                    {canSeedItem && (
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => {
-                          setSelectedRequest(grouped);
-                          setShowSeedAllModal(true);
-                        }}
-                      >
-                        <PackageX className="h-4 w-4 mr-1" />
-                        Seed All
-                      </Button>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
+                      {canCompleteItem && (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => {
+                            setSelectedRequest(grouped);
+                            setShowCompleteAllModal(true);
+                          }}
+                        >
+                          <CheckCircle className="h-4 w-4 mr-1" />
+                          Complete All
+                        </Button>
+                      )}
+                      {canSeedItem && (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => {
+                            setSelectedRequest(grouped);
+                            setShowSeedAllModal(true);
+                          }}
+                        >
+                          <PackageX className="h-4 w-4 mr-1" />
+                          Seed All
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>
@@ -599,9 +617,12 @@ export default function ActiveLoansPage() {
                   </p>
                 </div>
                 <div>
-                  <Label>Due Date</Label>
-                  <p className="text-sm font-medium">
-                    {new Date(selectedRequest.borrowRequest.endDate).toLocaleDateString()}
+                  <Label>Days Left</Label>
+                  <p className={`text-sm font-medium ${getDaysLeftColor(calculateDaysLeft(selectedRequest.borrowRequest.endDate))}`}>
+                    {(() => {
+                      const daysLeft = calculateDaysLeft(selectedRequest.borrowRequest.endDate);
+                      return daysLeft < 0 ? `Ended (${Math.abs(daysLeft)} days ago)` : `${daysLeft} day${daysLeft !== 1 ? 's' : ''}`;
+                    })()}
                   </p>
                 </div>
                 <div>
@@ -613,57 +634,71 @@ export default function ActiveLoansPage() {
               <div>
                 <Label className="text-base font-medium">Items</Label>
                 <div className="mt-2 space-y-3">
-                  {selectedRequest.items.map((item) => (
-                    <div key={item.id} className="border rounded-md p-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="font-medium">{item.item.description}</div>
-                          <div className="text-sm text-gray-500">{item.item.productCode}</div>
-                          <div className="flex items-center space-x-2 mt-1">
-                            {getBrandBadge(item.item.brandCode)}
-                            {getCategoryBadge(item.item.productCategory)}
-                          </div>
-                          {item.item.stock?.location && (
-                            <div className="flex items-center text-xs text-gray-500 mt-1">
-                              <MapPin className="h-3 w-3 mr-1" />
-                              {item.item.stock.location}
+                  {selectedRequest.items.map((item) => {
+                    const primaryImage = getPrimaryImage(item.item.images);
+                    return (
+                      <div key={item.id} className="border rounded-md p-3">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start space-x-3">
+                            {primaryImage && (
+                              <div className="w-16 h-16 rounded-md overflow-hidden flex-shrink-0">
+                                <img
+                                  src={`/uploads/${primaryImage.fileName}`}
+                                  alt={primaryImage.altText || item.item.description}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                            )}
+                            <div className="flex-1">
+                              <div className="font-medium">{item.item.description}</div>
+                              <div className="text-sm text-gray-500">{item.item.productCode}</div>
+                              <div className="flex items-center space-x-2 mt-1">
+                                {getBrandBadge(item.item.brandCode)}
+                                {getCategoryBadge(item.item.productCategory)}
+                              </div>
+                              {item.item.stock?.location && (
+                                <div className="flex items-center text-xs text-gray-500 mt-1">
+                                  <MapPin className="h-3 w-3 mr-1" />
+                                  {item.item.stock.location}
+                                </div>
+                              )}
+                              <div className="text-sm font-medium mt-1">
+                                Qty: {item.quantity}
+                              </div>
                             </div>
-                          )}
-                          <div className="text-sm font-medium mt-1">
-                            Qty: {item.quantity}
                           </div>
-                        </div>
-                        <div className="flex space-x-2">
-                          {canCompleteItem && (
-                            <Button
-                              size="sm"
-                              variant="default"
-                              onClick={() => {
-                                setSelectedRequestItem(item);
-                                setShowCompleteModal(true);
-                              }}
-                            >
-                              <CheckCircle className="h-4 w-4 mr-1" />
-                              Complete
-                            </Button>
-                          )}
-                          {canSeedItem && (
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => {
-                                setSelectedRequestItem(item);
-                                setShowSeedModal(true);
-                              }}
-                            >
-                              <Package className="h-4 w-4 mr-1" />
-                              Seed
-                            </Button>
-                          )}
+                          <div className="flex space-x-2">
+                            {canCompleteItem && (
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => {
+                                  setSelectedRequestItem(item);
+                                  setShowCompleteModal(true);
+                                }}
+                              >
+                                <CheckCircle className="h-4 w-4 mr-1" />
+                                Complete
+                              </Button>
+                            )}
+                            {canSeedItem && (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => {
+                                  setSelectedRequestItem(item);
+                                  setShowSeedModal(true);
+                                }}
+                              >
+                                <Package className="h-4 w-4 mr-1" />
+                                Seed
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { itemRequests, items, itemStock } from '@/lib/db/schema';
+import { itemRequests, items, itemStock, itemImages, borrowRequestItems, itemClearances, stockMovements } from '@/lib/db/schema';
 import { eq, inArray } from 'drizzle-orm';
 
 export async function POST(request: NextRequest) {
@@ -57,57 +57,49 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get the IDs of pending requests
+    // Get the IDs of pending requests and their corresponding item IDs
     const pendingRequestIds = pendingRequests.map(req => req.id);
-
-    // Update all pending item requests to rejected
-    await db
-      .update(itemRequests)
-      .set({
-        status: 'rejected',
-        approvedBy: session.user.id,
-        approvedAt: new Date(),
-        rejectionReason: reason,
-      })
-      .where(inArray(itemRequests.id, pendingRequestIds));
-
-    // Update all items to rejected
     const itemIds = pendingRequests.map(req => req.itemId);
-    await db
-      .update(items)
-      .set({
-        status: 'rejected',
-      })
-      .where(inArray(items.id, itemIds));
 
-    // Update all item stocks to set pending to 0 when items are rejected
-    await db
-      .update(itemStock)
-      .set({
-        updatedAt: new Date(),
-      })
+    // Delete all related records in the correct order to avoid foreign key constraint errors
+    // 1. Delete stock movements
+    await db.delete(stockMovements)
+      .where(inArray(stockMovements.itemId, itemIds));
+    
+    // 2. Delete borrow request items
+    await db.delete(borrowRequestItems)
+      .where(inArray(borrowRequestItems.itemId, itemIds));
+    
+    // 3. Delete item clearances
+    await db.delete(itemClearances)
+      .where(inArray(itemClearances.itemId, itemIds));
+    
+    // 4. Delete item images
+    await db.delete(itemImages)
+      .where(inArray(itemImages.itemId, itemIds));
+    
+    // 5. Delete item stock
+    await db.delete(itemStock)
       .where(inArray(itemStock.itemId, itemIds));
-
-    // Update pending to 0 for each item
-    for (const request of pendingRequests) {
-      await db
-        .update(itemStock)
-        .set({
-          pending: 0, // Set pending to 0 when item is rejected
-          updatedAt: new Date(),
-        })
-        .where(eq(itemStock.itemId, request.itemId));
-    }
+    
+    // 6. Delete item requests
+    await db.delete(itemRequests)
+      .where(inArray(itemRequests.id, pendingRequestIds));
+    
+    // 7. Finally, delete the items
+    const deletedItems = await db.delete(items)
+      .where(inArray(items.id, itemIds))
+      .returning({ id: items.id });
 
     return NextResponse.json({ 
-      message: `${pendingRequests.length} items rejected successfully`,
-      rejectedCount: pendingRequests.length,
+      message: `${deletedItems.length} items rejected and removed successfully`,
+      rejectedCount: deletedItems.length,
       reason: reason
     });
   } catch (error) {
-    console.error('Failed to reject items:', error);
+    console.error('Failed to reject and remove items:', error);
     return NextResponse.json(
-      { error: 'Failed to reject items' },
+      { error: 'Failed to reject and remove items' },
       { status: 500 }
     );
   }

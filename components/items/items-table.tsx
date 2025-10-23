@@ -36,7 +36,6 @@ import {
 import { MoreHorizontal, Edit, Image, Trash2, Eye, Package, Download, FileDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { UniversalBadge } from '@/components/ui/universal-badge';
 import { EditItemModal } from '@/components/items/edit-item-modal';
-import { ExportButton } from '@/components/items/export-button';
 import React from 'react';
 import { useSession } from 'next-auth/react';
 import { Select, SelectContent, SelectTrigger, SelectValue, SelectItem  } from '../ui/select';
@@ -130,6 +129,9 @@ interface ItemsTableProps {
   onPageChange?: (page: number) => void;
   onItemsPerPageChange?: (itemsPerPage: number) => void;
   totalItems?: number;
+  // New props for selected items
+  selectedItems?: string[];
+  onSelectionChange?: (selectedItems: string[]) => void;
 }
 
 export function ItemsTable({
@@ -159,6 +161,8 @@ export function ItemsTable({
   onPageChange,
   onItemsPerPageChange,
   totalItems = items.length,
+  selectedItems: propSelectedItems = [],
+  onSelectionChange,
 }: ItemsTableProps) {
   const { data: session } = useSession();
   const [showEditModal, setShowEditModal] = useState(false);
@@ -166,8 +170,11 @@ export function ItemsTable({
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [selectedImage, setSelectedImage] = useState<ItemImage | null>(null);
   const [removingItemId, setRemovingItemId] = useState<string | null>(null);
-  const [selectedItems, setSelectedItems] = useState<string[]>([]);
-  const [selectAll, setSelectAll] = useState(false);
+  
+  // Use internal state if no prop is provided
+  const [internalSelectedItems, setInternalSelectedItems] = useState<string[]>([]);
+  const selectedItems = propSelectedItems || internalSelectedItems;
+  const setSelectedItems = onSelectionChange || setInternalSelectedItems;
 
   // Internal state for pagination if not controlled externally
   const [internalCurrentPage, setInternalCurrentPage] = useState(currentPage);
@@ -258,30 +265,17 @@ export function ItemsTable({
 
   const handleSelectItem = (itemId: string, checked: boolean) => {
     if (checked) {
-      setSelectedItems(prev => [...prev, itemId]);
+      setSelectedItems([...selectedItems, itemId]);
     } else {
-      setSelectedItems(prev => prev.filter(id => id !== itemId));
+      setSelectedItems(selectedItems.filter(id => id !== itemId));
     }
   };
 
   const handleSelectAll = (checked: boolean) => {
-    setSelectAll(checked);
     if (checked) {
       setSelectedItems(items.map(item => item.id));
     } else {
       setSelectedItems([]);
-    }
-  };
-
-  const handleExportSelected = (itemIds: string[]) => {
-    if (onExportItems) {
-      onExportItems(itemIds);
-    }
-  };
-
-  const handleExportAll = () => {
-    if (onExportItems) {
-      onExportItems([]); // Empty array means export all
     }
   };
 
@@ -549,8 +543,9 @@ export function ItemsTable({
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       onClick={() => {
-                        setSelectedItems([item.id]);
-                        onExportItems?.([item.id]); // Fixed with optional chaining
+                        if (onExportItems) {
+                          onExportItems([item.id]);
+                        }
                       }}
                     >
                       <Download className="mr-2 h-4 w-4" />
@@ -613,7 +608,7 @@ export function ItemsTable({
               <TableHead key="checkbox" className="w-12">
                 <input
                   type="checkbox"
-                  checked={selectAll}
+                  checked={selectedItems.length === items.length && items.length > 0}
                   onChange={(e) => handleSelectAll(e.target.checked)}
                   className="h-4 w-4"
                 />
@@ -721,18 +716,6 @@ export function ItemsTable({
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
-      </div>
-
-      {/* Export Button */}
-      <div className="mt-4 flex justify-end">
-        <ExportButton
-          selectedItems={selectedItems}
-          totalItems={totalItems}
-          onExportSelected={handleExportSelected}
-          onExportAll={handleExportAll}
-          canExportItems={canExportItems}
-          isExporting={isExporting}
-        />
       </div>
 
       {/* Edit Item Modal */}

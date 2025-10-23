@@ -602,16 +602,19 @@ export default function StorageManagementPage() {
                           </div>
                         )}
                       <div className="flex flex-col min-w-0">
-                        <div className="font-medium truncate">{request.item.description}</div>
+                        <div className="font-medium truncate">{request.item.productCode}</div>
                         <div className="flex items-center space-x-2 text-sm text-gray-500">
-                            <UniversalBadge type="brand" value={request.item.brandCode} />
-                          <span>/</span>
-                            <UniversalBadge type="division" value={request.item.productDivision} />
+                            {request.item.description}
                         </div>
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="font-mono text-sm">{request.item.productCode}</TableCell>
+                  <TableCell className="font-mono text-sm">
+                    <UniversalBadge type="brand" value={request.item.brandCode} />
+                  </TableCell>
+                  <TableCell className="font-mono text-sm">
+                    <UniversalBadge type="division" value={request.item.productDivision} />
+                  </TableCell>
                   <TableCell>
                     <UniversalBadge type="category" value={request.item.productCategory} />
                   </TableCell>

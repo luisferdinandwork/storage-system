@@ -5,13 +5,14 @@ import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Package, Plus, Search, Filter, Columns, Upload, Download } from 'lucide-react';
+import { Package, Plus, Search, Filter, Columns, Upload, Download, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AddItemModal } from '@/components/items/add-item-modal';
 import { MessageContainer } from '@/components/ui/message';
 import { useMessages } from '@/hooks/use-messages';
 import { ItemsTable } from '@/components/items/items-table';
 import { ColumnSelector } from '@/components/items/column-selector';
+import { BulkDeleteDialog } from '@/components/items/bulk-delete-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { DialogHeader, DialogFooter } from '@/components/ui/dialog';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@radix-ui/react-dialog';
@@ -24,11 +25,11 @@ const ALL_COLUMNS = [
   { id: 'productDivision', label: 'Division', defaultVisible: true },
   { id: 'category', label: 'Category', defaultVisible: true },
   { id: 'unit', label: 'Unit', defaultVisible: true },
-  { id: 'condition', label: 'Condition', defaultVisible: true },
   { id: 'location', label: 'Location', defaultVisible: true },
   { id: 'createdBy', label: 'Created By', defaultVisible: true },
   { id: 'stock', label: 'Stock', defaultVisible: true },
-  { id: 'status', label: 'Status', defaultVisible: true },
+  { id: 'status', label: 'Status', defaultVisible: false },
+  { id: 'condition', label: 'Condition', defaultVisible: false },
   { id: 'actions', label: 'Actions', defaultVisible: true },
 ];
 
@@ -55,6 +56,9 @@ export default function ItemsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   
   // Use the export hook
   const { exportItems, isExporting } = useExportItems();
@@ -106,6 +110,37 @@ export default function ItemsPage() {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedItems.length === 0) return;
+    
+    setIsBulkDeleting(true);
+    try {
+      const response = await fetch('/api/items/bulk-delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ itemIds: selectedItems }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        fetchItems();
+        setSelectedItems([]);
+        setShowBulkDeleteDialog(false);
+        addMessage('success', `${result.deletedCount} items deleted successfully`, 'Success');
+      } else {
+        const error = await response.json();
+        addMessage('error', error.error || 'Failed to delete items', 'Error');
+      }
+    } catch (error) {
+      console.error('Failed to bulk delete items:', error);
+      addMessage('error', 'Failed to delete items', 'Error');
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
   const toggleColumnVisibility = (columnId: string) => {
     setVisibleColumns(prev => {
       if (prev.includes(columnId)) {
@@ -133,6 +168,13 @@ export default function ItemsPage() {
   const handleExportAll = async (format: 'csv' | 'excel') => {
     // Export all items
     await exportItems([], format);
+  };
+
+  const handleExportSelected = async (format: 'csv' | 'excel') => {
+    // Export selected items
+    await exportItems(selectedItems, format);
+    // Clear selection after export
+    setSelectedItems([]);
   };
 
   const handleDownloadTemplate = (format: 'csv' | 'excel') => {
@@ -243,6 +285,7 @@ export default function ItemsPage() {
             Columns
           </Button>
           
+          {/* Export All Button */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" disabled={isExporting}>
@@ -260,6 +303,38 @@ export default function ItemsPage() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          
+          {/* Export Selected Button */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" disabled={selectedItems.length === 0 || isExporting}>
+                <Download className="mr-2 h-4 w-4" />
+                Export Selected ({selectedItems.length})
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Export Format</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => handleExportSelected('csv')} disabled={isExporting}>
+                Export Selected as CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExportSelected('excel')} disabled={isExporting}>
+                Export Selected as Excel
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          
+          {/* Bulk Delete Button - Only for SuperAdmin */}
+          {canDeleteItem && (
+            <Button 
+              variant="outline" 
+              disabled={selectedItems.length === 0 || isBulkDeleting}
+              onClick={() => setShowBulkDeleteDialog(true)}
+              className="text-red-600 hover:text-red-700"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete Selected ({selectedItems.length})
+            </Button>
+          )}
           
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -449,6 +524,8 @@ export default function ItemsPage() {
         onPageChange={setCurrentPage}
         onItemsPerPageChange={setItemsPerPage}
         totalItems={totalItems}
+        selectedItems={selectedItems}
+        onSelectionChange={setSelectedItems}
       />
 
       {/* Add Item Modal */}
@@ -507,6 +584,15 @@ export default function ItemsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Bulk Delete Dialog Component */}
+      <BulkDeleteDialog
+        open={showBulkDeleteDialog}
+        onOpenChange={setShowBulkDeleteDialog}
+        selectedItemsCount={selectedItems.length}
+        onConfirm={handleBulkDelete}
+        isDeleting={isBulkDeleting}
+      />
     </div>
   );
 }

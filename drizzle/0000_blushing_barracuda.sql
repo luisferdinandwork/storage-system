@@ -1,9 +1,9 @@
 CREATE TABLE "borrow_request_items" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"borrow_request_id" uuid NOT NULL,
+	"borrow_request_id" varchar(10) NOT NULL,
 	"item_id" uuid NOT NULL,
 	"quantity" integer DEFAULT 1 NOT NULL,
-	"status" text DEFAULT 'pending' NOT NULL,
+	"status" text DEFAULT 'pending_manager' NOT NULL,
 	"return_condition" text,
 	"return_notes" text,
 	"completed_at" timestamp,
@@ -17,7 +17,7 @@ CREATE TABLE "borrow_request_items" (
 );
 --> statement-breakpoint
 CREATE TABLE "borrow_requests" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"id" varchar(10) PRIMARY KEY NOT NULL,
 	"user_id" uuid NOT NULL,
 	"requested_at" timestamp DEFAULT now() NOT NULL,
 	"start_date" timestamp NOT NULL,
@@ -129,7 +129,7 @@ CREATE TABLE "stock_movements" (
 	"quantity" integer NOT NULL,
 	"from_state" text,
 	"to_state" text,
-	"reference_id" uuid,
+	"reference_id" varchar(10),
 	"reference_type" text,
 	"performed_by" uuid NOT NULL,
 	"notes" text,
