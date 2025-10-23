@@ -12,6 +12,7 @@ import { MessageContainer } from '@/components/ui/message';
 import { useMessages } from '@/hooks/use-messages';
 import { ItemsTable } from '@/components/items/items-table';
 import { ColumnSelector } from '@/components/items/column-selector';
+import { BulkDeleteDialog } from '@/components/items/bulk-delete-dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { DialogHeader, DialogFooter } from '@/components/ui/dialog';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@radix-ui/react-dialog';
@@ -24,11 +25,11 @@ const ALL_COLUMNS = [
   { id: 'productDivision', label: 'Division', defaultVisible: true },
   { id: 'category', label: 'Category', defaultVisible: true },
   { id: 'unit', label: 'Unit', defaultVisible: true },
-  { id: 'condition', label: 'Condition', defaultVisible: true },
   { id: 'location', label: 'Location', defaultVisible: true },
   { id: 'createdBy', label: 'Created By', defaultVisible: true },
   { id: 'stock', label: 'Stock', defaultVisible: true },
-  { id: 'status', label: 'Status', defaultVisible: true },
+  { id: 'status', label: 'Status', defaultVisible: false },
+  { id: 'condition', label: 'Condition', defaultVisible: false },
   { id: 'actions', label: 'Actions', defaultVisible: true },
 ];
 
@@ -56,8 +57,8 @@ export default function ItemsPage() {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
-  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   
   // Use the export hook
   const { exportItems, isExporting } = useExportItems();
@@ -584,25 +585,14 @@ export default function ItemsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Bulk Delete Confirmation Dialog */}
-      <Dialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Bulk Delete Items</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete {selectedItems.length} items? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowBulkDeleteDialog(false)} disabled={isBulkDeleting}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleBulkDelete} disabled={isBulkDeleting}>
-              {isBulkDeleting ? 'Deleting...' : 'Delete Items'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Bulk Delete Dialog Component */}
+      <BulkDeleteDialog
+        open={showBulkDeleteDialog}
+        onOpenChange={setShowBulkDeleteDialog}
+        selectedItemsCount={selectedItems.length}
+        onConfirm={handleBulkDelete}
+        isDeleting={isBulkDeleting}
+      />
     </div>
   );
 }

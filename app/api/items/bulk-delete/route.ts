@@ -26,39 +26,56 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No item IDs provided' }, { status: 400 });
     }
 
+    // Check which items actually exist before attempting to delete
+    const existingItems = await db
+      .select({ id: items.id })
+      .from(items)
+      .where(inArray(items.id, itemIds));
+    
+    const existingItemIds = existingItems.map(item => item.id);
+    const nonExistingItemIds = itemIds.filter(id => !existingItemIds.includes(id));
+    
+    if (existingItemIds.length === 0) {
+      return NextResponse.json({ 
+        error: 'None of the provided item IDs exist',
+        nonExistingItemIds 
+      }, { status: 404 });
+    }
+
     // Delete all related records in the correct order to avoid foreign key constraint errors
     // 1. Delete stock movements
     await db.delete(stockMovements)
-      .where(inArray(stockMovements.itemId, itemIds));
+      .where(inArray(stockMovements.itemId, existingItemIds));
     
     // 2. Delete borrow request items
     await db.delete(borrowRequestItems)
-      .where(inArray(borrowRequestItems.itemId, itemIds));
+      .where(inArray(borrowRequestItems.itemId, existingItemIds));
     
     // 3. Delete item clearances
     await db.delete(itemClearances)
-      .where(inArray(itemClearances.itemId, itemIds));
+      .where(inArray(itemClearances.itemId, existingItemIds));
     
     // 4. Delete item requests
     await db.delete(itemRequests)
-      .where(inArray(itemRequests.itemId, itemIds));
+      .where(inArray(itemRequests.itemId, existingItemIds));
     
     // 5. Delete item images
     await db.delete(itemImages)
-      .where(inArray(itemImages.itemId, itemIds));
+      .where(inArray(itemImages.itemId, existingItemIds));
     
     // 6. Delete item stock
     await db.delete(itemStock)
-      .where(inArray(itemStock.itemId, itemIds));
+      .where(inArray(itemStock.itemId, existingItemIds));
     
     // 7. Finally, delete the items
     const deletedItems = await db.delete(items)
-      .where(inArray(items.id, itemIds))
+      .where(inArray(items.id, existingItemIds))
       .returning({ id: items.id });
 
     return NextResponse.json({ 
       message: `${deletedItems.length} items deleted successfully`,
-      deletedCount: deletedItems.length
+      deletedCount: deletedItems.length,
+      nonExistingItemIds: nonExistingItemIds.length > 0 ? nonExistingItemIds : undefined
     });
   } catch (error) {
     console.error('Error bulk deleting items:', error);
