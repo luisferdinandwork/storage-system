@@ -1,12 +1,11 @@
 // app/dashboard/clearance/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, use } from 'react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { 
   Archive, 
@@ -16,11 +15,19 @@ import {
   RotateCcw,
   ChevronLeft,
   ChevronRight,
-  ArrowUpRight
+  ArrowUpRight,
+  Trash2,
+  Undo
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ClearanceDetailsModal } from '@/components/items/clearance-details-modal';
 import Link from 'next/link';
+import { UniversalBadge } from '@/components/ui/universal-badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { MessageContainer } from '@/components/ui/message';
+import { useMessages } from '@/hooks/use-messages';
+import { BulkDeleteDialog } from '@/components/items/bulk-delete-dialog';
+import { BulkRevertDialog } from '@/components/items/bulk-revert-dialog';
 
 interface ItemImage {
   id: string;
@@ -89,23 +96,29 @@ interface Item {
 }
 
 interface ClearancePageProps {
-  searchParams: {
+  searchParams: Promise<{
     page?: string;
     limit?: string;
-  };
+  }>;
 }
-
 export default function ClearancePage({ searchParams }: ClearancePageProps) {
+  const { page, limit } = use(searchParams);
   const { data: session } = useSession();
+  const { messages, addMessage, dismissMessage } = useMessages();
   const [items, setItems] = useState<Item[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [currentPage, setCurrentPage] = useState(parseInt(searchParams.page || '1'));
-  const [itemsPerPage, setItemsPerPage] = useState(parseInt(searchParams.limit || '10'));
+  const [currentPage, setCurrentPage] = useState(parseInt(page || '1'));
+  const [itemsPerPage, setItemsPerPage] = useState(parseInt(limit || '10'));
   const [totalPages, setTotalPages] = useState(0);
   const [totalItems, setTotalItems] = useState(0);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [isReverting, setIsReverting] = useState(false);
+  const [showBulkRevertDialog, setShowBulkRevertDialog] = useState(false);
 
   const userRole = session?.user?.role;
   const isStorageMaster = userRole === 'storage-master';
@@ -130,10 +143,11 @@ export default function ClearancePage({ searchParams }: ClearancePageProps) {
         setTotalPages(data.pagination.totalPages);
         setTotalItems(data.pagination.total);
       } else {
-        console.error('Failed to fetch clearance items');
+        addMessage('error', 'Failed to fetch clearance items', 'Error');
       }
     } catch (error) {
       console.error('Error fetching clearance items:', error);
+      addMessage('error', 'Error fetching clearance items', 'Error');
     } finally {
       setIsLoading(false);
     }
@@ -152,6 +166,130 @@ export default function ClearancePage({ searchParams }: ClearancePageProps) {
     setShowDetailsModal(true);
   };
 
+  const handleSelectItem = (itemId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedItems([...selectedItems, itemId]);
+    } else {
+      setSelectedItems(selectedItems.filter(id => id !== itemId));
+    }
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedItems(filteredItems.map(item => item.id));
+    } else {
+      setSelectedItems([]);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedItems.length === 0) return;
+    
+    setIsDeleting(true);
+    try {
+      const response = await fetch('/api/items/clearance/bulk-delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ itemIds: selectedItems }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        addMessage('success', `${selectedItems.length} clearance records deleted successfully`, 'Success');
+        setSelectedItems([]);
+        fetchClearanceItems();
+      } else {
+        const error = await response.json();
+        addMessage('error', error.error || 'Failed to delete clearance records', 'Error');
+      }
+    } catch (error) {
+      console.error('Error deleting clearance records:', error);
+      addMessage('error', 'An error occurred while deleting clearance records', 'Error');
+    } finally {
+      setIsDeleting(false);
+      setShowBulkDeleteDialog(false);
+    }
+  };
+
+  const handleDeleteSingle = async (itemId: string) => {
+    try {
+      const response = await fetch('/api/items/clearance/bulk-delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ itemIds: [itemId] }),
+      });
+
+      if (response.ok) {
+        addMessage('success', 'Clearance record deleted successfully', 'Success');
+        fetchClearanceItems();
+      } else {
+        const error = await response.json();
+        addMessage('error', error.error || 'Failed to delete clearance record', 'Error');
+      }
+    } catch (error) {
+      console.error('Error deleting clearance record:', error);
+      addMessage('error', 'An error occurred while deleting the clearance record', 'Error');
+    }
+  };
+
+  const handleBulkRevert = async () => {
+    if (selectedItems.length === 0) return;
+    
+    setIsReverting(true);
+    try {
+      const response = await fetch('/api/items/clearance/bulk-revert', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ itemIds: selectedItems }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        addMessage('success', `${selectedItems.length} items reverted from clearance successfully`, 'Success');
+        setSelectedItems([]);
+        fetchClearanceItems();
+      } else {
+        const error = await response.json();
+        addMessage('error', error.error || 'Failed to revert items from clearance', 'Error');
+      }
+    } catch (error) {
+      console.error('Error reverting items from clearance:', error);
+      addMessage('error', 'An error occurred while reverting items from clearance', 'Error');
+    } finally {
+      setIsReverting(false);
+      setShowBulkRevertDialog(false);
+    }
+  };
+
+  const handleRevertSingle = async (itemId: string) => {
+    try {
+      const response = await fetch('/api/items/clearance/bulk-revert', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ itemIds: [itemId] }),
+      });
+
+      if (response.ok) {
+        addMessage('success', 'Item reverted from clearance successfully', 'Success');
+        fetchClearanceItems();
+      } else {
+        const error = await response.json();
+        addMessage('error', error.error || 'Failed to revert item from clearance', 'Error');
+      }
+    } catch (error) {
+      console.error('Error reverting item from clearance:', error);
+      addMessage('error', 'An error occurred while reverting the item from clearance', 'Error');
+    }
+  };
+
   const filteredItems = items.filter(item => {
     return (
       item.productCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -159,36 +297,11 @@ export default function ClearancePage({ searchParams }: ClearancePageProps) {
     );
   });
 
-  const getConditionBadge = (condition: string) => {
-    switch (condition) {
-      case 'excellent':
-        return <Badge variant="default">Excellent</Badge>;
-      case 'good':
-        return <Badge variant="secondary">Good</Badge>;
-      case 'fair':
-        return <Badge variant="outline">Fair</Badge>;
-      case 'poor':
-        return <Badge variant="destructive">Poor</Badge>;
-      default:
-        return <Badge variant="outline">Unknown</Badge>;
-    }
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return <Badge variant="secondary">Pending</Badge>;
-      case 'approved':
-        return <Badge variant="default">Approved</Badge>;
-      case 'completed':
-        return <Badge className="bg-green-500 hover:bg-green-600">Completed</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
-  };
-
   return (
     <div className="space-y-6">
+      {/* Message Container */}
+      <MessageContainer messages={messages} onDismiss={dismissMessage} />
+      
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Inventory Clearance</h1>
@@ -201,6 +314,26 @@ export default function ClearancePage({ searchParams }: ClearancePageProps) {
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
+          {selectedItems.length > 0 && (
+            <>
+              <Button 
+                variant="outline" 
+                onClick={() => setShowBulkRevertDialog(true)}
+                disabled={isReverting || isLoading}
+              >
+                <Undo className="mr-2 h-4 w-4" />
+                Revert Selected ({selectedItems.length})
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={() => setShowBulkDeleteDialog(true)}
+                disabled={isDeleting || isLoading}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete Selected ({selectedItems.length})
+              </Button>
+            </>
+          )}
           {canManageClearance && (
             <Link href="/dashboard/items">
               <Button>
@@ -255,19 +388,32 @@ export default function ClearancePage({ searchParams }: ClearancePageProps) {
                     <Table>
                       <TableHeader>
                         <TableRow>
+                          <TableHead className="w-12">
+                            <Checkbox
+                              checked={selectedItems.length === filteredItems.length && filteredItems.length > 0}
+                              onCheckedChange={handleSelectAll}
+                            />
+                          </TableHead>
                           <TableHead>Item</TableHead>
                           <TableHead>Brand</TableHead>
+                          <TableHead>Division</TableHead>
                           <TableHead>Category</TableHead>
                           <TableHead>Condition</TableHead>
                           <TableHead>Clearance Quantity</TableHead>
                           <TableHead>Latest Clearance</TableHead>
                           <TableHead>Status</TableHead>
-                          {canManageClearance && <TableHead className="w-24">Actions</TableHead>}
+                          {canManageClearance && <TableHead className="w-32">Actions</TableHead>}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {filteredItems.map((item) => (
                           <TableRow key={item.id}>
+                            <TableCell>
+                              <Checkbox
+                                checked={selectedItems.includes(item.id)}
+                                onCheckedChange={(checked) => handleSelectItem(item.id, checked as boolean)}
+                              />
+                            </TableCell>
                             <TableCell>
                               <div>
                                 <div className="font-medium">{item.productCode}</div>
@@ -277,13 +423,20 @@ export default function ClearancePage({ searchParams }: ClearancePageProps) {
                               </div>
                             </TableCell>
                             <TableCell>
-                              <Badge variant="outline">{item.brandCode}</Badge>
+                              <UniversalBadge type="brand" value={item.brandCode} />
                             </TableCell>
                             <TableCell>
-                              <Badge variant="secondary">{item.productCategory}</Badge>
+                              <UniversalBadge type="division" value={item.productDivision} />
                             </TableCell>
                             <TableCell>
-                              {item.stock ? getConditionBadge(item.stock.condition) : 'N/A'}
+                              <UniversalBadge type="category" value={item.productCategory} />
+                            </TableCell>
+                            <TableCell>
+                              {item.stock ? (
+                                <UniversalBadge type="condition" value={item.stock.condition} />
+                              ) : (
+                                'N/A'
+                              )}
                             </TableCell>
                             <TableCell>
                               {item.stock ? item.stock.inClearance : 0}
@@ -303,9 +456,11 @@ export default function ClearancePage({ searchParams }: ClearancePageProps) {
                               )}
                             </TableCell>
                             <TableCell>
-                              {item.clearances && item.clearances.length > 0
-                                ? getStatusBadge(item.clearances[0].status)
-                                : 'N/A'}
+                              {item.clearances && item.clearances.length > 0 ? (
+                                <UniversalBadge type="status" value={item.clearances[0].status} />
+                              ) : (
+                                'N/A'
+                              )}
                             </TableCell>
                             {canManageClearance && (
                               <TableCell>
@@ -317,8 +472,19 @@ export default function ClearancePage({ searchParams }: ClearancePageProps) {
                                   >
                                     <Eye className="h-4 w-4" />
                                   </Button>
-                                  <Button variant="ghost" size="sm">
-                                    <RotateCcw className="h-4 w-4" />
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    onClick={() => handleRevertSingle(item.id)}
+                                  >
+                                    <Undo className="h-4 w-4" />
+                                  </Button>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    onClick={() => handleDeleteSingle(item.id)}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
                                   </Button>
                                 </div>
                               </TableCell>
@@ -367,6 +533,24 @@ export default function ClearancePage({ searchParams }: ClearancePageProps) {
         open={showDetailsModal}
         onOpenChange={setShowDetailsModal}
         item={selectedItem}
+      />
+
+      {/* Bulk Delete Dialog */}
+      <BulkDeleteDialog
+        open={showBulkDeleteDialog}
+        onOpenChange={setShowBulkDeleteDialog}
+        selectedItemsCount={selectedItems.length}
+        onConfirm={handleBulkDelete}
+        isDeleting={isDeleting}
+      />
+
+      {/* Bulk Revert Dialog */}
+      <BulkRevertDialog
+        open={showBulkRevertDialog}
+        onOpenChange={setShowBulkRevertDialog}
+        selectedItemsCount={selectedItems.length}
+        onConfirm={handleBulkRevert}
+        isReverting={isReverting}
       />
     </div>
   );
