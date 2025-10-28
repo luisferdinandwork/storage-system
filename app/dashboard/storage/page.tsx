@@ -55,10 +55,13 @@ import {
   Warehouse,
   ArrowRight,
   Image,
-  CheckSquare
+  CheckSquare,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UniversalBadge } from '@/components/ui/universal-badge';
+import React from 'react';
 
 interface Item {
   id: string;
@@ -152,11 +155,20 @@ export default function StorageManagementPage() {
   const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'all'>('pending');
   const [selectedRequestIds, setSelectedRequestIds] = useState<string[]>([]);
   const [selectAll, setSelectAll] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   useEffect(() => {
     fetchItems();
     fetchItemRequests();
   }, []);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, locationFilter, activeTab]);
 
   const fetchItems = async () => {
     try {
@@ -389,6 +401,61 @@ export default function StorageManagementPage() {
                          activeTab === 'approved' ? approvedRequests : 
                          filteredRequests;
 
+  // Pagination logic
+  const totalPages = Math.ceil(displayRequests.length / itemsPerPage);
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentRequests = displayRequests.slice(indexOfFirstItem, indexOfLastItem);
+
+  // Generate page numbers for pagination controls
+  const generatePageNumbers = () => {
+    const pageNumbers = [];
+    const maxVisiblePages = 5;
+    
+    if (totalPages <= maxVisiblePages) {
+      for (let i = 1; i <= totalPages; i++) {
+        pageNumbers.push(i);
+      }
+    } else {
+      pageNumbers.push(1);
+      
+      let start = Math.max(2, currentPage - Math.floor(maxVisiblePages / 2));
+      let end = Math.min(totalPages - 1, start + maxVisiblePages - 3);
+      
+      if (end === totalPages - 1) {
+        start = Math.max(2, end - maxVisiblePages + 3);
+      }
+      
+      if (start > 2) {
+        pageNumbers.push('...');
+      }
+      
+      for (let i = start; i <= end; i++) {
+        pageNumbers.push(i);
+      }
+      
+      if (end < totalPages - 1) {
+        pageNumbers.push('...');
+      }
+      
+      pageNumbers.push(totalPages);
+    }
+    
+    return pageNumbers;
+  };
+
+  // Handle page change
+  const handlePageChange = (page: number) => {
+    if (page < 1 || page > totalPages) return;
+    setCurrentPage(page);
+  };
+
+  // Handle items per page change
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1); // Reset to first page when changing items per page
+  };
+
   const userRole = session?.user?.role;
   const canManageStorage = userRole === 'storage-master' || userRole === 'storage-master-manager' || userRole === 'superadmin';
 
@@ -553,159 +620,228 @@ export default function StorageManagementPage() {
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
         </div>
       ) : (
-        <div className="border rounded-md overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {activeTab === 'pending' && canManageStorage && (
-                  <TableHead className="w-12">
-                    <Checkbox
-                      checked={selectAll}
-                      onCheckedChange={handleSelectAll}
-                      aria-label="Select all"
-                    />
-                  </TableHead>
-                )}
-                <TableHead>Item</TableHead>
-                <TableHead>Product Code</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Stock</TableHead>
-                <TableHead>Condition</TableHead>
-                <TableHead>Location</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Requested By</TableHead>
-                <TableHead>Requested At</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {displayRequests.map((request) => (
-                <TableRow key={request.id}>
+        <>
+          <div className="border rounded-md overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
                   {activeTab === 'pending' && canManageStorage && (
-                    <TableCell>
+                    <TableHead className="w-12">
                       <Checkbox
-                        checked={selectedRequestIds.includes(request.id)}
-                        onCheckedChange={(checked) => handleSelectRequest(request.id, checked as boolean)}
-                        aria-label={`Select ${request.item.description}`}
+                        checked={selectAll}
+                        onCheckedChange={handleSelectAll}
+                        aria-label="Select all"
                       />
-                    </TableCell>
+                    </TableHead>
                   )}
-                  <TableCell>
-                    <div className="flex items-center space-x-3">
-                      {request.item.images && request.item.images.length > 0 && (
-                          <div className="w-12 h-12 rounded-md overflow-hidden flex-shrink-0">
-                            <img 
-                              src={getPrimaryImage(request.item.images).fileName ? `/uploads/${getPrimaryImage(request.item.images).fileName}` : '/placeholder.jpg'} 
-                              alt={getPrimaryImage(request.item.images).altText || request.item.description}
-                              className="w-full h-full object-cover"
-                            />
+                  <TableHead>Item</TableHead>
+                  <TableHead>Product Code</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Stock</TableHead>
+                  <TableHead>Condition</TableHead>
+                  <TableHead>Location</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Requested By</TableHead>
+                  <TableHead>Requested At</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {currentRequests.map((request) => (
+                  <TableRow key={request.id}>
+                    {activeTab === 'pending' && canManageStorage && (
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedRequestIds.includes(request.id)}
+                          onCheckedChange={(checked) => handleSelectRequest(request.id, checked as boolean)}
+                          aria-label={`Select ${request.item.description}`}
+                        />
+                      </TableCell>
+                    )}
+                    <TableCell>
+                      <div className="flex items-center space-x-3">
+                        {request.item.images && request.item.images.length > 0 && (
+                            <div className="w-12 h-12 rounded-md overflow-hidden flex-shrink-0">
+                              <img 
+                                src={getPrimaryImage(request.item.images).fileName ? `/uploads/${getPrimaryImage(request.item.images).fileName}` : '/placeholder.jpg'} 
+                                alt={getPrimaryImage(request.item.images).altText || request.item.description}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          )}
+                        <div className="flex flex-col min-w-0">
+                          <div className="font-medium truncate">{request.item.productCode}</div>
+                          <div className="flex items-center space-x-2 text-sm text-gray-500">
+                              {request.item.description}
                           </div>
-                        )}
-                      <div className="flex flex-col min-w-0">
-                        <div className="font-medium truncate">{request.item.productCode}</div>
-                        <div className="flex items-center space-x-2 text-sm text-gray-500">
-                            {request.item.description}
                         </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="font-mono text-sm">
-                    <UniversalBadge type="brand" value={request.item.brandCode} />
-                  </TableCell>
-                  <TableCell className="font-mono text-sm">
-                    <UniversalBadge type="division" value={request.item.productDivision} />
-                  </TableCell>
-                  <TableCell>
-                    <UniversalBadge type="category" value={request.item.productCategory} />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col items-center">
-                      <span className="font-medium">{request.item.totalStock}</span>
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">
+                      <UniversalBadge type="brand" value={request.item.brandCode} />
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">
+                      <UniversalBadge type="division" value={request.item.productDivision} />
+                    </TableCell>
+                    <TableCell>
+                      <UniversalBadge type="category" value={request.item.productCategory} />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col items-center">
+                        <span className="font-medium">{request.item.totalStock}</span>
+                        {request.item.stock && (
+                          <div className="text-xs text-gray-500">
+                            In Storage: {request.item.stock.inStorage}
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
                       {request.item.stock && (
-                        <div className="text-xs text-gray-500">
-                          In Storage: {request.item.stock.inStorage}
-                        </div>
+                        <UniversalBadge type="condition" value={request.item.stock.condition} />
                       )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {request.item.stock && (
-                      <UniversalBadge type="condition" value={request.item.stock.condition} />
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {request.item.stock && (
-                      <UniversalBadge type="location" value={request.item.stock.location || ''} />
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <UniversalBadge type="status" value={request.status} />
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-sm">
-                      <div>{request.requestedByUser?.name || 'Unknown'}</div>
-                      <div className="text-gray-500 capitalize">{request.requestedByUser?.role?.replace('-', ' ') || 'Unknown'}</div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-sm text-gray-500">
-                    {new Date(request.requestedAt).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <span className="sr-only">Open menu</span>
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem onClick={() => handleViewDetails(request.item)}>
-                          <Eye className="mr-2 h-4 w-4" />
-                          View Details
-                        </DropdownMenuItem>
-                        
-                        {request.item.images && request.item.images.length > 0 && (
-                          <DropdownMenuItem>
-                            <Image className="mr-2 h-4 w-4" />
-                            View Images
+                    </TableCell>
+                    <TableCell>
+                      {request.item.stock && (
+                        <UniversalBadge type="location" value={request.item.stock.location || ''} />
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <UniversalBadge type="status" value={request.status} />
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm">
+                        <div>{request.requestedByUser?.name || 'Unknown'}</div>
+                        <div className="text-gray-500 capitalize">{request.requestedByUser?.role?.replace('-', ' ') || 'Unknown'}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-sm text-gray-500">
+                      {new Date(request.requestedAt).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" className="h-8 w-8 p-0">
+                            <span className="sr-only">Open menu</span>
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                          <DropdownMenuItem onClick={() => handleViewDetails(request.item)}>
+                            <Eye className="mr-2 h-4 w-4" />
+                            View Details
                           </DropdownMenuItem>
-                        )}
-                        
-                        {request.status === 'pending' && canManageStorage && (
-                          <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem 
-                              onClick={() => handleOpenApproveModal(request)}
-                              className="text-green-600"
-                            >
-                              <CheckCircle className="mr-2 h-4 w-4" />
-                              Approve & Store
+                          
+                          {request.item.images && request.item.images.length > 0 && (
+                            <DropdownMenuItem>
+                              <Image className="mr-2 h-4 w-4" />
+                              View Images
                             </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              onClick={() => handleOpenRejectModal(request)}
-                              className="text-red-600"
-                            >
-                              <XCircle className="mr-2 h-4 w-4" />
-                              Reject
+                          )}
+                          
+                          {request.status === 'pending' && canManageStorage && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem 
+                                onClick={() => handleOpenApproveModal(request)}
+                                className="text-green-600"
+                              >
+                                <CheckCircle className="mr-2 h-4 w-4" />
+                                Approve & Store
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                onClick={() => handleOpenRejectModal(request)}
+                                className="text-red-600"
+                              >
+                                <XCircle className="mr-2 h-4 w-4" />
+                                Reject
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                          
+                          {request.status === 'approved' && (
+                            <DropdownMenuItem className="text-gray-600">
+                              <MapPin className="mr-2 h-4 w-4" />
+                              Location: {request.item.stock?.location || 'Not Assigned'}
                             </DropdownMenuItem>
-                          </>
-                        )}
-                        
-                        {request.status === 'approved' && (
-                          <DropdownMenuItem className="text-gray-600">
-                            <MapPin className="mr-2 h-4 w-4" />
-                            Location: {request.item.stock?.location || 'Not Assigned'}
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Pagination Controls */}
+          {displayRequests.length > 0 && (
+            <div className="mt-4 flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-700">
+                  Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, displayRequests.length)} of {displayRequests.length} results
+                </span>
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm text-gray-700">Items per page:</span>
+                  <Select
+                    value={itemsPerPage.toString()}
+                    onValueChange={(value) => handleItemsPerPageChange(Number(value))}
+                  >
+                    <SelectTrigger className="w-16 h-8">
+                      <SelectValue placeholder={itemsPerPage.toString()} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5</SelectItem>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="20">20</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              <div className="flex items-center space-x-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="h-8 w-8 p-0"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                
+                {generatePageNumbers().map((page, index) => (
+                  <React.Fragment key={index}>
+                    {page === '...' ? (
+                      <span className="px-3 py-1 text-sm">...</span>
+                    ) : (
+                      <Button
+                        variant={currentPage === page ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => handlePageChange(Number(page))}
+                        className="h-8 w-8 p-0"
+                      >
+                        {page}
+                      </Button>
+                    )}
+                  </React.Fragment>
+                ))}
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="h-8 w-8 p-0"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {!isLoading && displayRequests.length === 0 && (
