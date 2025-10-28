@@ -1,7 +1,7 @@
 // components/dashboard/sidebar.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -40,12 +40,20 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { usePendingItemRequestsCount, usePendingBorrowRequestsCount, useOverdueBorrowRequestsCount } from '@/components/notifications/pending-approval-notification';
+
+interface NavigationItem {
+  name: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  roles: string[];
+}
 
 interface SidebarProps {
   userRole: string;
 }
 
-const navigation = [
+const navigation: NavigationItem[] = [
   // Dashboard - accessible to all roles
   { 
     name: 'Dashboard', 
@@ -67,7 +75,7 @@ const navigation = [
     name: 'Warehousing', 
     href: '/dashboard/storage', 
     icon: Warehouse, 
-    roles: ['superadmin', 'storage-master', 'storage-manager'] 
+    roles: ['superadmin', 'storage-master', 'storage-manager']
   },
   { 
     name: 'Inventory Locations', 
@@ -144,6 +152,8 @@ export function Sidebar({ userRole }: SidebarProps) {
   const { data: session } = useSession();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const pendingItemRequestsCount = usePendingItemRequestsCount(userRole);
+  const pendingBorrowRequestsCount = usePendingBorrowRequestsCount(userRole);
 
   const filteredNavigation = navigation.filter(item => 
     item.roles.includes(userRole)
@@ -172,13 +182,6 @@ export function Sidebar({ userRole }: SidebarProps) {
       ),
       show: true
     },
-    // {
-    //   title: 'Inventory',
-    //   items: filteredNavigation.filter(item => 
-    //     ['Inventory Clearance', 'Clearance History'].includes(item.name)
-    //   ),
-    //   show: userRole === 'storage-master' || userRole === 'storage-manager' || userRole === 'superadmin'
-    // },
     {
       title: 'Administration',
       items: filteredNavigation.filter(item => 
@@ -257,10 +260,25 @@ export function Sidebar({ userRole }: SidebarProps) {
                         const isActive = pathname === item.href || 
                                        (item.href !== '/dashboard' && pathname.startsWith(item.href));
                         
+                        // Show pending count badges for Warehousing and Pending List
+                        const warehouseCount = item.name === 'Warehousing' ? pendingItemRequestsCount : 0;
+                        const borrowRequestCount = item.name === 'Pending List' ? pendingBorrowRequestsCount : 0;
+                        const badgeCount = warehouseCount > 0 ? warehouseCount : borrowRequestCount;
+                        const showBadge = badgeCount > 0;
+
                         const linkContent = (
                           <>
                             <item.icon className={cn('h-5 w-5', !isCollapsed && 'mr-3')} />
-                            {!isCollapsed && <span>{item.name}</span>}
+                            {!isCollapsed && (
+                              <div className="flex items-center justify-between flex-1">
+                                <span>{item.name}</span>
+                                {showBadge && (
+                                  <span className="inline-flex items-center justify-center px-2 py-1 text-xs font-bold text-white bg-red-600 rounded-full">
+                                    {badgeCount > 99 ? '99+' : badgeCount}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </>
                         );
 
@@ -269,18 +287,25 @@ export function Sidebar({ userRole }: SidebarProps) {
                             {isCollapsed ? (
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Link
-                                    href={item.href}
-                                    onClick={() => setIsMobileOpen(false)}
-                                    className={cn(
-                                      'flex items-center justify-center px-3 py-2 text-sm font-medium rounded-md mb-1 transition-colors w-full',
-                                      isActive
-                                        ? 'bg-primary-100 text-primary-700'
-                                        : 'text-gray-700 hover:bg-gray-100'
+                                  <div className="relative">
+                                    <Link
+                                      href={item.href}
+                                      onClick={() => setIsMobileOpen(false)}
+                                      className={cn(
+                                        'flex items-center justify-center px-3 py-2 text-sm font-medium rounded-md mb-1 transition-colors w-full',
+                                        isActive
+                                          ? 'bg-primary-100 text-primary-700'
+                                          : 'text-gray-700 hover:bg-gray-100'
+                                      )}
+                                    >
+                                      <item.icon className="h-5 w-5" />
+                                    </Link>
+                                    {showBadge && (
+                                      <span className="absolute -top-1 -right-1 inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-red-600 rounded-full">
+                                        {badgeCount > 99 ? '99+' : badgeCount}
+                                      </span>
                                     )}
-                                  >
-                                    <item.icon className="h-5 w-5" />
-                                  </Link>
+                                  </div>
                                 </TooltipTrigger>
                                 <TooltipContent side="right">
                                   <p>{item.name}</p>
@@ -291,7 +316,7 @@ export function Sidebar({ userRole }: SidebarProps) {
                                 href={item.href}
                                 onClick={() => setIsMobileOpen(false)}
                                 className={cn(
-                                  'flex items-center px-3 py-2 text-sm font-medium rounded-md mb-1 transition-colors',
+                                  'flex items-center px-3 py-2 text-sm font-medium rounded-md mb-1 transition-colors justify-between relative',
                                   isActive
                                     ? 'bg-primary-100 text-primary-700'
                                     : 'text-gray-700 hover:bg-gray-100'
