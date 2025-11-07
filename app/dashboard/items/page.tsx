@@ -1,11 +1,10 @@
-// app/dashboard/items/page.tsx
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Package, Plus, Search, Filter, Columns, Upload, Download, Trash2, Archive } from 'lucide-react';
+import { Package, Plus, Search, Filter, Columns, Upload, Download, Trash2, Archive, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AddItemModal } from '@/components/items/add-item-modal';
 import { MessageContainer } from '@/components/ui/message';
@@ -14,7 +13,17 @@ import { ItemsTable } from '@/components/items/items-table';
 import { ColumnSelector } from '@/components/items/column-selector';
 import { BulkDeleteDialog } from '@/components/items/bulk-delete-dialog';
 import { BulkClearanceDialog, BulkClearanceItem } from '@/components/items/bulk-clearance-dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuLabel, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent
+} from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useExportItems } from '@/hooks/use-export-items';
 
@@ -339,108 +348,131 @@ export default function ItemsPage() {
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-gray-900">Items</h1>
         <div className="flex space-x-2">
-          <Button 
-            variant="outline"
-            onClick={() => setShowColumnSelector(true)}
-          >
-            <Columns className="mr-2 h-4 w-4" />
-            Columns
-          </Button>
-          
-          {/* Export All Button */}
+         
+          {/* Actions Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" disabled={isExporting}>
-                <Download className="mr-2 h-4 w-4" />
-                Export All
+              <Button>
+                Actions
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Export Format</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => handleExportAll('csv')} disabled={isExporting}>
-                Export All as CSV
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExportAll('excel')} disabled={isExporting}>
-                Export All as Excel
-              </DropdownMenuItem>
+            <DropdownMenuContent align="end" className="w-56">
+              
+              {/* Export All Submenu */}
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <Download className="mr-2 h-4 w-4" />
+                  Export All
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem onClick={() => handleExportAll('csv')} disabled={isExporting}>
+                    Export All as CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExportAll('excel')} disabled={isExporting}>
+                    Export All as Excel
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              
+              {/* Export Selected Submenu */}
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger className={cn(
+                  selectedItems.length === 0 || isExporting ? "opacity-50 cursor-not-allowed" : ""
+                )}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Export Selected ({selectedItems.length})
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem 
+                    onClick={() => {
+                      if (selectedItems.length > 0 && !isExporting) {
+                        handleExportSelected('csv');
+                      }
+                    }} 
+                    className={cn(
+                      selectedItems.length === 0 || isExporting ? "opacity-50 cursor-not-allowed" : ""
+                    )}
+                  >
+                    Export Selected as CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => {
+                      if (selectedItems.length > 0 && !isExporting) {
+                        handleExportSelected('excel');
+                      }
+                    }} 
+                    className={cn(
+                      selectedItems.length === 0 || isExporting ? "opacity-50 cursor-not-allowed" : ""
+                    )}
+                  >
+                    Export Selected as Excel
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              
+              {/* Move to Clearance */}
+              {canClearance && (
+                <DropdownMenuItem 
+                  disabled={selectedItems.length === 0 || isBulkClearing}
+                  onClick={() => setShowBulkClearanceDialog(true)}
+                >
+                  <Archive className="mr-2 h-4 w-4" />
+                  Move to Clearance ({selectedItems.length})
+                </DropdownMenuItem>
+              )}
+              
+              {/* Delete Selected */}
+              {canDeleteItem && (
+                <DropdownMenuItem 
+                  disabled={selectedItems.length === 0 || isBulkDeleting}
+                  onClick={() => setShowBulkDeleteDialog(true)}
+                  className="text-red-600 hover:text-red-700"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete Selected ({selectedItems.length})
+                </DropdownMenuItem>
+              )}
+              
+              {/* Import Submenu */}
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Import
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem onClick={() => handleDownloadTemplate('csv')}>
+                    Download CSV Template
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleDownloadTemplate('excel')}>
+                    Download Excel Template
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => fileInputRef.current?.click()} className="bg-primary-100 text-primary-500 hover:bg-primary-200">
+                    Import from File
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              
+              {/* Add Item */}
             </DropdownMenuContent>
           </DropdownMenu>
-          
-          {/* Export Selected Button */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" disabled={selectedItems.length === 0 || isExporting}>
-                <Download className="mr-2 h-4 w-4" />
-                Export Selected ({selectedItems.length})
+               {/* Columns */}
+              <Button onClick={() => setShowColumnSelector(true)}
+                className="bg-primary-100 text-primary-500 hover:bg-primary-200">
+                <Columns className="mr-2 h-4 w-4" />
+                Columns
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Export Format</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => handleExportSelected('csv')} disabled={isExporting}>
-                Export Selected as CSV
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExportSelected('excel')} disabled={isExporting}>
-                Export Selected as Excel
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          
-          {/* Bulk Clearance Button - Only for SuperAdmin and ItemMaster */}
-          {canClearance && (
-            <Button 
-              variant="outline" 
-              disabled={selectedItems.length === 0 || isBulkClearing}
-              onClick={() => setShowBulkClearanceDialog(true)}
-            >
-              <Archive className="mr-2 h-4 w-4" />
-              Move to Clearance ({selectedItems.length})
-            </Button>
-          )}
-          
-          {/* Bulk Delete Button - Only for SuperAdmin */}
-          {canDeleteItem && (
-            <Button 
-              variant="outline" 
-              disabled={selectedItems.length === 0 || isBulkDeleting}
-              onClick={() => setShowBulkDeleteDialog(true)}
-              className="text-red-600 hover:text-red-700"
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete Selected ({selectedItems.length})
-            </Button>
-          )}
-          
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline">
-                <Upload className="mr-2 h-4 w-4" />
-                Import
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Import Options</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => handleDownloadTemplate('csv')}>
-                Download CSV Template
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleDownloadTemplate('excel')}>
-                Download Excel Template
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
-                Import from File
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          
-          {canAddItem && (
-            <Button 
-              onClick={() => setShowAddModal(true)} 
-              className="bg-primary-500 hover:bg-primary-600"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add Item
-            </Button>
-          )}
+              {canAddItem && (
+                <>
+                  <Button 
+                    onClick={() => setShowAddModal(true)} 
+                    className="bg-primary-100 text-primary-500 hover:bg-primary-200"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Item
+                  </Button>
+                </>
+              )}
         </div>
       </div>
 

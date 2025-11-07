@@ -182,16 +182,16 @@ export async function POST(request: NextRequest) {
         }
 
         // Validate location if provided
-        const validLocations = ['Storage 1', 'Storage 2', 'Storage 3'];
-        if (location && location !== '' && !validLocations.includes(location)) {
-          results.failed++;
-          results.errors.push({
-            row: i + 1,
-            productCode,
-            error: `Location must be one of: ${validLocations.join(', ')}, or empty`
-          });
-          continue;
-        }
+        // const validLocations = ['Storage 1', 'Storage 2', 'Storage 3'];
+        // if (location && location !== '' && !validLocations.includes(location)) {
+        //   results.failed++;
+        //   results.errors.push({
+        //     row: i + 1,
+        //     productCode,
+        //     error: `Location must be one of: ${validLocations.join(', ')}, or empty`
+        //   });
+        //   continue;
+        // }
 
         // Parse product code to extract auto-generated fields
         const parsed = parseProductCode(productCode);

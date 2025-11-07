@@ -30,7 +30,6 @@ export async function GET(request: NextRequest) {
       'Unit of Measure',
       'Condition',
       'Condition Notes',
-      'Location'
     ];
 
     // Example data rows
@@ -44,7 +43,6 @@ export async function GET(request: NextRequest) {
         'PRS',
         'excellent',
         'Brand new in box',
-        'Storage 1'
       ],
       [
         'SPE110100002',
@@ -55,7 +53,6 @@ export async function GET(request: NextRequest) {
         'PRS',
         'good',
         'Minor scuff marks on sole',
-        'Storage 2'
       ],
       [
         'PIE210200003',
@@ -66,7 +63,6 @@ export async function GET(request: NextRequest) {
         'PRS',
         'good',
         'Display model with slight wear',
-        'Storage 3'
       ],
       [
         'SPE120000004',
@@ -77,7 +73,6 @@ export async function GET(request: NextRequest) {
         'PCS',
         'excellent',
         '',
-        ''
       ]
     ];
 
