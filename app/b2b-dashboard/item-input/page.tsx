@@ -3,36 +3,37 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { FaSearch, FaPlus, FaTrash, FaArrowRight, FaBoxOpen, FaArrowLeft, FaFileExcel, FaCheckCircle, FaExclamationTriangle } from 'react-icons/fa';
-import { sampleB2BItems, B2BItem } from '@/data/b2b-item-data';
+import { FaPlus, FaTrash, FaArrowRight, FaBoxOpen, FaArrowLeft, FaFileExcel, FaCheckCircle, FaExclamationTriangle } from 'react-icons/fa';
 import * as XLSX from 'xlsx';
+
+interface SKUItem {
+  sku: string;
+}
 
 export default function ItemInputPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filteredItems, setFilteredItems] = useState<B2BItem[]>([]);
-  const [selectedItems, setSelectedItems] = useState<B2BItem[]>([]);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [skuInput, setSkuInput] = useState('');
+  const [selectedSKUs, setSelectedSKUs] = useState<SKUItem[]>([]);
   const [importStatus, setImportStatus] = useState<{
     type: 'idle' | 'success' | 'error' | 'processing';
     message: string;
     details?: string[];
   }>({ type: 'idle', message: '' });
 
-  // Load selected items from localStorage on mount
+  // Load selected SKUs from localStorage on mount
   useEffect(() => {
-    const storedItems = localStorage.getItem('b2bSelectedItems');
-    if (storedItems) {
-      setSelectedItems(JSON.parse(storedItems));
+    const storedSKUs = localStorage.getItem('b2bSelectedSKUs');
+    if (storedSKUs) {
+      setSelectedSKUs(JSON.parse(storedSKUs));
     }
   }, []);
 
-  // Save selected items to localStorage whenever they change
+  // Save selected SKUs to localStorage whenever they change
   useEffect(() => {
-    localStorage.setItem('b2bSelectedItems', JSON.stringify(selectedItems));
-  }, [selectedItems]);
+    localStorage.setItem('b2bSelectedSKUs', JSON.stringify(selectedSKUs));
+  }, [selectedSKUs]);
 
   // Redirect to signin if not authenticated
   useEffect(() => {
@@ -42,36 +43,37 @@ export default function ItemInputPage() {
     }
   }, [session, status, router]);
 
-  // Filter items based on search term
-  useEffect(() => {
-    if (searchTerm.trim() === '') {
-      setFilteredItems([]);
-      setIsDropdownOpen(false);
+  const handleAddSKU = () => {
+    const sku = skuInput.trim();
+    if (!sku) {
+      setImportStatus({
+        type: 'error',
+        message: 'SKU cannot be empty',
+      });
       return;
     }
 
-    const filtered = sampleB2BItems.filter(item =>
-      item.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.brandName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.divisionName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.categoryName.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-
-    setFilteredItems(filtered);
-    setIsDropdownOpen(true);
-  }, [searchTerm]);
-
-  const handleAddItem = (item: B2BItem) => {
-    // Check if item is already selected
-    if (!selectedItems.some(selected => selected.sku === item.sku)) {
-      setSelectedItems([...selectedItems, item]);
+    // Check if SKU already exists
+    if (selectedSKUs.some(item => item.sku.toLowerCase() === sku.toLowerCase())) {
+      setImportStatus({
+        type: 'error',
+        message: 'SKU already exists',
+        details: [`SKU ${sku} is already in your list`]
+      });
+      return;
     }
-    setSearchTerm('');
-    setIsDropdownOpen(false);
+
+    // Add to selected SKUs
+    setSelectedSKUs([...selectedSKUs, { sku }]);
+    setSkuInput('');
+    setImportStatus({
+      type: 'success',
+      message: `SKU ${sku} added successfully`
+    });
   };
 
-  const handleRemoveItem = (sku: string) => {
-    setSelectedItems(selectedItems.filter(item => item.sku !== sku));
+  const handleRemoveSKU = (sku: string) => {
+    setSelectedSKUs(selectedSKUs.filter(item => item.sku !== sku));
   };
 
   const handleContinue = () => {
@@ -80,10 +82,6 @@ export default function ItemInputPage() {
 
   const handleBack = () => {
     router.push('/menu-selection');
-  };
-
-  const getTotalVariants = () => {
-    return selectedItems.reduce((total, item) => total + item.variants.length, 0);
   };
 
   // Handle file input click
@@ -137,7 +135,7 @@ export default function ItemInputPage() {
           return;
         }
 
-        const skus = jsonData.map(row => row[skuColumn]).filter(Boolean);
+        const skus = jsonData.map(row => String(row[skuColumn]).trim()).filter(Boolean);
         
         if (skus.length === 0) {
           setImportStatus({
@@ -147,46 +145,30 @@ export default function ItemInputPage() {
           return;
         }
 
-        // Find matching items
-        const foundItems: B2BItem[] = [];
-        const notFoundSkus: string[] = [];
+        // Remove duplicates and check against existing
+        const uniqueSKUs = Array.from(new Set(skus.map(sku => sku.toLowerCase())));
+        const existingSKUs = selectedSKUs.map(item => item.sku.toLowerCase());
+        const newSKUs = uniqueSKUs.filter(sku => !existingSKUs.includes(sku));
         
-        skus.forEach(sku => {
-          const item = sampleB2BItems.find(item => 
-            item.sku.toLowerCase() === String(sku).toLowerCase()
-          );
-          
-          if (item && !selectedItems.some(selected => selected.sku === item.sku)) {
-            foundItems.push(item);
-          } else if (!item) {
-            notFoundSkus.push(String(sku));
-          }
-        });
-
-        // Add found items to selected items
-        if (foundItems.length > 0) {
-          setSelectedItems(prev => [...prev, ...foundItems]);
-        }
-
-        // Set status message
-        if (foundItems.length > 0 && notFoundSkus.length === 0) {
-          setImportStatus({
-            type: 'success',
-            message: `Successfully imported ${foundItems.length} item(s)`,
-          });
-        } else if (foundItems.length > 0 && notFoundSkus.length > 0) {
-          setImportStatus({
-            type: 'success',
-            message: `Imported ${foundItems.length} item(s). ${notFoundSkus.length} SKU(s) not found.`,
-            details: notFoundSkus.slice(0, 10) // Show first 10 not found SKUs
-          });
-        } else {
+        if (newSKUs.length === 0) {
           setImportStatus({
             type: 'error',
-            message: 'No matching items found',
-            details: notFoundSkus.slice(0, 10) // Show first 10 not found SKUs
+            message: 'All SKUs already exist in your list',
           });
+          return;
         }
+
+        // Add new SKUs
+        const newItems = newSKUs.map(sku => ({ sku: sku.toUpperCase() }));
+        setSelectedSKUs(prev => [...prev, ...newItems]);
+        
+        setImportStatus({
+          type: 'success',
+          message: `Successfully imported ${newSKUs.length} SKU(s)`,
+          details: newSKUs.length < skus.length 
+            ? [`Skipped ${skus.length - newSKUs.length} duplicate SKU(s)`] 
+            : undefined
+        });
 
         // Reset file input
         if (fileInputRef.current) {
@@ -245,7 +227,7 @@ export default function ItemInputPage() {
             
             <button
               onClick={handleContinue}
-              disabled={selectedItems.length === 0}
+              disabled={selectedSKUs.length === 0}
               className="flex items-center px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-lg hover:shadow-lg hover:scale-105 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
               Continue to Stock Input
@@ -255,13 +237,13 @@ export default function ItemInputPage() {
         </div>
 
         {/* Stats Cards */}
-        {selectedItems.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        {selectedSKUs.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-primary-500">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-500 text-sm font-medium">Selected SKUs</p>
-                  <p className="text-3xl font-bold text-gray-900 mt-1">{selectedItems.length}</p>
+                  <p className="text-3xl font-bold text-gray-900 mt-1">{selectedSKUs.length}</p>
                 </div>
                 <div className="bg-primary-100 p-3 rounded-full">
                   <FaBoxOpen className="text-primary-600 text-2xl" />
@@ -272,23 +254,11 @@ export default function ItemInputPage() {
             <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-emerald-500">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-gray-500 text-sm font-medium">Total Variants</p>
-                  <p className="text-3xl font-bold text-gray-900 mt-1">{getTotalVariants()}</p>
+                  <p className="text-gray-500 text-sm font-medium">Available Items</p>
+                  <p className="text-3xl font-bold text-gray-900 mt-1">1000+</p>
                 </div>
                 <div className="bg-emerald-100 p-3 rounded-full">
                   <FaBoxOpen className="text-emerald-600 text-2xl" />
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-violet-500">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-500 text-sm font-medium">Available Items</p>
-                  <p className="text-3xl font-bold text-gray-900 mt-1">{sampleB2BItems.length}</p>
-                </div>
-                <div className="bg-violet-100 p-3 rounded-full">
-                  <FaSearch className="text-violet-600 text-2xl" />
                 </div>
               </div>
             </div>
@@ -327,74 +297,48 @@ export default function ItemInputPage() {
           </div>
         )}
 
-        {/* Search Section */}
+        {/* Add SKU Form */}
         <div className="bg-white rounded-xl shadow-md mb-8">
           <div className="bg-gradient-to-r from-primary-500 to-primary-600 px-6 py-4">
             <h2 className="text-xl font-semibold text-white flex items-center">
-              <FaSearch className="mr-2" /> Search Items
+              <FaPlus className="mr-2" /> Add SKU
             </h2>
           </div>
           
           <div className="p-6">
             <div className="flex flex-col md:flex-row gap-4 mb-4">
               <div className="relative flex-1">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <FaSearch className="text-gray-400" />
-                </div>
                 <input
                   type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search by SKU, brand, division or category..."
-                  className="w-full pl-12 pr-4 py-4 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
+                  value={skuInput}
+                  onChange={(e) => setSkuInput(e.target.value)}
+                  placeholder="Enter SKU"
+                  className="w-full px-4 py-4 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
+                  onKeyPress={(e) => e.key === 'Enter' && handleAddSKU()}
                 />
-                
-                {isDropdownOpen && (
-                  <div className="absolute z-10 w-full mt-2 bg-white border-2 border-gray-200 rounded-lg shadow-xl max-h-80 overflow-y-auto">
-                    {filteredItems.length > 0 ? (
-                      filteredItems.map((item) => (
-                        <div
-                          key={item.sku}
-                          className="p-4 hover:bg-primary-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition-colors"
-                          onClick={() => handleAddItem(item)}
-                        >
-                          <div className="flex justify-between items-center">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="bg-primary-100 text-primary-700 px-3 py-1 rounded text-xs font-mono font-semibold">
-                                  {item.sku}
-                                </span>
-                                <span className="text-gray-400 text-xs">
-                                  {item.variants.length} variants
-                                </span>
-                              </div>
-                              <div className="text-sm text-gray-600">
-                                <span className="font-medium">{item.brandName}</span>
-                                <span className="mx-2">•</span>
-                                <span>{item.divisionName}</span>
-                                <span className="mx-2">•</span>
-                                <span>{item.categoryName}</span>
-                              </div>
-                            </div>
-                            <div className="ml-4 bg-primary-500 text-white p-2 rounded-full">
-                              <FaPlus />
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="p-8 text-center">
-                        <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3">
-                          <FaSearch className="text-gray-400 text-2xl" />
-                        </div>
-                        <p className="text-gray-500 font-medium">No items found</p>
-                        <p className="text-gray-400 text-sm mt-1">Try a different search term</p>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
               
+              <button
+                onClick={handleAddSKU}
+                className="flex items-center justify-center px-6 py-4 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-lg hover:shadow-lg hover:scale-105 active:scale-95 transition-all duration-200 whitespace-nowrap"
+              >
+                <FaPlus className="mr-2" />
+                Add SKU
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Import Section */}
+        <div className="bg-white rounded-xl shadow-md mb-8">
+          <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 px-6 py-4">
+            <h2 className="text-xl font-semibold text-white flex items-center">
+              <FaFileExcel className="mr-2" /> Import from Excel
+            </h2>
+          </div>
+          
+          <div className="p-6">
+            <div className="flex flex-col md:flex-row gap-4 mb-4">
               <button
                 onClick={handleImportClick}
                 className="flex items-center justify-center px-6 py-4 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-lg hover:shadow-lg hover:scale-105 active:scale-95 transition-all duration-200 whitespace-nowrap"
@@ -415,35 +359,35 @@ export default function ItemInputPage() {
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <p className="text-blue-800 text-sm">
                 <span className="font-medium">Excel Import Instructions:</span> Upload an Excel file with a column containing SKU values. 
-                The column should be named "SKU", "Item", or "Product". Only SKUs that exist in our system will be added.
+                The column should be named "SKU", "Item", or "Product". Duplicate SKUs will be skipped.
               </p>
             </div>
           </div>
         </div>
 
-        {/* Selected Items Section */}
+        {/* Selected SKUs Section */}
         <div className="bg-white rounded-xl shadow-md overflow-hidden">
           <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 px-6 py-4">
             <h2 className="text-xl font-semibold text-white flex items-center justify-between">
               <span className="flex items-center">
-                <FaBoxOpen className="mr-2" /> Selected Items
+                <FaBoxOpen className="mr-2" /> Selected SKUs
               </span>
-              {selectedItems.length > 0 && (
+              {selectedSKUs.length > 0 && (
                 <span className="bg-white text-emerald-600 px-3 py-1 rounded-full text-sm font-bold">
-                  {selectedItems.length} items
+                  {selectedSKUs.length} SKUs
                 </span>
               )}
             </h2>
           </div>
           
           <div className="p-6">
-            {selectedItems.length === 0 ? (
+            {selectedSKUs.length === 0 ? (
               <div className="text-center py-16">
                 <div className="bg-gray-100 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-4">
                   <FaBoxOpen className="text-gray-400 text-4xl" />
                 </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">No items selected yet</h3>
-                <p className="text-gray-500 mb-6">Search and add items using the search bar above or import from Excel</p>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">No SKUs selected yet</h3>
+                <p className="text-gray-500 mb-6">Add SKUs using the form above or import from Excel</p>
               </div>
             ) : (
               <>
@@ -452,44 +396,22 @@ export default function ItemInputPage() {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">SKU</th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Brand</th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Division</th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Category</th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Sizes Available</th>
                         <th className="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {selectedItems.map((item) => (
+                      {selectedSKUs.map((item) => (
                         <tr key={item.sku} className="hover:bg-gray-50 transition-colors">
                           <td className="px-6 py-4 whitespace-nowrap text-sm">
                             <div className="bg-primary-100 text-primary-700 px-3 py-1 rounded text-xs font-mono font-semibold inline-block">
                               {item.sku}
                             </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {item.brandName}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            {item.divisionName}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            {item.categoryName}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-600">
-                            <div className="flex flex-wrap gap-1">
-                              {item.variants.map((variant, index) => (
-                                <span key={index} className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs font-medium">
-                                  {variant.size}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
                           <td className="px-6 py-4 whitespace-nowrap text-center">
                             <button
-                              onClick={() => handleRemoveItem(item.sku)}
+                              onClick={() => handleRemoveSKU(item.sku)}
                               className="inline-flex items-center justify-center w-10 h-10 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Remove item"
+                              title="Remove SKU"
                             >
                               <FaTrash />
                             </button>
