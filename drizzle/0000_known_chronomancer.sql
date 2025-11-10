@@ -95,6 +95,7 @@ CREATE TABLE "item_stock" (
 	"in_clearance" integer DEFAULT 0 NOT NULL,
 	"seeded" integer DEFAULT 0 NOT NULL,
 	"location" text,
+	"rack" text,
 	"condition" text DEFAULT 'good' NOT NULL,
 	"condition_notes" text,
 	"created_at" timestamp DEFAULT now() NOT NULL,
@@ -119,6 +120,20 @@ CREATE TABLE "items" (
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "items_product_code_unique" UNIQUE("product_code")
+);
+--> statement-breakpoint
+CREATE TABLE "product_code_mappings" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"brand_code" text NOT NULL,
+	"brand_name" text NOT NULL,
+	"product_division" text NOT NULL,
+	"division_name" text NOT NULL,
+	"product_category" text NOT NULL,
+	"category_name" text NOT NULL,
+	"range_start" text NOT NULL,
+	"range_end" text NOT NULL,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "stock_movements" (
