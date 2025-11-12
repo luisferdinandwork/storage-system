@@ -212,14 +212,16 @@ async function seed() {
         period: '24Q1',
         season: 'SS',
         unitOfMeasure: 'PRS' as const,
-        status: 'pending_approval' as const,
+        status: 'approved' as const,
+        approvedBy: storageMaster1.id,
+        approvedAt: new Date(),
         createdBy: itemMaster1.id,
         stockData: {
           inStorage: 35,
           onBorrow: 0,
           inClearance: 0,
           seeded: 0,
-          boxId: box1A.id, // Using box reference instead of location enum
+          boxId: box1A.id,
           condition: 'excellent' as const,
           conditionNotes: 'Brand new in box',
         }

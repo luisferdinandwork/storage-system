@@ -29,7 +29,8 @@ export async function POST(request: NextRequest) {
     
     // If specific item IDs are provided, filter by those
     if (itemIds && itemIds.length > 0) {
-      conditions.push(inArray(items.id, itemIds));
+      // Use productCode instead of id
+      conditions.push(inArray(items.productCode, itemIds));
     }
     
     if (statusFilter && statusFilter !== 'all') {
@@ -43,13 +44,11 @@ export async function POST(request: NextRequest) {
     // Fetch items with creator information
     const itemsData = await db
       .select({
-        id: items.id,
-        productCode: items.productCode,
+        productCode: items.productCode, // Changed from id to productCode
         description: items.description,
         brandCode: items.brandCode,
         productDivision: items.productDivision,
         productCategory: items.productCategory,
-        totalStock: items.totalStock,
         period: items.period,
         season: items.season,
         unitOfMeasure: items.unitOfMeasure,
@@ -83,7 +82,6 @@ export async function POST(request: NextRequest) {
         'Division Name',
         'Product Category',
         'Category Name',
-        'Total Stock',
         'Period',
         'Season',
         'Unit of Measure',
@@ -114,7 +112,6 @@ export async function POST(request: NextRequest) {
           escapeCsvField(item.divisionName),
           escapeCsvField(item.productCategory),
           escapeCsvField(item.categoryName),
-          escapeCsvField(item.totalStock),
           escapeCsvField(item.period),
           escapeCsvField(item.season),
           escapeCsvField(item.unitOfMeasure),
@@ -141,7 +138,6 @@ export async function POST(request: NextRequest) {
         'Division Name',
         'Product Category',
         'Category Name',
-        'Total Stock',
         'Period',
         'Season',
         'Unit of Measure',
@@ -170,7 +166,6 @@ export async function POST(request: NextRequest) {
         item.divisionName,
         item.productCategory,
         item.categoryName,
-        item.totalStock,
         item.period,
         item.season,
         item.unitOfMeasure,

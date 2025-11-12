@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { itemRequests, items, itemStock } from '@/lib/db/schema';
+import { itemRequests, items, itemStock, stockMovements, boxes, users, locations } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
 export async function POST(
@@ -22,30 +22,37 @@ export async function POST(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    // Verify the user exists in the database
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, session.user.id),
+    });
+
+    if (!user) {
+      return NextResponse.json({ 
+        error: 'User not found in database',
+        userId: session.user.id 
+      }, { status: 404 });
+    }
+
     const { id: requestId } = await params;
-    const { location } = await request.json();
+    const { boxId } = await request.json();
 
-    if (!location) {
+    if (!boxId) {
       return NextResponse.json(
-        { error: 'Storage location is required' },
+        { error: 'Storage box is required' },
         { status: 400 }
       );
     }
 
-    // Validate location against allowed enum values
-    const allowedLocations = ['Storage 1', 'Storage 2', 'Storage 3'];
-    if (!allowedLocations.includes(location)) {
-      return NextResponse.json(
-        { error: `Invalid location. Allowed values: ${allowedLocations.join(', ')}` },
-        { status: 400 }
-      );
-    }
-
-    // Get the item request with item details
+    // Get the item request with item and stock details
     const itemRequest = await db.query.itemRequests.findFirst({
       where: eq(itemRequests.id, requestId),
       with: {
-        item: true,
+        item: {
+          with: {
+            stock: true
+          }
+        },
       },
     });
 
@@ -60,12 +67,44 @@ export async function POST(
       );
     }
 
+    if (!itemRequest.item.stock) {
+      return NextResponse.json(
+        { error: 'Item stock record not found' },
+        { status: 404 }
+      );
+    }
+
+    // Get the box with location details
+    const box = await db.query.boxes.findFirst({
+      where: eq(boxes.id, boxId),
+      with: {
+        location: true // Include location details
+      }
+    });
+
+    if (!box) {
+      return NextResponse.json(
+        { error: 'Storage box not found' },
+        { status: 404 }
+      );
+    }
+
+    // Calculate the quantity to move from pending to inStorage
+    const quantityToMove = itemRequest.item.stock.pending;
+    
+    if (quantityToMove <= 0) {
+      return NextResponse.json(
+        { error: 'No pending stock available to move' },
+        { status: 400 }
+      );
+    }
+
     // Update the item request to approved
     await db
       .update(itemRequests)
       .set({
         status: 'approved',
-        approvedBy: session.user.id,
+        approvedBy: user.id, // Use the verified user ID from the database
         approvedAt: new Date(),
       })
       .where(eq(itemRequests.id, requestId));
@@ -75,32 +114,56 @@ export async function POST(
       .update(items)
       .set({
         status: 'approved',
-        approvedBy: session.user.id,
+        approvedBy: user.id, // Use the verified user ID from the database
         approvedAt: new Date(),
       })
-      .where(eq(items.id, itemRequest.itemId));
+      .where(eq(items.productCode, itemRequest.itemId));
 
-    // Update the item stock with location and set pending to 0
+    // Update the item stock:
+    // 1. Move stock from pending to inStorage
+    // 2. Set the boxId
+    // 3. Update timestamps
     await db
       .update(itemStock)
       .set({
-        location: location,
-        inStorage: itemRequest.item.totalStock,
-        pending: 0, // Set pending to 0 when item is approved
+        boxId: boxId,
+        pending: itemRequest.item.stock.pending - quantityToMove,
+        inStorage: itemRequest.item.stock.inStorage + quantityToMove,
         updatedAt: new Date(),
       })
-      .where(eq(itemStock.itemId, itemRequest.itemId));
+      .where(eq(itemStock.id, itemRequest.item.stock.id));
+
+    // Create a stock movement record
+    // Generate a shorter reference ID from the UUID (first 10 characters)
+    const shortReferenceId = requestId.substring(0, 10);
+    
+    await db.insert(stockMovements).values({
+      itemId: itemRequest.itemId,
+      stockId: itemRequest.item.stock.id,
+      movementType: 'borrow', // Using 'borrow' as the movement type for approval
+      quantity: quantityToMove,
+      fromState: 'pending',
+      toState: 'storage',
+      referenceId: shortReferenceId, // Use the shortened reference ID
+      referenceType: 'borrow_request',
+      boxId: boxId,
+      performedBy: user.id, // Use the verified user ID from the database
+      notes: `Item approved and stored in box ${box.boxNumber}`,
+    });
 
     return NextResponse.json({ 
       message: 'Item approved and stored successfully',
       itemId: itemRequest.itemId,
-      location: location,
+      boxId: boxId,
+      boxNumber: box.boxNumber,
+      location: box.location.name, // Now we can access location name
+      quantityMoved: quantityToMove,
       status: 'approved'
     });
   } catch (error) {
     console.error('Failed to approve item:', error);
     return NextResponse.json(
-      { error: 'Failed to approve item' },
+      { error: 'Failed to approve item', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }

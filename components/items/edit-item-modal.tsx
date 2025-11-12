@@ -579,7 +579,7 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
+            {/* <div className="space-y-2">
               <Label htmlFor="boxId">Storage Box</Label>
               <Select 
                 value={formData.boxId} 
@@ -589,16 +589,16 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
                 <SelectTrigger>
                   <SelectValue placeholder="Select box" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No Box</SelectItem> {/* Changed from value="" to value="none" */}
-                  {boxes.map((box) => (
+                <SelectContent> 
+                  <SelectItem value="none">No Box</SelectItem> */}
+                  {/* {boxes.map((box) => (
                     <SelectItem key={box.id} value={box.id}>
                       {box.boxNumber} {box.location ? `(${box.location.name})` : ''}
                     </SelectItem>
-                  ))}
-                </SelectContent>
+                  ))} */}
+                {/* </SelectContent>
               </Select>
-            </div>
+            </div> */}
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="conditionNotes">Condition Notes</Label>
               <Textarea

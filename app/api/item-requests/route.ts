@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { itemRequests, items, users, itemImages, itemStock } from '@/lib/db/schema';
+import { itemRequests, items, users, itemImages, itemStock, boxes, locations } from '@/lib/db/schema';
 import { eq, desc } from 'drizzle-orm';
 
 // GET /api/item-requests - List all item requests
@@ -24,7 +24,15 @@ export async function GET(request: NextRequest) {
         item: {
           with: {
             images: true,
-            stock: true,
+            stock: {
+              with: {
+                box: {
+                  with: {
+                    location: true
+                  }
+                }
+              }
+            },
             createdBy: {
               columns: {
                 id: true,
@@ -68,7 +76,21 @@ export async function GET(request: NextRequest) {
       notes: request.notes,
       item: {
         ...request.item,
+        totalStock: request.item.stock 
+        ? (request.item.stock.pending + 
+          request.item.stock.inStorage + 
+          request.item.stock.onBorrow + 
+          request.item.stock.inClearance + 
+          request.item.stock.seeded)
+        : 0,
         images: request.item.images || [],
+        stock: request.item.stock ? {
+          ...request.item.stock,
+          box: request.item.stock.box ? {
+            ...request.item.stock.box,
+            location: request.item.stock.box.location || null
+          } : null
+        } : null
       },
       requestedByUser: request.requestedBy || {
         id: request.requestedBy,

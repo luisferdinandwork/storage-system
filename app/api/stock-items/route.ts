@@ -3,8 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { items, itemStock, itemImages } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { items, itemStock, itemImages, boxes, locations } from '@/lib/db/schema';
+import { eq, ilike } from 'drizzle-orm';
 
 // GET /api/stock-items - List all items with stock information
 export async function GET(request: NextRequest) {
@@ -22,13 +22,22 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const location = searchParams.get('location');
+    const boxId = searchParams.get('boxId');
+    const locationId = searchParams.get('locationId');
     const search = searchParams.get('search');
 
     // Build the query using Drizzle ORM
     const itemsWithStock = await db.query.items.findMany({
       with: {
-        stock: true,
+        stock: {
+          with: {
+            box: {
+              with: {
+                location: true
+              }
+            }
+          }
+        },
         images: true,
       },
       orderBy: [items.productCode],
@@ -37,9 +46,15 @@ export async function GET(request: NextRequest) {
     // Filter results if needed
     let filteredItems = itemsWithStock;
     
-    if (location) {
+    if (boxId) {
       filteredItems = filteredItems.filter(item => 
-        item.stock && item.stock.location === location
+        item.stock && item.stock.boxId === boxId
+      );
+    }
+    
+    if (locationId) {
+      filteredItems = filteredItems.filter(item => 
+        item.stock && item.stock.box && item.stock.box.locationId === locationId
       );
     }
     
@@ -52,31 +67,49 @@ export async function GET(request: NextRequest) {
     }
 
     // Format the response
-    const formattedItems = filteredItems.map((item) => ({
-      id: item.id,
-      productCode: item.productCode,
-      description: item.description,
-      brandCode: item.brandCode,
-      productDivision: item.productDivision,
-      productCategory: item.productCategory,
-      totalStock: item.totalStock,
-      period: item.period,
-      season: item.season,
-      unitOfMeasure: item.unitOfMeasure,
-      status: item.status,
-      images: item.images || [],
-      stock: item.stock ? {
-        id: item.stock.id,
-        pending: item.stock.pending,
-        inStorage: item.stock.inStorage,
-        onBorrow: item.stock.onBorrow,
-        inClearance: item.stock.inClearance,
-        seeded: item.stock.seeded,
-        location: item.stock.location,
-        condition: item.stock.condition,
-        conditionNotes: item.stock.conditionNotes,
-      } : null,
-    }));
+    const formattedItems = filteredItems.map((item) => {
+      // Calculate total stock from stock fields
+      const totalStock = item.stock ? 
+        item.stock.pending + item.stock.inStorage + item.stock.onBorrow + 
+        item.stock.inClearance + item.stock.seeded : 0;
+
+      return {
+        productCode: item.productCode,
+        description: item.description,
+        brandCode: item.brandCode,
+        productDivision: item.productDivision,
+        productCategory: item.productCategory,
+        period: item.period,
+        season: item.season,
+        unitOfMeasure: item.unitOfMeasure,
+        status: item.status,
+        totalStock: totalStock,
+        images: item.images || [],
+        stock: item.stock ? {
+          id: item.stock.id,
+          pending: item.stock.pending,
+          inStorage: item.stock.inStorage,
+          onBorrow: item.stock.onBorrow,
+          inClearance: item.stock.inClearance,
+          seeded: item.stock.seeded,
+          boxId: item.stock.boxId,
+          box: item.stock.box ? {
+            id: item.stock.box.id,
+            boxNumber: item.stock.box.boxNumber,
+            description: item.stock.box.description,
+            location: item.stock.box.location ? {
+              id: item.stock.box.location.id,
+              name: item.stock.box.location.name,
+              description: item.stock.box.location.description,
+            } : null,
+          } : null,
+          condition: item.stock.condition,
+          conditionNotes: item.stock.conditionNotes,
+          createdAt: item.stock.createdAt,
+          updatedAt: item.stock.updatedAt,
+        } : null,
+      };
+    });
 
     return NextResponse.json(formattedItems);
   } catch (error) {
