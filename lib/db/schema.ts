@@ -1,8 +1,8 @@
-import { pgTable, text, timestamp, boolean, uuid, integer, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, boolean, uuid, integer, jsonb, unique } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { varchar } from 'drizzle-orm/pg-core';
 
-// Departments table
+// Departments table (unchanged)
 export const departments = pgTable('departments', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: text('name').notNull(),
@@ -11,7 +11,7 @@ export const departments = pgTable('departments', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// Users table with updated roles
+// Users table (unchanged)
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: text('name').notNull(),
@@ -25,12 +25,33 @@ export const users = pgTable('users', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// Items table - Master item information only
-export const items = pgTable('items', {
+// Locations table - NEW
+export const locations = pgTable('locations', {
   id: uuid('id').defaultRandom().primaryKey(),
+  name: text('name').notNull().unique(),
+  description: text('description'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Boxes table - FIXED
+export const boxes = pgTable('boxes', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  locationId: uuid('location_id').references(() => locations.id, { onDelete: 'cascade' }).notNull(),
+  boxNumber: text('box_number').notNull(),
+  description: text('description'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => [
+  unique('unique_box_number').on(table.locationId, table.boxNumber)
+]);
+
+// Items table - UPDATED to use productCode as ID
+export const items = pgTable('items', {
+  // Using productCode as primary key instead of generated UUID
+  productCode: text('product_code').primaryKey(),
   
   // Product identification
-  productCode: text('product_code').notNull().unique(),
   description: text('description').notNull(),
   
   // Product metadata (auto-generated from productCode)
@@ -42,9 +63,6 @@ export const items = pgTable('items', {
   period: text('period').notNull(),
   season: text('season').notNull(),
   unitOfMeasure: text('unit_of_measure', { enum: ['PCS', 'PRS'] }).notNull().default('PCS'),
-  
-  // Total stock across all states
-  totalStock: integer('total_stock').notNull().default(0),
   
   // Approval status for the item itself
   status: text('status', { 
@@ -59,10 +77,10 @@ export const items = pgTable('items', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// Stock table - Tracks where items are and in what state
+// Stock table - UPDATED to reference boxes instead of location enum
 export const itemStock = pgTable('item_stock', {
   id: uuid('id').defaultRandom().primaryKey(),
-  itemId: uuid('item_id').references(() => items.id, { onDelete: 'cascade' }).notNull(),
+  itemId: text('item_id').references(() => items.productCode, { onDelete: 'cascade' }).notNull(),
   
   // Quantity tracking by state
   pending: integer('pending').notNull().default(0),
@@ -71,8 +89,8 @@ export const itemStock = pgTable('item_stock', {
   inClearance: integer('in_clearance').notNull().default(0),
   seeded: integer('seeded').notNull().default(0),
   
-  // Storage location (only applies to items in storage)
-  location: text('location', { enum: ['Storage 1', 'Storage 2', 'Storage 3'] }),
+  // Storage location (now references box instead of enum)
+  boxId: uuid('box_id').references(() => boxes.id, { onDelete: 'set null' }),
   
   // Item condition
   condition: text('condition', { enum: ['excellent', 'good', 'fair', 'poor'] }).notNull().default('good'),
@@ -83,10 +101,10 @@ export const itemStock = pgTable('item_stock', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// Item images table
+// Item images table - UPDATED to reference productCode
 export const itemImages = pgTable('item_images', {
   id: uuid('id').defaultRandom().primaryKey(),
-  itemId: uuid('item_id').references(() => items.id, { onDelete: 'cascade' }).notNull(),
+  itemId: text('item_id').references(() => items.productCode, { onDelete: 'cascade' }).notNull(),
   fileName: text('file_name').notNull(),
   originalName: text('original_name').notNull(),
   mimeType: text('mime_type').notNull(),
@@ -96,10 +114,10 @@ export const itemImages = pgTable('item_images', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
-// Item requests table (for item addition workflow)
+// Item requests table - UPDATED to reference productCode
 export const itemRequests = pgTable('item_requests', {
   id: uuid('id').defaultRandom().primaryKey(),
-  itemId: uuid('item_id').references(() => items.id, { onDelete: 'cascade' }).notNull(),
+  itemId: text('item_id').references(() => items.productCode, { onDelete: 'cascade' }).notNull(),
   requestedBy: uuid('requested_by').references(() => users.id).notNull(),
   requestedAt: timestamp('requested_at').defaultNow().notNull(),
   status: text('status', { enum: ['pending', 'approved', 'rejected'] }).notNull().default('pending'),
@@ -109,7 +127,7 @@ export const itemRequests = pgTable('item_requests', {
   notes: text('notes'),
 });
 
-// Borrow requests table - Updated to support multiple items
+// Borrow requests table (unchanged)
 export const borrowRequests = pgTable('borrow_requests', {
   id: varchar('id', { length: 10 }).primaryKey(),
   userId: uuid('user_id').references(() => users.id).notNull(),
@@ -141,11 +159,11 @@ export const borrowRequests = pgTable('borrow_requests', {
   notes: text('notes'),
 });
 
-// Borrow request items table - Links items to borrow requests
+// Borrow request items table - UPDATED to reference productCode
 export const borrowRequestItems = pgTable('borrow_request_items', {
   id: uuid('id').defaultRandom().primaryKey(),
-  borrowRequestId: varchar('borrow_request_id', { length: 10 }).references(() => borrowRequests.id, { onDelete: 'cascade' }).notNull(), // Changed from uuid to varchar
-  itemId: uuid('item_id').references(() => items.id, { onDelete: 'cascade' }).notNull(),
+  borrowRequestId: varchar('borrow_request_id', { length: 10 }).references(() => borrowRequests.id, { onDelete: 'cascade' }).notNull(),
+  itemId: text('item_id').references(() => items.productCode, { onDelete: 'cascade' }).notNull(),
   quantity: integer('quantity').notNull().default(1),
   status: text('status', { 
     enum: ['pending_manager', 'pending_storage', 'rejected', 'active', 'complete', 'seeded', 'reverted'] 
@@ -165,10 +183,10 @@ export const borrowRequestItems = pgTable('borrow_request_items', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// Item clearances table
+// Item clearances table - UPDATED to reference productCode
 export const itemClearances = pgTable('item_clearances', {
   id: uuid('id').defaultRandom().primaryKey(),
-  itemId: uuid('item_id').references(() => items.id, { onDelete: 'cascade' }).notNull(),
+  itemId: text('item_id').references(() => items.productCode, { onDelete: 'cascade' }).notNull(),
   quantity: integer('quantity').notNull().default(1),
   requestedBy: uuid('requested_by').references(() => users.id).notNull(),
   requestedAt: timestamp('requested_at').defaultNow().notNull(),
@@ -181,10 +199,10 @@ export const itemClearances = pgTable('item_clearances', {
   metadata: jsonb('metadata').notNull(),
 });
 
-// Stock movements table - Audit trail for all stock changes
+// Stock movements table - UPDATED to reference productCode and add boxId
 export const stockMovements = pgTable('stock_movements', {
   id: uuid('id').defaultRandom().primaryKey(),
-  itemId: uuid('item_id').references(() => items.id, { onDelete: 'cascade' }).notNull(),
+  itemId: text('item_id').references(() => items.productCode, { onDelete: 'cascade' }).notNull(),
   stockId: uuid('stock_id').references(() => itemStock.id, { onDelete: 'cascade' }).notNull(),
   
   // Movement details
@@ -198,8 +216,11 @@ export const stockMovements = pgTable('stock_movements', {
   toState: text('to_state', { enum: ['storage', 'borrowed', 'clearance', 'seeded', 'none', 'pending'] }),
   
   // Reference to related entity
-  referenceId: varchar('reference_id', { length: 10 }), // Changed from uuid to varchar to accommodate borrow request IDs
+  referenceId: varchar('reference_id', { length: 10 }),
   referenceType: text('reference_type', { enum: ['borrow_request', 'borrow_request_item', 'clearance', 'manual'] }),
+  
+  // Storage location tracking
+  boxId: uuid('box_id').references(() => boxes.id, { onDelete: 'set null' }),
   
   // Audit
   performedBy: uuid('performed_by').references(() => users.id).notNull(),
@@ -207,7 +228,7 @@ export const stockMovements = pgTable('stock_movements', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
-// Relations
+// Relations - UPDATED for new tables and references
 export const departmentsRelations = relations(departments, ({ many }) => ({
   users: many(users),
 }));
@@ -228,6 +249,19 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   clearanceApprovals: many(itemClearances, { relationName: 'clearanceApproval' }),
 }));
 
+export const locationsRelations = relations(locations, ({ many }) => ({
+  boxes: many(boxes),
+}));
+
+export const boxesRelations = relations(boxes, ({ one, many }) => ({
+  location: one(locations, {
+    fields: [boxes.locationId],
+    references: [locations.id],
+  }),
+  stockItems: many(itemStock),
+  stockMovements: many(stockMovements),
+}));
+
 export const itemsRelations = relations(items, ({ one, many }) => ({
   createdBy: one(users, {
     fields: [items.createdBy],
@@ -238,7 +272,7 @@ export const itemsRelations = relations(items, ({ one, many }) => ({
     references: [users.id],
   }),
   stock: one(itemStock, {
-    fields: [items.id],
+    fields: [items.productCode],
     references: [itemStock.itemId],
   }),
   images: many(itemImages),
@@ -251,7 +285,11 @@ export const itemsRelations = relations(items, ({ one, many }) => ({
 export const itemStockRelations = relations(itemStock, ({ one, many }) => ({
   item: one(items, {
     fields: [itemStock.itemId],
-    references: [items.id],
+    references: [items.productCode],
+  }),
+  box: one(boxes, {
+    fields: [itemStock.boxId],
+    references: [boxes.id],
   }),
   movements: many(stockMovements),
 }));
@@ -259,14 +297,14 @@ export const itemStockRelations = relations(itemStock, ({ one, many }) => ({
 export const itemImagesRelations = relations(itemImages, ({ one }) => ({
   item: one(items, {
     fields: [itemImages.itemId],
-    references: [items.id],
+    references: [items.productCode],
   }),
 }));
 
 export const itemRequestsRelations = relations(itemRequests, ({ one }) => ({
   item: one(items, {
     fields: [itemRequests.itemId],
-    references: [items.id],
+    references: [items.productCode],
   }),
   requestedBy: one(users, {
     fields: [itemRequests.requestedBy],
@@ -315,7 +353,7 @@ export const borrowRequestItemsRelations = relations(borrowRequestItems, ({ one 
   }),
   item: one(items, {
     fields: [borrowRequestItems.itemId],
-    references: [items.id],
+    references: [items.productCode],
   }),
   completedBy: one(users, {
     fields: [borrowRequestItems.completedBy],
@@ -334,7 +372,7 @@ export const borrowRequestItemsRelations = relations(borrowRequestItems, ({ one 
 export const itemClearancesRelations = relations(itemClearances, ({ one }) => ({
   item: one(items, {
     fields: [itemClearances.itemId],
-    references: [items.id],
+    references: [items.productCode],
   }),
   requestedBy: one(users, {
     fields: [itemClearances.requestedBy],
@@ -350,11 +388,15 @@ export const itemClearancesRelations = relations(itemClearances, ({ one }) => ({
 export const stockMovementsRelations = relations(stockMovements, ({ one }) => ({
   item: one(items, {
     fields: [stockMovements.itemId],
-    references: [items.id],
+    references: [items.productCode],
   }),
   stock: one(itemStock, {
     fields: [stockMovements.stockId],
     references: [itemStock.id],
+  }),
+  box: one(boxes, {
+    fields: [stockMovements.boxId],
+    references: [boxes.id],
   }),
   performedBy: one(users, {
     fields: [stockMovements.performedBy],
@@ -362,12 +404,18 @@ export const stockMovementsRelations = relations(stockMovements, ({ one }) => ({
   }),
 }));
 
-// Type exports
+// Type exports - UPDATED with new types
 export type Department = typeof departments.$inferSelect;
 export type NewDepartment = typeof departments.$inferInsert;
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
+
+export type Location = typeof locations.$inferSelect;
+export type NewLocation = typeof locations.$inferInsert;
+
+export type Box = typeof boxes.$inferSelect;
+export type NewBox = typeof boxes.$inferInsert;
 
 export type Item = typeof items.$inferSelect;
 export type NewItem = typeof items.$inferInsert;
@@ -396,7 +444,6 @@ export type NewStockMovement = typeof stockMovements.$inferInsert;
 export type UserRole = User['role'];
 export type ItemStatus = Item['status'];
 export type ItemCondition = ItemStock['condition'];
-export type ItemLocation = ItemStock['location'];
 export type UnitOfMeasure = Item['unitOfMeasure'];
 export type BorrowRequestStatus = BorrowRequest['status'];
 export type BorrowRequestItemStatus = BorrowRequestItem['status'];
@@ -406,7 +453,7 @@ export type MovementType = StockMovement['movementType'];
 export type StockState = StockMovement['fromState'];
 
 // ============================================================================
-// STOCK MANAGEMENT HELPER FUNCTIONS
+// STOCK MANAGEMENT HELPER FUNCTIONS - UPDATED
 // ============================================================================
 
 /**
@@ -433,7 +480,6 @@ export function hasAvailableStock(stock: ItemStock, requestedQuantity: number): 
 // ============================================================================
 // PRODUCT CODE PARSER (unchanged from original)
 // ============================================================================
-
 interface ProductCodeMapping {
   brandCode: string;
   brandName: string;

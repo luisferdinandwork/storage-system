@@ -2,11 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { items, itemImages as itemImagesTable } from '@/lib/db/schema';
+import { items, itemImages as itemImagesTable, itemStock, boxes } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { unlink } from 'fs/promises';
 import { join } from 'path';
-import { itemStock } from '@/lib/db/schema';
 
 // PUT /api/items/[id] - Update a specific item
 export async function PUT(
@@ -25,28 +24,26 @@ export async function PUT(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { id: itemId } = await params;
+    const { id: productCode } = await params;
     const body = await request.json();
     const { 
-      productCode, 
       description, 
-      totalStock, 
       period, 
       season, 
       unitOfMeasure, 
       condition, 
       conditionNotes, 
-      location,
+      boxId, // Changed from location to boxId
       images 
     } = body;
 
-    if (!productCode || !description || !period || !season || !unitOfMeasure) {
+    if (!description || !period || !season || !unitOfMeasure) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
     // Get current item with images using Drizzle ORM
     const currentItem = await db.query.items.findFirst({
-      where: eq(items.id, itemId),
+      where: eq(items.productCode, productCode),
       with: {
         images: true,
       },
@@ -63,7 +60,7 @@ export async function PUT(
       );
     }
 
-    // Parse product code to extract auto-generated fields
+    // Parse product code to extract auto-generated fields (in case it changed)
     const { parseProductCode } = await import('@/lib/db/schema');
     const parsed = parseProductCode(productCode);
     
@@ -91,49 +88,42 @@ export async function PUT(
       }
     }
 
-    // Update the item
+    // Update the item (note: productCode can't be changed as it's the primary key)
     const [updatedItem] = await db
       .update(items)
       .set({
-        productCode,
         description,
         brandCode: parsed.brandCode,
         productDivision: parsed.productDivision,
         productCategory: parsed.productCategory,
-        totalStock: totalStock || 0,  // Changed from inventory
         period,
         season,
         unitOfMeasure,
-        // Removed: condition, conditionNotes
         updatedAt: new Date(),
       })
-      .where(eq(items.id, itemId))
+      .where(eq(items.productCode, productCode))
       .returning();
 
-    await db
+    // Update the stock record
+    const [updatedStock] = await db
       .update(itemStock)
       .set({
-        location: location || null,
+        boxId: boxId || null, // Updated to use boxId instead of location
         condition: condition || 'good',
         conditionNotes: conditionNotes || null,
         updatedAt: new Date(),
       })
-      .where(eq(itemStock.itemId, itemId));
-
-    // Fetch updated stock
-    const [updatedStock] = await db
-      .select()
-      .from(itemStock)
-      .where(eq(itemStock.itemId, itemId));
+      .where(eq(itemStock.itemId, productCode))
+      .returning();
 
     // Delete existing image records from database
-    await db.delete(itemImagesTable).where(eq(itemImagesTable.itemId, itemId));
+    await db.delete(itemImagesTable).where(eq(itemImagesTable.itemId, productCode));
 
     // Create new images if provided
     let newImages: any[] = [];
     if (images && images.length > 0) {
       const imagesToInsert = images.map((image: any, index: number) => ({
-        itemId: updatedItem.id,
+        itemId: productCode, // Using productCode as reference
         fileName: image.fileName,
         originalName: image.originalName,
         mimeType: image.mimeType,
@@ -145,10 +135,17 @@ export async function PUT(
       newImages = await db.insert(itemImagesTable).values(imagesToInsert).returning();
     }
 
+    // Calculate total stock
+    const totalStock = updatedStock ? 
+      updatedStock.pending + updatedStock.inStorage + 
+      updatedStock.onBorrow + updatedStock.inClearance + 
+      updatedStock.seeded : 0;
+
     const response: any = { 
       ...updatedItem, 
       images: newImages,
       stock: updatedStock, 
+      totalStock, // Include calculated total stock
     };
 
     // Include warning if some old files couldn't be deleted
@@ -160,7 +157,10 @@ export async function PUT(
     return NextResponse.json(response);
   } catch (error) {
     console.error('Failed to update item:', error);
-    return NextResponse.json({ error: 'Failed to update item' }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'Failed to update item',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 }
 
@@ -180,11 +180,11 @@ export async function DELETE(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { id: itemId } = await params;
+    const { id: productCode } = await params;
 
     // Get the item with images using Drizzle ORM
     const itemToDelete = await db.query.items.findFirst({
-      where: eq(items.id, itemId),
+      where: eq(items.productCode, productCode),
       with: {
         images: true,
       },
@@ -212,15 +212,14 @@ export async function DELETE(
     }
 
     // Delete the item images from database
-    await db.delete(itemImagesTable).where(eq(itemImagesTable.itemId, itemId));
+    await db.delete(itemImagesTable).where(eq(itemImagesTable.itemId, productCode));
 
-    // Delete the item
-    await db.delete(items).where(eq(items.id, itemId));
+    // Delete the item (this will cascade delete the stock record due to foreign key constraint)
+    await db.delete(items).where(eq(items.productCode, productCode));
 
     const response: any = { 
       message: 'Item deleted successfully',
       deletedItem: {
-        id: itemToDelete.id,
         productCode: itemToDelete.productCode,
         description: itemToDelete.description,
         imagesDeleted: itemToDelete.images?.length || 0,

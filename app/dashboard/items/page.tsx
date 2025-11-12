@@ -35,6 +35,7 @@ const ALL_COLUMNS = [
   { id: 'category', label: 'Category', defaultVisible: true },
   { id: 'unit', label: 'Unit', defaultVisible: true },
   { id: 'location', label: 'Location', defaultVisible: true },
+  { id: 'box', label: 'Box', defaultVisible: true }, // Added box column
   { id: 'createdBy', label: 'Created By', defaultVisible: true },
   { id: 'stock', label: 'Stock', defaultVisible: true },
   { id: 'status', label: 'Status', defaultVisible: false },
@@ -46,9 +47,11 @@ export default function ItemsPage() {
   const { data: session } = useSession();
   const { messages, addMessage, dismissMessage } = useMessages();
   const [items, setItems] = useState<any[]>([]);
+  const [boxes, setBoxes] = useState<any[]>([]); // Added boxes state
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [locationFilter, setLocationFilter] = useState<string>('all');
+  const [boxFilter, setBoxFilter] = useState<string>('all'); // Added box filter
   const [unitFilter, setUnitFilter] = useState<string>('all');
   const [conditionFilter, setConditionFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -65,7 +68,7 @@ export default function ItemsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [selectedItems, setSelectedItems] = useState<string[]>([]); // Now stores productCodes
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const [isBulkClearing, setIsBulkClearing] = useState(false);
@@ -77,6 +80,7 @@ export default function ItemsPage() {
 
   useEffect(() => {
     fetchItems();
+    fetchBoxes(); // Added fetchBoxes call
   }, []);
 
   const fetchItems = async () => {
@@ -97,15 +101,30 @@ export default function ItemsPage() {
     }
   };
 
+  // Added fetchBoxes function
+  const fetchBoxes = async () => {
+    try {
+      const response = await fetch('/api/boxes');
+      if (response.ok) {
+        const data = await response.json();
+        setBoxes(data);
+      } else {
+        console.error('Failed to fetch boxes');
+      }
+    } catch (error) {
+      console.error('Failed to fetch boxes:', error);
+    }
+  };
+
   // Prepare selected items for clearance dialog
   useEffect(() => {
     const clearanceItems = selectedItems
-      .map(itemId => {
-        const item = items.find(i => i.id === itemId);
+      .map(productCode => {
+        const item = items.find(i => i.productCode === productCode);
         if (!item || !item.stock) return null;
         
         return {
-          itemId: item.id,
+          itemId: item.productCode, // Now using productCode
           productCode: item.productCode,
           description: item.description,
           availableStock: item.stock.pending + item.stock.inStorage,
@@ -123,9 +142,9 @@ export default function ItemsPage() {
     addMessage('success', 'Item added successfully', 'Success');
   };
 
-  const handleRemoveItem = async (itemId: string) => {
+  const handleRemoveItem = async (productCode: string) => {
     try {
-      const response = await fetch(`/api/items/${itemId}`, {
+      const response = await fetch(`/api/items/${productCode}`, {
         method: 'DELETE',
       });
 
@@ -152,7 +171,7 @@ export default function ItemsPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ itemIds: selectedItems }),
+        body: JSON.stringify({ productCodes: selectedItems }), // Changed to productCodes
       });
 
       if (response.ok) {
@@ -228,11 +247,11 @@ export default function ItemsPage() {
   };
 
   const handleExport = async (format: 'csv' | 'excel') => {
-    // Get filtered item IDs based on current filters
-    const filteredItemIds = filteredItems.map(item => item.id);
+    // Get filtered item productCodes based on current filters
+    const filteredProductCodes = filteredItems.map(item => item.productCode);
     
     // Export the filtered items
-    await exportItems(filteredItemIds, format);
+    await exportItems(filteredProductCodes, format);
   };
 
   const handleExportAll = async (format: 'csv' | 'excel') => {
@@ -303,12 +322,14 @@ export default function ItemsPage() {
     const matchesSearch = item.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
                        item.productCode.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilter === 'all' || item.productCategory === categoryFilter;
-    const matchesLocation = locationFilter === 'all' || item.stock?.location === locationFilter;
+    const matchesLocation = locationFilter === 'all' || item.location?.name === locationFilter;
+    const matchesBox = boxFilter === 'all' || item.box?.id === boxFilter; // Changed to compare by ID
     const matchesUnit = unitFilter === 'all' || item.unitOfMeasure === unitFilter;
     const matchesCondition = conditionFilter === 'all' || item.stock?.condition === conditionFilter;
     const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
 
-    return matchesSearch && matchesCategory && matchesLocation && matchesUnit && matchesCondition && matchesStatus;
+    return matchesSearch && matchesCategory && matchesLocation && matchesBox && 
+           matchesUnit && matchesCondition && matchesStatus;
   });
 
   // Calculate pagination
@@ -327,18 +348,6 @@ export default function ItemsPage() {
   const canDeleteItem = isSuperAdmin;
   const canExportItems = isSuperAdmin || isItemMaster;
   const canClearance = isSuperAdmin || isItemMaster;
-
-  // Custom action for borrowing items (example)
-  const renderBorrowAction = (item: any) => {
-    if (item.status === 'available' && item.stock?.location) {
-      return (
-        <DropdownMenuItem>
-          Borrow Item
-        </DropdownMenuItem>
-      );
-    }
-    return null;
-  };
 
   return (
     <div className="space-y-4">
@@ -508,7 +517,7 @@ export default function ItemsPage() {
       {/* Filter Panel */}
       {showFilterPanel && (
         <div className="bg-gray-50 p-4 rounded-md space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
               <select
@@ -549,6 +558,26 @@ export default function ItemsPage() {
                 <option value="Storage 1">Storage 1</option>
                 <option value="Storage 2">Storage 2</option>
                 <option value="Storage 3">Storage 3</option>
+                <option value="">Not Assigned</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Box</label>
+              <select
+                value={boxFilter}
+                onChange={(e) => {
+                  setBoxFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="all">All Boxes</option>
+                {/* Dynamically populate boxes from API */}
+                {boxes.map((box) => (
+                  <option key={box.id} value={box.id}>
+                    {box.boxNumber} {box.location ? `(${box.location.name})` : ''}
+                  </option>
+                ))}
                 <option value="">Not Assigned</option>
               </select>
             </div>
@@ -622,9 +651,8 @@ export default function ItemsPage() {
         canClearanceItems={canClearance}
         canExportItems={canExportItems}
         showActions={true}
-        customActions={renderBorrowAction}
         onExportItems={exportItems}
-        onClearanceItems={(itemIds) => setShowBulkClearanceDialog(true)}
+        onClearanceItems={(productCodes) => setShowBulkClearanceDialog(true)}
         isExporting={isExporting}
         currentPage={currentPage}
         totalPages={totalPages}

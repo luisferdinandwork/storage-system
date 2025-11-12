@@ -30,6 +30,17 @@ interface AddItemModalProps {
   onSuccess: () => void;
 }
 
+interface Box {
+  id: string;
+  boxNumber: string;
+  description: string | null;
+  location: {
+    id: string;
+    name: string;
+    description: string | null;
+  };
+}
+
 interface UploadedImage {
   fileName: string;
   originalName: string;
@@ -59,29 +70,51 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
   const [error, setError] = useState<string | null>(null);
   const [productCodeError, setProductCodeError] = useState<string | null>(null);
   const [parsedProductCode, setParsedProductCode] = useState<ParsedProductCode | null>(null);
+  const [boxes, setBoxes] = useState<Box[]>([]); // Added boxes state
   const [formData, setFormData] = useState({
     productCode: '',
     description: '',
-    totalStock: 0,
+    initialStock: 0, // Changed from totalStock to initialStock
     period: '',
     season: '',
     unitOfMeasure: 'PCS',
     condition: 'good',
     conditionNotes: '',
+    boxId: '',
   });
   const [images, setImages] = useState<UploadedImage[]>([]);
+
+  // Fetch boxes when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      fetchBoxes();
+    }
+  }, [isOpen]);
+
+  const fetchBoxes = async () => {
+    try {
+      const response = await fetch('/api/boxes');
+      if (response.ok) {
+        const data = await response.json();
+        setBoxes(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch boxes:', error);
+    }
+  };
 
   useEffect(() => {
     if (isOpen) {
       setFormData({
         productCode: '',
         description: '',
-        totalStock: 0,
+        initialStock: 0,
         period: '',
         season: '',
         unitOfMeasure: 'PCS',
         condition: 'good',
         conditionNotes: '',
+        boxId: 'none',
       });
       setImages([]);
       setError(null);
@@ -94,7 +127,7 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'totalStock' ? parseInt(value) || 0 : value,
+      [name]: name === 'initialStock' ? parseInt(value) || 0 : value,
     }));
     
     // If product code is changed, parse it
@@ -284,12 +317,13 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
         body: JSON.stringify({
           productCode: formData.productCode,
           description: formData.description,
-          totalStock: formData.totalStock,
+          initialStock: formData.initialStock, // Changed from totalStock to initialStock
           period: formData.period,
           season: formData.season,
           unitOfMeasure: formData.unitOfMeasure,
           condition: formData.condition,
           conditionNotes: formData.conditionNotes,
+          boxId: formData.boxId === 'none' ? null : formData.boxId, // Added boxId
           images: images,
         }),
       });
@@ -379,13 +413,13 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="totalStock">Total Stock</Label>
+              <Label htmlFor="initialStock">Initial Stock</Label>
               <Input
-                id="totalStock"
-                name="totalStock"
+                id="initialStock"
+                name="initialStock"
                 type="number"
                 min="0"
-                value={formData.totalStock}
+                value={formData.initialStock}
                 onChange={handleInputChange}
                 required
               />
@@ -436,6 +470,22 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
                   <SelectItem value="good">Good</SelectItem>
                   <SelectItem value="fair">Fair</SelectItem>
                   <SelectItem value="poor">Poor</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="boxId">Storage Box</Label>
+              <Select value={formData.boxId} onValueChange={(value) => handleSelectChange('boxId', value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select box" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Box</SelectItem> {/* Changed from value="" to value="none" */}
+                  {boxes.map((box) => (
+                    <SelectItem key={box.id} value={box.id}>
+                      {box.boxNumber} {box.location ? `(${box.location.name})` : ''}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

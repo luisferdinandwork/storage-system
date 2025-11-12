@@ -42,7 +42,7 @@ import { Select, SelectContent, SelectTrigger, SelectValue, SelectItem  } from '
 
 interface ItemImage {
   id: string;
-  itemId: string;
+  itemId: string; // This is now the productCode
   fileName: string;
   originalName: string;
   mimeType: string;
@@ -52,15 +52,32 @@ interface ItemImage {
   createdAt: string;
 }
 
+interface Box {
+  id: string;
+  boxNumber: string;
+  description: string | null;
+  location: {
+    id: string;
+    name: string;
+    description: string | null;
+  } | null;
+}
+
+interface Location {
+  id: string;
+  name: string;
+  description: string | null;
+}
+
 interface ItemStock {
   pending: number;
   id: string;
-  itemId: string;
+  itemId: string; // This is now the productCode
   inStorage: number;
   onBorrow: number;
   inClearance: number;
   seeded: number;
-  location: string | null;
+  boxId: string | null;
   condition: string;
   conditionNotes: string | null;
   createdAt: string;
@@ -68,13 +85,11 @@ interface ItemStock {
 }
 
 export interface Item {
-  id: string;
-  productCode: string;
+  productCode: string; // This is now the primary key
   description: string;
   brandCode: string;
   productDivision: string;
   productCategory: string;
-  totalStock: number;
   period: string;
   season: string;
   unitOfMeasure: string;
@@ -94,6 +109,9 @@ export interface Item {
   };
   images: ItemImage[];
   stock: ItemStock | null;
+  box?: Box | null; // Added box object
+  location?: Location | null; // Added location object
+  totalStock?: number; // Added total stock
 }
 
 export interface Column {
@@ -110,17 +128,17 @@ interface ItemsTableProps {
   emptyMessage?: string;
   emptyDescription?: string;
   onEditItem?: (item: Item) => void;
-  onDeleteItem?: (itemId: string) => void;
+  onDeleteItem?: (productCode: string) => void; // Changed to productCode
   onViewImage?: (image: ItemImage) => void;
-  onApproveItem?: (itemId: string) => void;
-  onRejectItem?: (itemId: string) => void;
-  onExportItems?: (itemIds: string[]) => void;
-  onClearanceItems?: (itemIds: string[]) => void; // New prop for clearance
+  onApproveItem?: (productCode: string) => void; // Changed to productCode
+  onRejectItem?: (productCode: string) => void; // Changed to productCode
+  onExportItems?: (productCodes: string[]) => void; // Changed to productCodes
+  onClearanceItems?: (productCodes: string[]) => void; // Changed to productCodes
   canEditItem?: boolean;
   canDeleteItem?: boolean;
   canApproveItem?: boolean;
   canExportItems?: boolean;
-  canClearanceItems?: boolean; // New prop for clearance permission
+  canClearanceItems?: boolean;
   showActions?: boolean;
   customActions?: (item: Item) => React.ReactNode;
   renderCustomCell?: (item: Item, columnId: string) => React.ReactNode;
@@ -132,8 +150,8 @@ interface ItemsTableProps {
   onItemsPerPageChange?: (itemsPerPage: number) => void;
   totalItems?: number;
   // New props for selected items
-  selectedItems?: string[];
-  onSelectionChange?: (selectedItems: string[]) => void;
+  selectedItems?: string[]; // These are now productCodes
+  onSelectionChange?: (selectedItems: string[]) => void; // These are now productCodes
 }
 
 export function ItemsTable({
@@ -149,12 +167,12 @@ export function ItemsTable({
   onApproveItem,
   onRejectItem,
   onExportItems,
-  onClearanceItems, // Add the new prop
+  onClearanceItems,
   canEditItem = false,
   canDeleteItem = false,
   canApproveItem = false,
   canExportItems = false,
-  canClearanceItems = false, // Add the new prop
+  canClearanceItems = false,
   showActions = true,
   customActions,
   renderCustomCell,
@@ -244,8 +262,8 @@ export function ItemsTable({
     }
   };
 
-  const handleRemoveItem = (itemId: string) => {
-    setRemovingItemId(itemId);
+  const handleRemoveItem = (productCode: string) => {
+    setRemovingItemId(productCode);
   };
 
   const confirmRemoveItem = () => {
@@ -255,29 +273,29 @@ export function ItemsTable({
     }
   };
 
-  const handleApproveItem = (itemId: string) => {
+  const handleApproveItem = (productCode: string) => {
     if (onApproveItem) {
-      onApproveItem(itemId);
+      onApproveItem(productCode);
     }
   };
 
-  const handleRejectItem = (itemId: string) => {
+  const handleRejectItem = (productCode: string) => {
     if (onRejectItem) {
-      onRejectItem(itemId);
+      onRejectItem(productCode);
     }
   };
 
-  const handleSelectItem = (itemId: string, checked: boolean) => {
+  const handleSelectItem = (productCode: string, checked: boolean) => {
     if (checked) {
-      setSelectedItems([...selectedItems, itemId]);
+      setSelectedItems([...selectedItems, productCode]);
     } else {
-      setSelectedItems(selectedItems.filter(id => id !== itemId));
+      setSelectedItems(selectedItems.filter(id => id !== productCode));
     }
   };
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedItems(items.map(item => item.id));
+      setSelectedItems(items.map(item => item.productCode));
     } else {
       setSelectedItems([]);
     }
@@ -342,7 +360,7 @@ export function ItemsTable({
     switch (columnId) {
       case 'item':
         return (
-          <TableCell key={`item-${item.id}`}>
+          <TableCell key={`item-${item.productCode}`}>
             <div className="flex items-center space-x-3">
               {item.images.length > 0 && (
                 <div 
@@ -367,31 +385,31 @@ export function ItemsTable({
         );
       case 'brandCode':
         return (
-          <TableCell key={`brandCode-${item.id}`}>
+          <TableCell key={`brandCode-${item.productCode}`}>
             <UniversalBadge type="brand" value={item.brandCode} />
           </TableCell>
         );
       case 'productDivision':
         return (
-          <TableCell key={`productDivision-${item.id}`}>
+          <TableCell key={`productDivision-${item.productCode}`}>
             <UniversalBadge type="division" value={item.productDivision} />
           </TableCell>
         );
       case 'category':
         return (
-          <TableCell key={`category-${item.id}`}>
+          <TableCell key={`category-${item.productCode}`}>
             <UniversalBadge type="category" value={item.productCategory} />
           </TableCell>
         );
       case 'unit':
         return (
-          <TableCell key={`unit-${item.id}`}>
+          <TableCell key={`unit-${item.productCode}`}>
             <UniversalBadge type="unit" value={item.unitOfMeasure} />
           </TableCell>
         );
       case 'stock':
         return (
-          <TableCell key={`stock-${item.id}`}>
+          <TableCell key={`stock-${item.productCode}`}>
             {item.stock ? (
               <TooltipProvider>
                 <div className="flex items-center space-x-2">
@@ -433,7 +451,7 @@ export function ItemsTable({
         );
       case 'condition':
         return (
-          <TableCell key={`condition-${item.id}`}>
+          <TableCell key={`condition-${item.productCode}`}>
             {item.stock ? (
               <div className="flex flex-col space-y-1">
                 <UniversalBadge type="condition" value={item.stock.condition} />
@@ -450,30 +468,44 @@ export function ItemsTable({
         );
       case 'location':
         return (
-          <TableCell key={`location-${item.id}`}>
-            {item.stock && item.stock.location ? (
-              <UniversalBadge type="location" value={item.stock.location} />
+          <TableCell key={`location-${item.productCode}`}>
+            {item.location ? (
+              <UniversalBadge type="location" value={item.location.name} />
             ) : (
               <div className="text-gray-500">No location</div>
             )}
           </TableCell>
         );
+      case 'box':
+        return (
+          <TableCell key={`box-${item.productCode}`}>
+            {item.box ? (
+              <div className="flex flex-col space-y-1">
+                <span className="text-sm font-medium">{item.box.boxNumber}</span>
+                {item.box.description && (
+                  <span className="text-xs text-gray-500 truncate max-w-[200px]">
+                    {item.box.description}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="text-gray-500">No box</div>
+            )}
+          </TableCell>
+        );
       case 'totalStock':
         return (
-          <TableCell key={`totalStock-${item.id}`}>
+          <TableCell key={`totalStock-${item.productCode}`}>
             <div className="flex justify-center">
               <div className="font-medium">
-                {item.stock ? 
-                  (item.stock.pending > 0 || item.stock.inStorage > 0 ? 
-                    item.stock.pending + item.stock.inStorage : 0) : 
-                  0}
+                {item.totalStock || 0}
               </div>
             </div>
           </TableCell>
         );
       case 'createdBy':
         return (
-          <TableCell key={`createdBy-${item.id}`}>
+          <TableCell key={`createdBy-${item.productCode}`}>
             <div className="text-sm">
               {item.createdByUser?.name || 'Unknown'}
             </div>
@@ -481,7 +513,7 @@ export function ItemsTable({
         );
       case 'approvedBy':
         return (
-          <TableCell key={`approvedBy-${item.id}`}>
+          <TableCell key={`approvedBy-${item.productCode}`}>
             <div className="text-sm">
               {item.approvedByUser?.name || item.approvedBy ? 'Unknown' : 'Not approved'}
             </div>
@@ -489,13 +521,13 @@ export function ItemsTable({
         );
       case 'status':
         return (
-          <TableCell key={`status-${item.id}`}>
+          <TableCell key={`status-${item.productCode}`}>
             <UniversalBadge type="status" value={item.status} />
           </TableCell>
         );
       case 'actions':
         return (
-          <TableCell key={`actions-${item.id}`} className="text-right">
+          <TableCell key={`actions-${item.productCode}`} className="text-right">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="h-8 w-8 p-0">
@@ -526,14 +558,14 @@ export function ItemsTable({
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
-                      onClick={() => handleApproveItem(item.id)}
+                      onClick={() => handleApproveItem(item.productCode)}
                       className="text-green-600"
                     >
                       <Package className="mr-2 h-4 w-4" />
                       Approve
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      onClick={() => handleRejectItem(item.id)}
+                      onClick={() => handleRejectItem(item.productCode)}
                       className="text-red-600"
                     >
                       <Trash2 className="mr-2 h-4 w-4" />
@@ -548,7 +580,7 @@ export function ItemsTable({
                     <DropdownMenuItem
                       onClick={() => {
                         if (onExportItems) {
-                          onExportItems([item.id]);
+                          onExportItems([item.productCode]);
                         }
                       }}
                     >
@@ -564,7 +596,7 @@ export function ItemsTable({
                     <DropdownMenuItem
                       onClick={() => {
                         if (onClearanceItems) {
-                          onClearanceItems([item.id]);
+                          onClearanceItems([item.productCode]);
                         }
                       }}
                       className="text-orange-600"
@@ -581,7 +613,7 @@ export function ItemsTable({
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
-                      onClick={() => handleRemoveItem(item.id)}
+                      onClick={() => handleRemoveItem(item.productCode)}
                       className="text-red-600"
                     >
                       <Trash2 className="mr-2 h-4 w-4" />
@@ -647,24 +679,24 @@ export function ItemsTable({
           </TableHeader>
           <TableBody>
             {items.map((item) => (
-              <TableRow key={item.id}>
-                <TableCell key={`checkbox-${item.id}`}>
+              <TableRow key={item.productCode}>
+                <TableCell key={`checkbox-${item.productCode}`}>
                   <input
                     type="checkbox"
-                    checked={selectedItems.includes(item.id)}
-                    onChange={(e) => handleSelectItem(item.id, e.target.checked)}
+                    checked={selectedItems.includes(item.productCode)}
+                    onChange={(e) => handleSelectItem(item.productCode, e.target.checked)}
                     className="h-4 w-4"
                   />
                 </TableCell>
                 {visibleColumns
                   .filter(col => col !== 'actions')
                   .map(columnId => (
-                    <React.Fragment key={`${item.id}-${columnId}`}>
+                    <React.Fragment key={`${item.productCode}-${columnId}`}>
                       {renderTableCell(item, columnId)}
                     </React.Fragment>
                   ))}
                 {showActions && visibleColumns.includes('actions') && (
-                  <React.Fragment key={`${item.id}-actions`}>
+                  <React.Fragment key={`${item.productCode}-actions`}>
                     {renderTableCell(item, 'actions')}
                   </React.Fragment>
                 )}
