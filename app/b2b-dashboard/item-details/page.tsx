@@ -3,11 +3,23 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { FaBoxOpen, FaTrash, FaSave, FaArrowLeft, FaCheckCircle, FaExclamationTriangle, FaTimes, FaArrowRight } from 'react-icons/fa';
-import { sampleB2BItems, B2BItem, Variant } from '@/data/b2b-item-data';
+import { FaBoxOpen, FaTrash, FaSave, FaArrowLeft, FaCheckCircle, FaExclamationTriangle, FaTimes, FaArrowRight, FaSync } from 'react-icons/fa';
 
 interface SKUItem {
   sku: string;
+}
+
+interface Variant {
+  variantCode: string;
+  stock: number;
+}
+
+interface B2BItem {
+  sku: string;
+  brandName?: string;
+  divisionName?: string;
+  categoryName?: string;
+  variants: Variant[];
 }
 
 export default function ItemDetailsPage() {
@@ -20,6 +32,8 @@ export default function ItemDetailsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showValidation, setShowValidation] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Load selected SKUs from localStorage on mount
   useEffect(() => {
@@ -28,8 +42,10 @@ export default function ItemDetailsPage() {
       const skus = JSON.parse(storedSKUs);
       setSelectedSKUs(skus);
       
-      // Validate SKUs
-      validateSKUs(skus);
+      // Fetch item details for the SKUs
+      fetchItemDetails(skus);
+    } else {
+      setIsLoading(false);
     }
   }, []);
 
@@ -41,34 +57,66 @@ export default function ItemDetailsPage() {
     }
   }, [session, status, router]);
 
-  const validateSKUs = (skus: SKUItem[]) => {
-    const valid: B2BItem[] = [];
-    const invalid: string[] = [];
+  // Fetch item details from Business Central
+  const fetchItemDetails = async (skus: SKUItem[]) => {
+    setIsLoading(true);
+    setError(null);
     
-    skus.forEach(skuObj => {
-      const sku = skuObj.sku;
-      const item = sampleB2BItems.find(item => item.sku === sku);
-      
-      if (item) {
-        valid.push(item);
-        // Initialize stock inputs for each variant
-        item.variants.forEach(variant => {
-          const key = `${item.sku}-${variant.size}`;
-          setStockInputs(prev => ({ ...prev, [key]: 0 }));
-        });
-      } else {
-        invalid.push(sku);
+    try {
+      // Call the API to get item details
+      const response = await fetch('/api/get-item-details', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ skus: skus.map(s => s.sku) }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch item details');
       }
-    });
-    
-    setValidItems(valid);
-    setInvalidSKUs(invalid);
-    setShowValidation(true);
+
+      const data = await response.json();
+      
+      // Process the response
+      const valid: B2BItem[] = [];
+      const invalid: string[] = [];
+      
+      // Initialize stock inputs for each variant
+      const initialStockInputs: Record<string, number> = {};
+      
+      skus.forEach(skuObj => {
+        const sku = skuObj.sku;
+        const item = data.items.find((item: B2BItem) => item.sku === sku);
+        
+        if (item && item.variants && item.variants.length > 0) {
+          valid.push(item);
+          
+          // Initialize stock inputs for each variant
+          item.variants.forEach((variant: { variantCode: any; }) => {
+            const key = `${item.sku}-${variant.variantCode}`;
+            initialStockInputs[key] = 0;
+          });
+        } else {
+          invalid.push(sku);
+        }
+      });
+      
+      setValidItems(valid);
+      setInvalidSKUs(invalid);
+      setStockInputs(initialStockInputs);
+      setShowValidation(true);
+    } catch (err) {
+      console.error('Error fetching item details:', err);
+      setError('Failed to fetch item details. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleStockChange = (sku: string, size: string, value: string) => {
+  const handleStockChange = (sku: string, variantCode: string, value: string) => {
     const numValue = parseInt(value) || 0;
-    const key = `${sku}-${size}`;
+    const key = `${sku}-${variantCode}`;
     
     setStockInputs(prev => ({
       ...prev,
@@ -76,21 +124,56 @@ export default function ItemDetailsPage() {
     }));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setIsSaving(true);
     setSaveSuccess(false);
     
-    // Simulate API call
-    setTimeout(() => {
-      console.log('Saving stock data:', stockInputs);
-      setIsSaving(false);
-      setSaveSuccess(true);
+    try {
+      // Prepare the data to be saved
+      const stockData = validItems.map(item => {
+        return {
+          sku: item.sku,
+          variants: item.variants.map(variant => {
+            const key = `${item.sku}-${variant.variantCode}`;
+            return {
+              variantCode: variant.variantCode,
+              stock: stockInputs[key] || 0
+            };
+          })
+        };
+      });
+
+      // Call the API to save the stock data
+      const response = await fetch('/api/save-stock-data', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ items: stockData }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save stock data');
+      }
+
+      const result = await response.json();
       
-      // Hide success message after 3 seconds
-      setTimeout(() => {
-        setSaveSuccess(false);
-      }, 3000);
-    }, 1000);
+      if (result.success) {
+        setSaveSuccess(true);
+        
+        // Hide success message after 3 seconds
+        setTimeout(() => {
+          setSaveSuccess(false);
+        }, 3000);
+      } else {
+        throw new Error(result.message || 'Failed to save stock data');
+      }
+    } catch (err) {
+      console.error('Error saving stock data:', err);
+      setError('Failed to save stock data. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleBack = () => {
@@ -103,8 +186,12 @@ export default function ItemDetailsPage() {
     // router.push('/next-page');
   };
 
+  const handleRetry = () => {
+    fetchItemDetails(selectedSKUs);
+  };
+
   const getTotalItems = () => {
-    return validItems.reduce((total, item) => total + item.variants.length, 0);
+    return validItems.reduce((total, item) => total + (item.variants?.length || 0), 0);
   };
 
   const getTotalStock = () => {
@@ -180,6 +267,32 @@ export default function ItemDetailsPage() {
           </div>
         </div>
 
+        {/* Error Message */}
+        {error && (
+          <div className="mb-6 rounded-lg p-4 flex items-start bg-red-50 border border-red-200 text-red-800">
+            <FaExclamationTriangle className="mt-0.5 mr-3 flex-shrink-0" />
+            <div>
+              <p className="font-medium">{error}</p>
+              <button
+                onClick={handleRetry}
+                className="mt-2 flex items-center text-sm font-medium text-red-700 hover:text-red-900"
+              >
+                <FaSync className="mr-1" /> Retry
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {isLoading && (
+          <div className="mb-8 rounded-lg p-8 bg-white shadow-md">
+            <div className="flex flex-col items-center justify-center">
+              <div className="w-16 h-16 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mb-4" />
+              <p className="text-gray-600">Fetching item details from Business Central...</p>
+            </div>
+          </div>
+        )}
+
         {/* Stats Cards */}
         {validItems.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -224,7 +337,7 @@ export default function ItemDetailsPage() {
         )}
 
         {/* Validation Results */}
-        {showValidation && (
+        {showValidation && !isLoading && (
           <div className="mb-8">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-semibold text-gray-900">Validation Results</h2>
@@ -255,17 +368,19 @@ export default function ItemDetailsPage() {
                           <div className="flex justify-between items-start mb-2">
                             <div>
                               <span className="font-semibold">{item.sku}</span>
-                              <span className="text-gray-500 text-sm ml-2">{item.brandName}</span>
+                              {item.brandName && (
+                                <span className="text-gray-500 text-sm ml-2">{item.brandName}</span>
+                              )}
                             </div>
                             <span className="bg-emerald-100 text-emerald-800 text-xs px-2 py-1 rounded">
                               Valid
                             </span>
                           </div>
                           <div className="text-sm text-gray-600">
-                            <div>Division: {item.divisionName}</div>
-                            <div>Category: {item.categoryName}</div>
+                            {item.divisionName && <div>Division: {item.divisionName}</div>}
+                            {item.categoryName && <div>Category: {item.categoryName}</div>}
                             <div className="mt-2">
-                              <span className="font-medium">Sizes:</span> {item.variants.map(v => v.size).join(', ')}
+                              <span className="font-medium">Variants:</span> {item.variants.map(v => v.variantCode).join(', ')}
                             </div>
                           </div>
                         </div>
@@ -331,7 +446,7 @@ export default function ItemDetailsPage() {
           </div>
           
           <div className="p-6">
-            {validItems.length === 0 ? (
+            {validItems.length === 0 && !isLoading ? (
               <div className="text-center py-16">
                 <div className="bg-gray-100 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-4">
                   <FaBoxOpen className="text-gray-400 text-4xl" />
@@ -350,8 +465,8 @@ export default function ItemDetailsPage() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">SKU-Size</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Size Variant</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">SKU-Variant</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Variant Code</th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Current Stock</th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Stock to Send</th>
                     </tr>
@@ -359,20 +474,20 @@ export default function ItemDetailsPage() {
                   <tbody className="bg-white divide-y divide-gray-200">
                     {validItems.map((item) => (
                       item.variants.map((variant) => {
-                        const key = `${item.sku}-${variant.size}`;
+                        const key = `${item.sku}-${variant.variantCode}`;
                         
                         return (
                           <tr key={key} className="hover:bg-gray-50 transition-colors">
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
                               <div className="flex items-center">
                                 <div className="bg-primary-100 text-primary-700 px-2 py-1 rounded text-xs font-mono">
-                                  {item.sku}-{variant.size}
+                                  {item.sku}-{variant.variantCode}
                                 </div>
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm">
                               <span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-xs font-semibold">
-                                {variant.size}
+                                {variant.variantCode}
                               </span>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -384,9 +499,8 @@ export default function ItemDetailsPage() {
                               <input
                                 type="number"
                                 min="0"
-                                max={variant.stock}
                                 value={stockInputs[key] || variant.stock}
-                                onChange={(e) => handleStockChange(item.sku, variant.size, e.target.value)}
+                                onChange={(e) => handleStockChange(item.sku, variant.variantCode, e.target.value)}
                                 className="w-24 px-3 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
                               />
                             </td>
