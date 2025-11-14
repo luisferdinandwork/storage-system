@@ -8,7 +8,7 @@ import { eq, and, or, desc, sum } from 'drizzle-orm';
 import { itemStock } from '@/lib/db/schema';
 import { sql } from 'drizzle-orm';
 
-// GET /api/items - List items with their images
+// GET /api/items - List items with aggregated stock from all locations
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -20,8 +20,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
 
-    // Build the query with updated schema
-    let query = db
+    // First, get all items with basic info
+    let itemsQuery = db
       .select({
         productCode: items.productCode,
         description: items.description,
@@ -41,58 +41,18 @@ export async function GET(request: NextRequest) {
           id: users.id,
           name: users.name,
         },
-        stock: {
-          id: itemStock.id,
-          itemId: itemStock.itemId,
-          pending: itemStock.pending,
-          inStorage: itemStock.inStorage,
-          onBorrow: itemStock.onBorrow,
-          inClearance: itemStock.inClearance,
-          seeded: itemStock.seeded,
-          boxId: itemStock.boxId,
-          condition: itemStock.condition,
-          conditionNotes: itemStock.conditionNotes,
-          createdAt: itemStock.createdAt,
-          updatedAt: itemStock.updatedAt,
-        },
-        box: {
-          id: boxes.id,
-          boxNumber: boxes.boxNumber,
-          description: boxes.description,
-        },
-        location: {
-          id: locations.id,
-          name: locations.name,
-          description: locations.description,
-        }
       })
       .from(items)
       .leftJoin(users, eq(items.createdBy, users.id))
-      .leftJoin(itemStock, eq(items.productCode, itemStock.itemId))
-      .leftJoin(boxes, eq(itemStock.boxId, boxes.id))
-      .leftJoin(locations, eq(boxes.locationId, locations.id))
       .orderBy(desc(items.updatedAt));
 
     // Apply status filter if specified
     let itemsData;
     if (status) {
-      itemsData = await query.where(eq(items.status, status as any));
+      itemsData = await itemsQuery.where(eq(items.status, status as any));
     } else {
-      itemsData = await query;
+      itemsData = await itemsQuery;
     }
-
-    // Filter items that have stock in pending, inStorage, or onBorrow
-    // Exclude items that ONLY have stock in clearance or seeded
-    const filteredItems = itemsData.filter(item => {
-      if (!item.stock) return false;
-      
-      const { pending, inStorage, onBorrow, inClearance, seeded } = item.stock;
-      
-      // Show item if it has any stock in pending, inStorage, or onBorrow
-      const hasVisibleStock = pending > 0 || inStorage > 0 || onBorrow > 0;
-      
-      return hasVisibleStock;
-    });
 
     // Fetch all images
     const allImages = await db
@@ -108,30 +68,69 @@ export async function GET(request: NextRequest) {
       imagesByItemId[image.itemId].push(image);
     }
 
-    // Calculate total stock for each item
-    const itemsWithTotalStock = await Promise.all(
-      filteredItems.map(async (item) => {
-        if (!item.stock) {
-          return {
-            ...item,
-            totalStock: 0,
-            images: imagesByItemId[item.productCode] || []
-          };
-        }
+    // For each item, aggregate stock from all locations
+    const itemsWithAggregatedStock = await Promise.all(
+      itemsData.map(async (item) => {
+        // Get all stock records for this item
+        const stockRecords = await db
+          .select({
+            stock: itemStock,
+            box: boxes,
+            location: locations,
+          })
+          .from(itemStock)
+          .leftJoin(boxes, eq(itemStock.boxId, boxes.id))
+          .leftJoin(locations, eq(boxes.locationId, locations.id))
+          .where(eq(itemStock.itemId, item.productCode));
 
-        const totalStock = item.stock.pending + item.stock.inStorage + 
-                          item.stock.onBorrow + item.stock.inClearance + 
-                          item.stock.seeded;
+        // Aggregate quantities across all locations
+        const aggregatedStock = stockRecords.reduce(
+          (totals, record) => ({
+            pending: totals.pending + record.stock.pending,
+            inStorage: totals.inStorage + record.stock.inStorage,
+            onBorrow: totals.onBorrow + record.stock.onBorrow,
+            inClearance: totals.inClearance + record.stock.inClearance,
+            seeded: totals.seeded + record.stock.seeded,
+          }),
+          { pending: 0, inStorage: 0, onBorrow: 0, inClearance: 0, seeded: 0 }
+        );
+
+        // Calculate total stock
+        const totalStock = 
+          aggregatedStock.pending + 
+          aggregatedStock.inStorage + 
+          aggregatedStock.onBorrow + 
+          aggregatedStock.inClearance + 
+          aggregatedStock.seeded;
+
+        // Check if item should be visible (has stock in pending, inStorage, or onBorrow)
+        const hasVisibleStock = 
+          aggregatedStock.pending > 0 || 
+          aggregatedStock.inStorage > 0 || 
+          aggregatedStock.onBorrow > 0;
 
         return {
           ...item,
+          stock: aggregatedStock, // Aggregated stock quantities
+          stockRecords: stockRecords.map(r => ({
+            ...r.stock,
+            box: r.box,
+            location: r.location,
+          })), // Individual stock records with location details
           totalStock,
-          images: imagesByItemId[item.productCode] || []
+          hasVisibleStock,
+          images: imagesByItemId[item.productCode] || [],
         };
       })
     );
 
-    return NextResponse.json(itemsWithTotalStock);
+    // Filter items that have visible stock
+    const filteredItems = itemsWithAggregatedStock.filter(item => item.hasVisibleStock);
+
+    // Remove hasVisibleStock flag before sending response
+    const responseItems = filteredItems.map(({ hasVisibleStock, ...item }) => item);
+
+    return NextResponse.json(responseItems);
   } catch (error) {
     console.error('Failed to fetch items:', error);
     return NextResponse.json(

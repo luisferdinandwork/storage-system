@@ -33,7 +33,22 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { MoreHorizontal, Edit, Image, Trash2, Eye, Package, Download, FileDown, ChevronLeft, ChevronRight, Archive } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { 
+  MoreHorizontal, 
+  Edit, 
+  Image, 
+  Trash2, 
+  Eye, 
+  Package, 
+  Download, 
+  FileDown, 
+  ChevronLeft, 
+  ChevronRight, 
+  Archive,
+  Calendar,
+  Clock
+} from 'lucide-react';
 import { UniversalBadge } from '@/components/ui/universal-badge';
 import { EditItemModal } from '@/components/items/edit-item-modal';
 import React from 'react';
@@ -401,6 +416,24 @@ export function ItemsTable({
             <UniversalBadge type="category" value={item.productCategory} />
           </TableCell>
         );
+      case 'season':
+        return (
+          <TableCell key={`season-${item.productCode}`}>
+            <Badge variant="outline" className="bg-purple-50 text-purple-800 border-purple-200">
+              <Calendar className="mr-1 h-3 w-3" />
+              {item.season}
+            </Badge>
+          </TableCell>
+        );
+      case 'period':
+        return (
+          <TableCell key={`period-${item.productCode}`}>
+            <Badge variant="outline" className="bg-indigo-50 text-indigo-800 border-indigo-200">
+              <Clock className="mr-1 h-3 w-3" />
+              {item.period}
+            </Badge>
+          </TableCell>
+        );
       case 'unit':
         return (
           <TableCell key={`unit-${item.productCode}`}>
@@ -412,84 +445,42 @@ export function ItemsTable({
           <TableCell key={`stock-${item.productCode}`}>
             {item.stock ? (
               <TooltipProvider>
-                <div className="flex items-center space-x-2">
-                  {/* Calculate available stock (pending + inStorage) */}
-                  {(item.stock.pending > 0 || item.stock.inStorage > 0) && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex items-center space-x-1 px-2 py-1 rounded-full bg-green-100 text-green-800 text-xs font-medium">
-                          <span>{item.stock.pending + item.stock.inStorage}</span>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Total: {item.stock.pending + item.stock.inStorage} items</p>
-                        {item.stock.pending > 0 && <p>Pending: {item.stock.pending} items</p>}
-                        {item.stock.inStorage > 0 && <p>In Storage: {item.stock.inStorage} items</p>}
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
-                  
-                  {/* Show borrowed stock only if all stock is borrowed (no pending or inStorage) */}
-                  {item.stock.onBorrow > 0 && item.stock.pending === 0 && item.stock.inStorage === 0 && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex items-center space-x-1 px-2 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-medium">
-                          <span>{item.stock.onBorrow}</span>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>On Borrow: {item.stock.onBorrow} items</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
+                <div className="flex flex-col space-y-2">
+                  <div className="flex flex-wrap gap-1">
+                    {/* Calculate available stock (pending + inStorage) */}
+                    {(item.stock.pending > 0 || item.stock.inStorage > 0) && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex items-center space-x-1 px-2 py-1 rounded-full bg-green-100 text-green-800 text-xs font-medium">
+                            <span>{item.stock.pending + item.stock.inStorage}</span>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Total: {item.stock.pending + item.stock.inStorage} items</p>
+                          {item.stock.pending > 0 && <p>Pending: {item.stock.pending} items</p>}
+                          {item.stock.inStorage > 0 && <p>In Storage: {item.stock.inStorage} items</p>}
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                    
+                    {/* Show borrowed stock only if all stock is borrowed (no pending or inStorage) */}
+                    {item.stock.onBorrow > 0 && item.stock.pending === 0 && item.stock.inStorage === 0 && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex items-center space-x-1 px-2 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-medium">
+                            <span>{item.stock.onBorrow}</span>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>On Borrow: {item.stock.onBorrow} items</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                  </div>
                 </div>
               </TooltipProvider>
             ) : (
               <div className="text-gray-500">No stock data</div>
-            )}
-          </TableCell>
-        );
-      case 'condition':
-        return (
-          <TableCell key={`condition-${item.productCode}`}>
-            {item.stock ? (
-              <div className="flex flex-col space-y-1">
-                <UniversalBadge type="condition" value={item.stock.condition} />
-                {item.stock.conditionNotes && (
-                  <span className="text-xs text-gray-500 truncate max-w-[200px]">
-                    {item.stock.conditionNotes}
-                  </span>
-                )}
-              </div>
-            ) : (
-              <div className="text-gray-500">No condition data</div>
-            )}
-          </TableCell>
-        );
-      case 'location':
-        return (
-          <TableCell key={`location-${item.productCode}`}>
-            {item.location ? (
-              <UniversalBadge type="location" value={item.location.name} />
-            ) : (
-              <div className="text-gray-500">No location</div>
-            )}
-          </TableCell>
-        );
-      case 'box':
-        return (
-          <TableCell key={`box-${item.productCode}`}>
-            {item.box ? (
-              <div className="flex flex-col space-y-1">
-                <span className="text-sm font-medium">{item.box.boxNumber}</span>
-                {item.box.description && (
-                  <span className="text-xs text-gray-500 truncate max-w-[200px]">
-                    {item.box.description}
-                  </span>
-                )}
-              </div>
-            ) : (
-              <div className="text-gray-500">No box</div>
             )}
           </TableCell>
         );
@@ -530,28 +521,35 @@ export function ItemsTable({
           <TableCell key={`actions-${item.productCode}`} className="text-right">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-8 w-8 p-0">
+                <Button variant="ghost" className="h-8 w-8 p-0 rounded-full hover:bg-gray-100">
                   <span className="sr-only">Open menu</span>
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel className="text-xs font-normal text-gray-500">Item Actions</DropdownMenuLabel>
                 
                 {item.images.length > 0 && (
-                  <DropdownMenuItem onClick={() => handleViewImage(getPrimaryImage(item.images))}>
+                  <DropdownMenuItem 
+                    onClick={() => handleViewImage(getPrimaryImage(item.images))}
+                    className="cursor-pointer"
+                  >
                     <Image className="mr-2 h-4 w-4" />
                     View Images
                   </DropdownMenuItem>
                 )}
                 
                 {canEditItem && (
-                  <DropdownMenuItem
-                    onClick={() => handleEditItem(item)}
-                  >
-                    <Edit className="mr-2 h-4 w-4" />
-                    Edit
-                  </DropdownMenuItem>
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => handleEditItem(item)}
+                      className="cursor-pointer"
+                    >
+                      <Edit className="mr-2 h-4 w-4" />
+                      Edit
+                    </DropdownMenuItem>
+                  </>
                 )}
                 
                 {canApproveItem && item.status === 'pending_approval' && (
@@ -559,14 +557,14 @@ export function ItemsTable({
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       onClick={() => handleApproveItem(item.productCode)}
-                      className="text-green-600"
+                      className="cursor-pointer text-green-600"
                     >
                       <Package className="mr-2 h-4 w-4" />
                       Approve
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => handleRejectItem(item.productCode)}
-                      className="text-red-600"
+                      className="cursor-pointer text-red-600"
                     >
                       <Trash2 className="mr-2 h-4 w-4" />
                       Reject
@@ -583,6 +581,7 @@ export function ItemsTable({
                           onExportItems([item.productCode]);
                         }
                       }}
+                      className="cursor-pointer"
                     >
                       <Download className="mr-2 h-4 w-4" />
                       Export
@@ -599,7 +598,7 @@ export function ItemsTable({
                           onClearanceItems([item.productCode]);
                         }
                       }}
-                      className="text-orange-600"
+                      className="cursor-pointer text-orange-600"
                     >
                       <Archive className="mr-2 h-4 w-4" />
                       Move to Clearance
@@ -614,7 +613,7 @@ export function ItemsTable({
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       onClick={() => handleRemoveItem(item.productCode)}
-                      className="text-red-600"
+                      className="cursor-pointer text-red-600"
                     >
                       <Trash2 className="mr-2 h-4 w-4" />
                       Delete
@@ -654,38 +653,38 @@ export function ItemsTable({
 
   return (
     <>
-      <div className="border rounded-md overflow-x-auto">
+      <div className="border rounded-md overflow-hidden bg-white">
         <Table>
-          <TableHeader>
+          <TableHeader className="bg-gray-50">
             <TableRow>
               <TableHead key="checkbox" className="w-12">
                 <input
                   type="checkbox"
                   checked={selectedItems.length === items.length && items.length > 0}
                   onChange={(e) => handleSelectAll(e.target.checked)}
-                  className="h-4 w-4"
+                  className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                 />
               </TableHead>
               {visibleColumns
                 .filter(col => col !== 'actions')
                 .map(columnId => {
                   const column = columns.find(col => col.id === columnId);
-                  return column ? <TableHead key={columnId}>{column.label}</TableHead> : null;
+                  return column ? <TableHead key={columnId} className="font-medium text-gray-900">{column.label}</TableHead> : null;
                 })}
               {showActions && visibleColumns.includes('actions') && (
-                <TableHead key="actions" className="text-right">Actions</TableHead>
+                <TableHead key="actions" className="text-right font-medium text-gray-900">Actions</TableHead>
               )}
             </TableRow>
           </TableHeader>
           <TableBody>
             {items.map((item) => (
-              <TableRow key={item.productCode}>
+              <TableRow key={item.productCode} className="hover:bg-gray-50">
                 <TableCell key={`checkbox-${item.productCode}`}>
                   <input
                     type="checkbox"
                     checked={selectedItems.includes(item.productCode)}
                     onChange={(e) => handleSelectItem(item.productCode, e.target.checked)}
-                    className="h-4 w-4"
+                    className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                   />
                 </TableCell>
                 {visibleColumns
@@ -737,7 +736,7 @@ export function ItemsTable({
             size="sm"
             onClick={() => handlePageChange(activeCurrentPage - 1)}
             disabled={activeCurrentPage === 1}
-            className="h-8 w-8 p-0"
+            className="h-8 w-8 p-0 rounded-full"
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -745,13 +744,13 @@ export function ItemsTable({
           {generatePageNumbers().map((page, index) => (
             <React.Fragment key={index}>
               {page === '...' ? (
-                <span className="px-3 py-1 text-sm">...</span>
+                <span className="px-3 py-1 text-sm text-gray-500">...</span>
               ) : (
                 <Button
                   variant={activeCurrentPage === page ? "default" : "outline"}
                   size="sm"
                   onClick={() => handlePageChange(Number(page))}
-                  className="h-8 w-8 p-0"
+                  className="h-8 w-8 p-0 rounded-full"
                 >
                   {page}
                 </Button>
@@ -764,7 +763,7 @@ export function ItemsTable({
             size="sm"
             onClick={() => handlePageChange(activeCurrentPage + 1)}
             disabled={activeCurrentPage === activeTotalPages}
-            className="h-8 w-8 p-0"
+            className="h-8 w-8 p-0 rounded-full"
           >
             <ChevronRight className="h-4 w-4" />
           </Button>

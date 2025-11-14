@@ -4,7 +4,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { boxes, locations } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 
 export async function GET() {
   try {
@@ -28,6 +28,7 @@ export async function GET() {
 
     return NextResponse.json(boxesData);
   } catch (error) {
+    console.error('Failed to fetch boxes:', error);
     return NextResponse.json({ error: 'Failed to fetch boxes' }, { status: 500 });
   }
 }
@@ -68,7 +69,10 @@ export async function POST(request: NextRequest) {
 
     // Check if a box with the same number already exists in this location
     const existingBox = await db.query.boxes.findFirst({
-      where: eq(boxes.boxNumber, boxNumber),
+      where: and(
+        eq(boxes.boxNumber, boxNumber),
+        eq(boxes.locationId, locationId)
+      ),
     });
 
     if (existingBox) {
@@ -85,9 +89,25 @@ export async function POST(request: NextRequest) {
       locationId,
     }).returning();
 
+    // Fetch the newly created box with location information
+    const createdBoxWithLocation = await db
+      .select({
+        id: boxes.id,
+        boxNumber: boxes.boxNumber,
+        description: boxes.description,
+        location: {
+          id: locations.id,
+          name: locations.name,
+        }
+      })
+      .from(boxes)
+      .leftJoin(locations, eq(boxes.locationId, locations.id))
+      .where(eq(boxes.id, newBox[0].id))
+      .limit(1);
+
     return NextResponse.json({
       message: 'Box created successfully',
-      box: newBox[0],
+      box: createdBoxWithLocation[0],
     });
   } catch (error) {
     console.error('Failed to create box:', error);
