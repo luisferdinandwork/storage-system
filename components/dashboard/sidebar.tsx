@@ -83,9 +83,17 @@ const navigation: NavigationItem[] = [
     icon: MapPin, 
     roles: ['superadmin', 'storage-master', 'storage-manager'] 
   },
+  
+  // Clearance Management - Storage Master and Storage Manager specific
   { 
-    name: 'Inventory Clearence', 
+    name: 'Form Clearence', 
     href: '/dashboard/clearance', 
+    icon: FileText, 
+    roles: ['superadmin', 'storage-master', 'storage-manager'] 
+  },
+  { 
+    name: 'Items in Clearence', 
+    href: '/dashboard/item-clearance', 
     icon: Trash2, 
     roles: ['superadmin', 'storage-master', 'storage-manager'] 
   },
@@ -171,7 +179,14 @@ export function Sidebar({ userRole }: SidebarProps) {
     {
       title: 'Manajemen Inventori',
       items: filteredNavigation.filter(item => 
-        ['Warehousing', 'Lokasi Inventori', 'Inventory Clearence'].includes(item.name)
+        ['Warehousing', 'Lokasi Inventori'].includes(item.name)
+      ),
+      show: userRole === 'storage-master' || userRole === 'storage-manager' || userRole === 'superadmin'
+    },
+    {
+      title: 'Manajemen Clearence',
+      items: filteredNavigation.filter(item => 
+        ['Form Clearence', 'Items in Clearence'].includes(item.name)
       ),
       show: userRole === 'storage-master' || userRole === 'storage-manager' || userRole === 'superadmin'
     },

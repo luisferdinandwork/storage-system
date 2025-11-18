@@ -1,4 +1,4 @@
-// app/api/items/bulk-clearance/route.ts
+// app/api/items/bulk-revert-clearance/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -23,15 +23,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Only item-master and superadmin can move items to clearance
-    const allowedRoles = ['superadmin', 'item-master'];
+    // Only storage-master, storage-master-manager, and superadmin can revert items from clearance
+    const allowedRoles = ['superadmin', 'storage-master', 'storage-master-manager'];
     if (!allowedRoles.includes(session.user.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { items: clearanceItems, reason } = await request.json();
+    const { items: revertItems, reason } = await request.json();
 
-    if (!clearanceItems || !Array.isArray(clearanceItems) || clearanceItems.length === 0) {
+    if (!revertItems || !Array.isArray(revertItems) || revertItems.length === 0) {
       return NextResponse.json(
         { error: 'Items are required' },
         { status: 400 }
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
 
     if (!reason || !reason.trim()) {
       return NextResponse.json(
-        { error: 'Clearance reason is required' },
+        { error: 'Revert reason is required' },
         { status: 400 }
       );
     }
@@ -49,8 +49,8 @@ export async function POST(request: NextRequest) {
     const errors = [];
 
     // Process each item
-    for (const item of clearanceItems) {
-      const { itemId, quantity, stockId } = item;
+    for (const item of revertItems) {
+      const { itemId, stockId, quantity } = item;
 
       if (!itemId || !quantity || quantity <= 0) {
         errors.push({ itemId, error: 'Invalid item ID or quantity' });
@@ -58,8 +58,6 @@ export async function POST(request: NextRequest) {
       }
 
       // Get the current stock for the item
-      // If stockId is provided, get that specific stock record
-      // Otherwise, get any available stock record for the item
       let stock;
       if (stockId) {
         stock = await db.query.itemStock.findFirst({
@@ -79,34 +77,21 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // Check if there's enough available stock (pending + inStorage)
-      const availableStock = stock.pending + stock.inStorage;
-      if (availableStock < quantity) {
+      // Check if there's enough clearance stock
+      if (stock.inClearance < quantity) {
         errors.push({ 
           itemId, 
-          error: `Insufficient stock. Available: ${availableStock}, Requested: ${quantity}` 
+          error: `Insufficient clearance stock. Available: ${stock.inClearance}, Requested: ${quantity}` 
         });
         continue;
       }
 
-      // Determine how much to take from pending and inStorage
-      let pendingToClear = 0;
-      let inStorageToClear = 0;
-
-      if (stock.pending >= quantity) {
-        pendingToClear = quantity;
-      } else {
-        pendingToClear = stock.pending;
-        inStorageToClear = quantity - stock.pending;
-      }
-
-      // Update item stock - location (boxId) remains unchanged
+      // Update item stock - move from clearance to storage
       const updatedStock = await db
         .update(itemStock)
         .set({
-          pending: stock.pending - pendingToClear,
-          inStorage: stock.inStorage - inStorageToClear,
-          inClearance: stock.inClearance + quantity,
+          inClearance: stock.inClearance - quantity,
+          inStorage: stock.inStorage + quantity,
           updatedAt: new Date(),
         })
         .where(eq(itemStock.id, stock.id))
@@ -123,18 +108,18 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Create clearance record
+      // Create a clearance record for the revert
+      // Using 'completed' status since 'reverted' is not in the enum
       const [clearance] = await db
         .insert(itemClearances)
         .values({
           itemId,
           quantity,
           requestedBy: session.user.id,
-          reason,
-          status: 'completed',
+          reason: `REVERT: ${reason}`, // Prefix to indicate this is a revert
+          status: 'completed', // Using 'completed' since 'reverted' is not in the enum
           metadata: {
-            pendingCleared: pendingToClear,
-            inStorageCleared: inStorageToClear,
+            type: 'revert', // Adding type in metadata to track this is a revert
             stockId: stock.id,
             boxId: stock.boxId,
             locationId: locationInfo?.location?.id,
@@ -147,26 +132,25 @@ export async function POST(request: NextRequest) {
       // Generate a short reference ID
       const shortReferenceId = generateShortId(10);
 
-      // Record stock movement - include location information
+      // Record stock movement
+      // Using 'clearance' as referenceType since 'clearance_revert' is not in the enum
       await db.insert(stockMovements).values({
         itemId,
         stockId: updatedStock[0].id,
-        movementType: 'clearance',
+        movementType: 'adjustment', // Using 'adjustment' since 'revert_clearance' is not in the enum
         quantity,
-        fromState: pendingToClear > 0 ? 'pending' : 'storage',
-        toState: 'clearance',
+        fromState: 'clearance',
+        toState: 'storage',
         referenceId: shortReferenceId,
-        referenceType: 'clearance',
+        referenceType: 'clearance', // Using 'clearance' which is in the enum
         performedBy: session.user.id,
-        notes: `Moved to clearance: ${reason}`,
-        boxId: stock.boxId, // Include the boxId in the movement record
+        notes: `REVERT FROM CLEARANCE: ${reason}`, // Making it clear in notes this is a revert
+        boxId: stock.boxId,
       });
 
       results.push({
         itemId,
         quantity,
-        pendingCleared: pendingToClear,
-        inStorageCleared: inStorageToClear,
         clearanceId: clearance.id,
         referenceId: shortReferenceId,
         stockId: stock.id,
@@ -177,14 +161,14 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ 
-      message: `${results.length} items moved to clearance successfully`,
+      message: `${results.length} items reverted from clearance successfully`,
       results,
       errors: errors.length > 0 ? errors : undefined
     });
   } catch (error) {
-    console.error('Failed to move items to clearance:', error);
+    console.error('Failed to revert items from clearance:', error);
     return NextResponse.json(
-      { error: 'Failed to move items to clearance' },
+      { error: 'Failed to revert items from clearance' },
       { status: 500 }
     );
   }

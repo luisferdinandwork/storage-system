@@ -228,6 +228,120 @@ export const stockMovements = pgTable('stock_movements', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+// Clearance Forms table
+export const clearanceForms = pgTable('clearance_forms', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  formNumber: varchar('form_number', { length: 20 }).notNull().unique(),
+  title: text('title').notNull(),
+  description: text('description'),
+  period: text('period').notNull(), // e.g., "2023-Q4", "2024-H1"
+  status: text('status', { 
+    enum: ['draft', 'pending_approval', 'approved', 'rejected', 'processed'] 
+  }).notNull().default('draft'),
+  
+  // Audit fields
+  createdBy: uuid('created_by').references(() => users.id).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  
+  // Approval fields
+  approvedBy: uuid('approved_by').references(() => users.id),
+  approvedAt: timestamp('approved_at'),
+  rejectionReason: text('rejection_reason'),
+  
+  // Processing fields
+  processedAt: timestamp('processed_at'),
+  processedBy: uuid('processed_by').references(() => users.id),
+});
+
+// Clearance Form Items table (junction table)
+export const clearanceFormItems = pgTable('clearance_form_items', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  formId: uuid('form_id').references(() => clearanceForms.id, { onDelete: 'cascade' }).notNull(),
+  itemId: text('item_id').references(() => items.productCode, { onDelete: 'cascade' }).notNull(),
+  stockId: uuid('stock_id').references(() => itemStock.id, { onDelete: 'cascade' }).notNull(),
+  quantity: integer('quantity').notNull(),
+  condition: text('condition', { enum: ['excellent', 'good', 'fair', 'poor'] }).notNull().default('good'),
+  conditionNotes: text('condition_notes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Cleared Items table (stores historical data of cleared items)
+export const clearedItems = pgTable('cleared_items', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  formId: uuid('form_id').references(() => clearanceForms.id, { onDelete: 'set null' }),
+  formNumber: varchar('form_number', { length: 20 }).notNull(),
+  
+  // Item details (copied from items table)
+  productCode: text('product_code').notNull(),
+  description: text('description').notNull(),
+  brandCode: text('brand_code').notNull(),
+  productDivision: text('product_division').notNull(),
+  productCategory: text('product_category').notNull(),
+  period: text('period').notNull(),
+  season: text('season').notNull(),
+  unitOfMeasure: text('unit_of_measure', { enum: ['PCS', 'PRS'] }).notNull(),
+  
+  // Clearance details
+  quantity: integer('quantity').notNull(),
+  condition: text('condition', { enum: ['excellent', 'good', 'fair', 'poor'] }).notNull(),
+  conditionNotes: text('condition_notes'),
+  
+  // Location details (copied from stock)
+  boxId: uuid('box_id'),
+  boxNumber: text('box_number'),
+  locationId: uuid('location_id'),
+  locationName: text('location_name'),
+  
+  // Audit fields
+  clearedAt: timestamp('cleared_at').defaultNow().notNull(),
+  clearedBy: uuid('cleared_by').references(() => users.id).notNull(),
+});
+
+// Add relations for the new tables
+export const clearanceFormsRelations = relations(clearanceForms, ({ one, many }) => ({
+  createdBy: one(users, {
+    fields: [clearanceForms.createdBy],
+    references: [users.id],
+  }),
+  approvedBy: one(users, {
+    fields: [clearanceForms.approvedBy],
+    references: [users.id],
+  }),
+  processedBy: one(users, {
+    fields: [clearanceForms.processedBy],
+    references: [users.id],
+  }),
+  items: many(clearanceFormItems),
+  clearedItems: many(clearedItems),
+}));
+
+export const clearanceFormItemsRelations = relations(clearanceFormItems, ({ one }) => ({
+  form: one(clearanceForms, {
+    fields: [clearanceFormItems.formId],
+    references: [clearanceForms.id],
+  }),
+  item: one(items, {
+    fields: [clearanceFormItems.itemId],
+    references: [items.productCode],
+  }),
+  stock: one(itemStock, {
+    fields: [clearanceFormItems.stockId],
+    references: [itemStock.id],
+  }),
+}));
+
+export const clearedItemsRelations = relations(clearedItems, ({ one }) => ({
+  form: one(clearanceForms, {
+    fields: [clearedItems.formId],
+    references: [clearanceForms.id],
+  }),
+  clearedBy: one(users, {
+    fields: [clearedItems.clearedBy],
+    references: [users.id],
+  }),
+}));
+
 // Relations - UPDATED for new tables and references
 export const departmentsRelations = relations(departments, ({ many }) => ({
   users: many(users),
@@ -441,6 +555,16 @@ export type NewItemClearance = typeof itemClearances.$inferInsert;
 export type StockMovement = typeof stockMovements.$inferSelect;
 export type NewStockMovement = typeof stockMovements.$inferInsert;
 
+export type ClearanceForm = typeof clearanceForms.$inferSelect;
+export type NewClearanceForm = typeof clearanceForms.$inferInsert;
+
+export type ClearanceFormItem = typeof clearanceFormItems.$inferSelect;
+export type NewClearanceFormItem = typeof clearanceFormItems.$inferInsert;
+
+export type ClearedItem = typeof clearedItems.$inferSelect;
+export type NewClearedItem = typeof clearedItems.$inferInsert;
+
+export type ClearanceFormStatus = ClearanceForm['status'];
 export type UserRole = User['role'];
 export type ItemStatus = Item['status'];
 export type ItemCondition = ItemStock['condition'];

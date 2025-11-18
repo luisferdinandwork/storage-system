@@ -49,6 +49,58 @@ CREATE TABLE "boxes" (
 	CONSTRAINT "unique_box_number" UNIQUE("location_id","box_number")
 );
 --> statement-breakpoint
+CREATE TABLE "clearance_form_items" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"form_id" uuid NOT NULL,
+	"item_id" text NOT NULL,
+	"stock_id" uuid NOT NULL,
+	"quantity" integer NOT NULL,
+	"condition" text DEFAULT 'good' NOT NULL,
+	"condition_notes" text,
+	"created_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "clearance_forms" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"form_number" varchar(20) NOT NULL,
+	"title" text NOT NULL,
+	"description" text,
+	"period" text NOT NULL,
+	"status" text DEFAULT 'draft' NOT NULL,
+	"created_by" uuid NOT NULL,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL,
+	"approved_by" uuid,
+	"approved_at" timestamp,
+	"rejection_reason" text,
+	"processed_at" timestamp,
+	"processed_by" uuid,
+	CONSTRAINT "clearance_forms_form_number_unique" UNIQUE("form_number")
+);
+--> statement-breakpoint
+CREATE TABLE "cleared_items" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"form_id" uuid,
+	"form_number" varchar(20) NOT NULL,
+	"product_code" text NOT NULL,
+	"description" text NOT NULL,
+	"brand_code" text NOT NULL,
+	"product_division" text NOT NULL,
+	"product_category" text NOT NULL,
+	"period" text NOT NULL,
+	"season" text NOT NULL,
+	"unit_of_measure" text NOT NULL,
+	"quantity" integer NOT NULL,
+	"condition" text NOT NULL,
+	"condition_notes" text,
+	"box_id" uuid,
+	"box_number" text,
+	"location_id" uuid,
+	"location_name" text,
+	"cleared_at" timestamp DEFAULT now() NOT NULL,
+	"cleared_by" uuid NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "departments" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"name" text NOT NULL,
@@ -177,6 +229,14 @@ ALTER TABLE "borrow_requests" ADD CONSTRAINT "borrow_requests_completed_by_users
 ALTER TABLE "borrow_requests" ADD CONSTRAINT "borrow_requests_seeded_by_users_id_fk" FOREIGN KEY ("seeded_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "borrow_requests" ADD CONSTRAINT "borrow_requests_reverted_by_users_id_fk" FOREIGN KEY ("reverted_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "boxes" ADD CONSTRAINT "boxes_location_id_locations_id_fk" FOREIGN KEY ("location_id") REFERENCES "public"."locations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "clearance_form_items" ADD CONSTRAINT "clearance_form_items_form_id_clearance_forms_id_fk" FOREIGN KEY ("form_id") REFERENCES "public"."clearance_forms"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "clearance_form_items" ADD CONSTRAINT "clearance_form_items_item_id_items_product_code_fk" FOREIGN KEY ("item_id") REFERENCES "public"."items"("product_code") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "clearance_form_items" ADD CONSTRAINT "clearance_form_items_stock_id_item_stock_id_fk" FOREIGN KEY ("stock_id") REFERENCES "public"."item_stock"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "clearance_forms" ADD CONSTRAINT "clearance_forms_created_by_users_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "clearance_forms" ADD CONSTRAINT "clearance_forms_approved_by_users_id_fk" FOREIGN KEY ("approved_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "clearance_forms" ADD CONSTRAINT "clearance_forms_processed_by_users_id_fk" FOREIGN KEY ("processed_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "cleared_items" ADD CONSTRAINT "cleared_items_form_id_clearance_forms_id_fk" FOREIGN KEY ("form_id") REFERENCES "public"."clearance_forms"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "cleared_items" ADD CONSTRAINT "cleared_items_cleared_by_users_id_fk" FOREIGN KEY ("cleared_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "item_clearances" ADD CONSTRAINT "item_clearances_item_id_items_product_code_fk" FOREIGN KEY ("item_id") REFERENCES "public"."items"("product_code") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "item_clearances" ADD CONSTRAINT "item_clearances_requested_by_users_id_fk" FOREIGN KEY ("requested_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "item_clearances" ADD CONSTRAINT "item_clearances_approved_by_users_id_fk" FOREIGN KEY ("approved_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint

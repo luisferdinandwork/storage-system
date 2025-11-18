@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
       .insert(itemClearances)
       .values({
         itemId,
-        quantity: -quantity, // Negative quantity indicates a revert
+        quantity: -quantity, 
         requestedBy: session.user.id,
         reason: 'Reverted from clearance',
         status: 'completed',
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
       itemId,
       stockId: updatedStock[0].id,
       movementType: 'clearance',
-      quantity: -quantity, // Negative quantity indicates a revert
+      quantity: -quantity, 
       fromState: 'clearance',
       toState: 'storage',
       performedBy: session.user.id,
