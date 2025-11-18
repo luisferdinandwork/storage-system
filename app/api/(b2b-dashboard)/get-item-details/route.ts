@@ -47,7 +47,8 @@ export async function POST(request: NextRequest) {
           sku: item.itemNo,
           variants: item.variants.map((variant: any) => ({
             variantCode: variant.variantCode,
-            stock: variant.stock || 0
+            stock: variant.stock || 0,
+            jubelioItemId: variant.jubelioItemId // Add this field
           }))
         }));
         

@@ -1,4 +1,3 @@
-// app/api/validate-sku/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
@@ -62,7 +61,11 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ 
               exists: true, 
               stock: totalStock,
-              variants: item.variants
+              variants: item.variants.map((variant: any) => ({
+                variantCode: variant.variantCode,
+                stock: variant.stock || 0,
+                jubelioItemId: variant.jubelioItemId // Add this field
+              }))
             });
           }
         }

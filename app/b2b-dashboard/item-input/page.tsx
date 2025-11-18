@@ -12,9 +12,10 @@ import {
   FaFileExcel, 
   FaCheckCircle, 
   FaExclamationTriangle, 
-  FaSearch, 
+  FaSearch,
   FaInfoCircle,
-  FaTimes
+  FaTimes,
+  FaDownload
 } from 'react-icons/fa';
 import * as XLSX from 'xlsx';
 
@@ -22,15 +23,30 @@ interface SKUItem {
   sku: string;
   exists?: boolean;
   stock?: number;
-  variants?: { variantCode: string; stock: number }[];
+  variants?: { 
+    variantCode: string; 
+    stock: number;
+    jubelioItemId: number;
+  }[];
 }
 
 interface ImportResult {
   sku: string;
   status: 'pending' | 'valid' | 'invalid';
   stock?: number;
-  variants?: { variantCode: string; stock: number }[];
+  variants?: { 
+    variantCode: string; 
+    stock: number;
+    jubelioItemId: number;
+  }[];
   error?: string;
+}
+
+interface Toast {
+  id: number;
+  type: 'success' | 'error' | 'info';
+  message: string;
+  details?: string[];
 }
 
 export default function ItemInputPage() {
@@ -40,13 +56,26 @@ export default function ItemInputPage() {
   const [skuInput, setSkuInput] = useState('');
   const [selectedSKUs, setSelectedSKUs] = useState<SKUItem[]>([]);
   const [isValidating, setIsValidating] = useState(false);
-  const [importStatus, setImportStatus] = useState<{
-    type: 'idle' | 'success' | 'error' | 'processing';
-    message: string;
-    details?: string[];
-  }>({ type: 'idle', message: '' });
   const [importResults, setImportResults] = useState<ImportResult[]>([]);
   const [showImportDetails, setShowImportDetails] = useState(false);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const toastIdRef = useRef(0);
+
+  // Toast management
+  const addToast = (type: 'success' | 'error' | 'info', message: string, details?: string[]) => {
+    const id = toastIdRef.current;
+    toastIdRef.current += 1;
+    setToasts(prev => [...prev, { id, type, message, details }]);
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+      removeToast(id);
+    }, 5000);
+  };
+
+  const removeToast = (id: number) => {
+    setToasts(prev => prev.filter(toast => toast.id !== id));
+  };
 
   // Load selected SKUs from localStorage on mount
   useEffect(() => {
@@ -70,7 +99,15 @@ export default function ItemInputPage() {
   }, [session, status, router]);
 
   // Function to validate SKU against Business Central API
-  const validateSKU = async (sku: string): Promise<{ exists: boolean; stock?: number; variants?: { variantCode: string; stock: number }[] }> => {
+  const validateSKU = async (sku: string): Promise<{ 
+    exists: boolean; 
+    stock?: number; 
+    variants?: { 
+      variantCode: string; 
+      stock: number;
+      jubelioItemId: number;
+    }[] 
+  }> => {
     try {
       console.log('Validating SKU:', sku); // Log for debugging
       
@@ -105,35 +142,24 @@ export default function ItemInputPage() {
   const handleAddSKU = async () => {
     const sku = skuInput.trim();
     if (!sku) {
-      setImportStatus({
-        type: 'error',
-        message: 'SKU cannot be empty',
-      });
+      addToast('error', 'SKU cannot be empty');
       return;
     }
 
     // Check if SKU already exists
     if (selectedSKUs.some(item => item.sku.toLowerCase() === sku.toLowerCase())) {
-      setImportStatus({
-        type: 'error',
-        message: 'SKU already exists',
-        details: [`SKU ${sku} is already in your list`]
-      });
+      addToast('error', 'SKU already exists', [`SKU ${sku} is already in your list`]);
       return;
     }
 
     setIsValidating(true);
-    setImportStatus({ type: 'processing', message: `Validating SKU ${sku}...` });
+    addToast('info', `Validating SKU ${sku}...`);
 
     try {
       const validation = await validateSKU(sku);
       
       if (!validation.exists) {
-        setImportStatus({
-          type: 'error',
-          message: `SKU ${sku} not found`,
-          details: [`The SKU ${sku} does not exist in the Business Central database`]
-        });
+        addToast('error', `SKU ${sku} not found`, [`The SKU ${sku} does not exist in the Business Central database`]);
       } else {
         // Add to selected SKUs with validation info
         setSelectedSKUs([...selectedSKUs, { 
@@ -143,18 +169,10 @@ export default function ItemInputPage() {
           variants: validation.variants
         }]);
         setSkuInput('');
-        setImportStatus({
-          type: 'success',
-          message: `SKU ${sku} added successfully`,
-          details: validation.stock !== undefined ? [`Available stock: ${validation.stock}`] : undefined
-        });
+        addToast('success', `SKU ${sku} added successfully`, validation.stock !== undefined ? [`Available stock: ${validation.stock}`] : undefined);
       }
     } catch (error) {
-      setImportStatus({
-        type: 'error',
-        message: 'Error validating SKU',
-        details: [error instanceof Error ? error.message : 'Unknown error occurred']
-      });
+      addToast('error', 'Error validating SKU', [error instanceof Error ? error.message : 'Unknown error occurred']);
     } finally {
       setIsValidating(false);
     }
@@ -162,6 +180,7 @@ export default function ItemInputPage() {
 
   const handleRemoveSKU = (sku: string) => {
     setSelectedSKUs(selectedSKUs.filter(item => item.sku !== sku));
+    addToast('info', `Removed SKU ${sku}`);
   };
 
   const handleContinue = () => {
@@ -184,7 +203,7 @@ export default function ItemInputPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setImportStatus({ type: 'processing', message: 'Processing file...' });
+    addToast('info', 'Processing file...');
     setShowImportDetails(true);
     setImportResults([]);
 
@@ -202,10 +221,7 @@ export default function ItemInputPage() {
         const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
         
         if (jsonData.length === 0) {
-          setImportStatus({
-            type: 'error',
-            message: 'No data found in the Excel file',
-          });
+          addToast('error', 'No data found in the Excel file');
           return;
         }
 
@@ -217,11 +233,7 @@ export default function ItemInputPage() {
         );
 
         if (!skuColumn) {
-          setImportStatus({
-            type: 'error',
-            message: 'Could not find SKU column in the Excel file',
-            details: ['Please ensure your file has a column named "SKU", "Item", or "Product"']
-          });
+          addToast('error', 'Could not find SKU column in the Excel file', ['Please ensure your file has a column named "SKU", "Item", or "Product"']);
           return;
         }
 
@@ -229,10 +241,7 @@ export default function ItemInputPage() {
         const skus = jsonData.map(row => String(row[skuColumn]).trim()).filter(Boolean);
         
         if (skus.length === 0) {
-          setImportStatus({
-            type: 'error',
-            message: 'No valid SKUs found in the Excel file',
-          });
+          addToast('error', 'No valid SKUs found in the Excel file');
           return;
         }
 
@@ -253,10 +262,7 @@ export default function ItemInputPage() {
         const newSKUs = uniqueSKUs.filter(sku => !existingSKUsLower.includes(sku.toLowerCase()));
         
         if (newSKUs.length === 0) {
-          setImportStatus({
-            type: 'error',
-            message: 'All SKUs already exist in your list',
-          });
+          addToast('error', 'All SKUs already exist in your list');
           return;
         }
 
@@ -268,7 +274,7 @@ export default function ItemInputPage() {
         
         setImportResults(initialResults);
         setIsValidating(true);
-        setImportStatus({ type: 'processing', message: 'Validating SKUs...' });
+        addToast('info', 'Validating SKUs...');
 
         // Validate SKUs against Business Central - process sequentially to avoid overwhelming the API
         const updatedResults = [...initialResults];
@@ -315,13 +321,10 @@ export default function ItemInputPage() {
         const invalidSKUs = updatedResults.filter(r => r.status === 'invalid');
         
         if (validSKUs.length === 0) {
-          setImportStatus({
-            type: 'error',
-            message: 'None of the SKUs are valid',
-            details: invalidSKUs.length > 0 
-              ? [`Invalid SKUs: ${invalidSKUs.map(r => r.sku).join(', ')}`] 
-              : ['No valid SKUs found']
-          });
+          addToast('error', 'None of the SKUs are valid', invalidSKUs.length > 0 
+            ? [`Invalid SKUs: ${invalidSKUs.map(r => r.sku).join(', ')}`] 
+            : ['No valid SKUs found']
+          );
         } else {
           // Add valid SKUs to selected list
           const newValidItems = validSKUs.map(item => ({
@@ -333,16 +336,12 @@ export default function ItemInputPage() {
           
           setSelectedSKUs(prev => [...prev, ...newValidItems]);
           
-          setImportStatus({
-            type: 'success',
-            message: `Successfully imported ${validSKUs.length} SKU(s)`,
-            details: [
-              invalidSKUs.length > 0 ? `Skipped ${invalidSKUs.length} invalid SKU(s)` : undefined,
-              validSKUs.some(item => item.stock !== undefined) 
-                ? 'Stock information retrieved for valid SKUs' 
-                : undefined
-            ].filter(Boolean) as string[]
-          });
+          addToast('success', `Successfully imported ${validSKUs.length} SKU(s)`, [
+            invalidSKUs.length > 0 ? `Skipped ${invalidSKUs.length} invalid SKU(s)` : undefined,
+            validSKUs.some(item => item.stock !== undefined) 
+              ? 'Stock information retrieved for valid SKUs' 
+              : undefined
+          ].filter(Boolean) as string[]);
         }
 
         // Reset file input
@@ -350,11 +349,7 @@ export default function ItemInputPage() {
           fileInputRef.current.value = '';
         }
       } catch (error) {
-        setImportStatus({
-          type: 'error',
-          message: 'Error processing Excel file',
-          details: ['Please ensure the file is a valid Excel file (.xlsx or .xls)']
-        });
+        addToast('error', 'Error processing Excel file', ['Please ensure the file is a valid Excel file (.xlsx or .xls)']);
         console.error('Error processing Excel file:', error);
       } finally {
         setIsValidating(false);
@@ -367,7 +362,7 @@ export default function ItemInputPage() {
   // Show loading state while checking session
   if (status === 'loading') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-gray-600">Loading...</p>
@@ -382,13 +377,55 @@ export default function ItemInputPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-8">
-      <div className="mx-auto">
-        {/* Header Section */}
-        <div className="mb-8">
+    <div className="min-h-screen bg-gray-50">
+      {/* Toast Container */}
+      <div className="fixed top-4 right-4 z-50 space-y-2 max-w-md">
+        {toasts.map((toast) => (
+          <div
+            key={`toast-${toast.id}`} // Fixed: Added unique key prefix
+            className={`rounded-lg shadow-lg p-4 flex items-start animate-in slide-in-from-top-5 ${
+              toast.type === 'success' 
+                ? 'bg-white border-l-4 border-primary-500' 
+                : toast.type === 'error'
+                  ? 'bg-white border-l-4 border-red-500'
+                  : 'bg-white border-l-4 border-primary-300'
+            }`}
+          >
+            <div className="flex-shrink-0">
+              {toast.type === 'success' ? (
+                <FaCheckCircle className="text-primary-500 text-lg" />
+              ) : toast.type === 'error' ? (
+                <FaExclamationTriangle className="text-red-500 text-lg" />
+              ) : (
+                <FaInfoCircle className="text-primary-300 text-lg" />
+              )}
+            </div>
+            <div className="ml-3 flex-1">
+              <p className="text-sm font-medium text-gray-900">{toast.message}</p>
+              {toast.details && toast.details.length > 0 && (
+                <ul className="mt-1 text-xs text-gray-600 list-disc pl-4">
+                  {toast.details.map((detail, index) => (
+                    <li key={`detail-${toast.id}-${index}`}>{detail}</li> // Fixed: Added unique key
+                  ))}
+                </ul>
+              )}
+            </div>
+            <button
+              onClick={() => removeToast(toast.id)}
+              className="ml-3 flex-shrink-0 text-gray-400 hover:text-gray-600"
+            >
+              <FaTimes />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <button
             onClick={handleBack}
-            className="flex items-center text-gray-600 hover:text-primary-600 mb-4 transition-colors"
+            className="flex items-center text-gray-600 hover:text-primary-600 mb-3 transition-colors text-sm font-medium"
           >
             <FaArrowLeft className="mr-2" />
             Back to Menu
@@ -396,152 +433,136 @@ export default function ItemInputPage() {
           
           <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">B2B Item Input</h1>
-              <p className="text-gray-600">
-                Welcome, <span className="font-semibold text-primary-600">{session.user?.name}</span>
+              <h1 className="text-2xl font-bold text-gray-900 mb-1">B2B Item Selection</h1>
+              <p className="text-sm text-gray-600">
+                Select items to create your B2B order • <span className="font-medium text-primary-600">{session.user?.name}</span>
               </p>
             </div>
-            
-            <button
-              onClick={handleContinue}
-              disabled={selectedSKUs.length === 0}
-              className="flex items-center px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-lg hover:shadow-lg hover:scale-105 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-            >
-              Continue to Stock Input
-              <FaArrowRight className="ml-2" />
-            </button>
           </div>
         </div>
+      </div>
 
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-32">
         {/* Stats Cards */}
         {selectedSKUs.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-primary-500">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="bg-white rounded-lg shadow-sm p-4 border border-gray-200">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-gray-500 text-sm font-medium">Selected SKUs</p>
-                  <p className="text-3xl font-bold text-gray-900 mt-1">{selectedSKUs.length}</p>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Items</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">{selectedSKUs.length}</p>
                 </div>
-                <div className="bg-primary-100 p-3 rounded-full">
-                  <FaBoxOpen className="text-primary-600 text-2xl" />
+                <div className="bg-primary-100 p-3 rounded-lg">
+                  <FaBoxOpen className="text-primary-600 text-xl" />
                 </div>
               </div>
             </div>
             
-            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-emerald-500">
+            <div className="bg-white rounded-lg shadow-sm p-4 border border-gray-200">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-gray-500 text-sm font-medium">Validated Items</p>
-                  <p className="text-3xl font-bold text-gray-900 mt-1">
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Validated</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">
                     {selectedSKUs.filter(item => item.exists).length}
                   </p>
                 </div>
-                <div className="bg-emerald-100 p-3 rounded-full">
-                  <FaCheckCircle className="text-emerald-600 text-2xl" />
+                <div className="bg-green-100 p-3 rounded-lg">
+                  <FaCheckCircle className="text-green-600 text-xl" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow-sm p-4 border border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">With Variants</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">
+                    {selectedSKUs.filter(item => item.variants && item.variants.length > 0).length}
+                  </p>
+                </div>
+                <div className="bg-primary-100 p-3 rounded-lg">
+                  <FaInfoCircle className="text-primary-600 text-xl" />
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Import Status Message */}
-        {importStatus.type !== 'idle' && (
-          <div className={`mb-6 rounded-lg p-4 flex items-start ${
-            importStatus.type === 'success' 
-              ? 'bg-green-50 border border-green-200 text-green-800' 
-              : importStatus.type === 'error'
-                ? 'bg-red-50 border border-red-200 text-red-800'
-                : 'bg-blue-50 border border-blue-200 text-blue-800'
-          }`}>
-            {importStatus.type === 'success' ? (
-              <FaCheckCircle className="mt-0.5 mr-3 flex-shrink-0" />
-            ) : importStatus.type === 'error' ? (
-              <FaExclamationTriangle className="mt-0.5 mr-3 flex-shrink-0" />
-            ) : (
-              <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mr-3 flex-shrink-0" />
-            )}
-            <div>
-              <p className="font-medium">{importStatus.message}</p>
-              {importStatus.details && importStatus.details.length > 0 && (
-                <div className="mt-2 text-sm">
-                  <p className="font-medium mb-1">Details:</p>
-                  <ul className="list-disc pl-5 space-y-1">
-                    {importStatus.details.map((detail, index) => (
-                      <li key={index}>{detail}</li>
-                    ))}
-                  </ul>
+        {/* Input Methods */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          {/* Manual Input */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+            <div className="border-b border-gray-200 px-5 py-4">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center">
+                <div className="bg-primary-100 p-2 rounded-lg mr-3">
+                  <FaPlus className="text-primary-600" />
                 </div>
-              )}
+                Add Single Item
+              </h2>
+              <p className="text-sm text-gray-500 mt-1">Enter SKU to validate and add</p>
             </div>
-          </div>
-        )}
-
-        {/* Add SKU Form */}
-        <div className="bg-white rounded-xl shadow-md mb-8">
-          <div className="bg-gradient-to-r from-primary-500 to-primary-600 px-6 py-4">
-            <h2 className="text-xl font-semibold text-white flex items-center">
-              <FaPlus className="mr-2" /> Add SKU
-            </h2>
-          </div>
-          
-          <div className="p-6">
-            <div className="flex flex-col md:flex-row gap-4 mb-4">
-              <div className="relative flex-1">
+            
+            <div className="p-5">
+              <div className="flex gap-2 mb-3">
                 <input
                   type="text"
                   value={skuInput}
                   onChange={(e) => setSkuInput(e.target.value)}
-                  placeholder="Enter SKU"
-                  className="w-full px-4 py-4 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
+                  placeholder="Enter SKU (e.g., ITEM-001)"
+                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all text-sm"
                   onKeyPress={(e) => e.key === 'Enter' && handleAddSKU()}
                   disabled={isValidating}
                 />
+                
+                <button
+                  onClick={handleAddSKU}
+                  disabled={isValidating || !skuInput.trim()}
+                  className="px-5 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 active:scale-95 transition-all whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium flex items-center"
+                >
+                  {isValidating ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                      Validating
+                    </>
+                  ) : (
+                    <>
+                      <FaSearch className="mr-2" />
+                      Add Item
+                    </>
+                  )}
+                </button>
               </div>
               
-              <button
-                onClick={handleAddSKU}
-                disabled={isValidating || !skuInput.trim()}
-                className="flex items-center justify-center px-6 py-4 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-lg hover:shadow-lg hover:scale-105 active:scale-95 transition-all duration-200 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isValidating ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                    Validating...
-                  </>
-                ) : (
-                  <>
-                    <FaSearch className="mr-2" />
-                    Validate & Add
-                  </>
-                )}
-              </button>
+              <div className="bg-primary-50 border border-primary-200 rounded-lg p-3">
+                <p className="text-primary-800 text-xs flex items-start">
+                  <FaInfoCircle className="mr-2 mt-0.5 flex-shrink-0" />
+                  <span>Each SKU is validated against Business Central before being added to ensure accuracy.</span>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Excel Import */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+            <div className="border-b border-gray-200 px-5 py-4">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center">
+                <div className="bg-green-100 p-2 rounded-lg mr-3">
+                  <FaFileExcel className="text-green-600" />
+                </div>
+                Import from Excel
+              </h2>
+              <p className="text-sm text-gray-500 mt-1">Upload multiple items at once</p>
             </div>
             
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-blue-800 text-sm">
-                <span className="font-medium">Validation:</span> Each SKU will be validated against your Business Central database before being added to your list.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Import Section */}
-        <div className="bg-white rounded-xl shadow-md mb-8">
-          <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 px-6 py-4">
-            <h2 className="text-xl font-semibold text-white flex items-center">
-              <FaFileExcel className="mr-2" /> Import from Excel
-            </h2>
-          </div>
-          
-          <div className="p-6">
-            <div className="flex flex-col md:flex-row gap-4 mb-4">
+            <div className="p-5">
               <button
                 onClick={handleImportClick}
                 disabled={isValidating}
-                className="flex items-center justify-center px-6 py-4 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-lg hover:shadow-lg hover:scale-105 active:scale-95 transition-all duration-200 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium flex items-center justify-center mb-3"
               >
                 <FaFileExcel className="mr-2" />
-                Import from Excel
+                Choose Excel File
               </button>
               
               <input
@@ -552,206 +573,195 @@ export default function ItemInputPage() {
                 className="hidden"
                 disabled={isValidating}
               />
-            </div>
-            
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-blue-800 text-sm">
-                <span className="font-medium">Excel Import Instructions:</span> Upload an Excel file with a column containing SKU values. 
-                The column should be named "SKU", "Item", or "Product". Each SKU will be validated against Business Central before being added.
-              </p>
+              
+              <div className="bg-primary-50 border border-primary-200 rounded-lg p-3">
+                <p className="text-primary-800 text-xs flex items-start mb-2">
+                  <FaInfoCircle className="mr-2 mt-0.5 flex-shrink-0" />
+                  <span className="font-medium">Excel file requirements:</span>
+                </p>
+                <ul className="text-primary-800 text-xs space-y-1 pl-6 list-disc">
+                  <li>Column named "SKU", "Item", or "Product"</li>
+                  <li>One SKU per row</li>
+                  <li>Supports .xlsx and .xls formats</li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Import Details Section */}
+        {/* Import Details */}
         {showImportDetails && importResults.length > 0 && (
-          <div className="bg-white rounded-xl shadow-md mb-8">
-            <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-4 flex justify-between items-center">
-              <h2 className="text-xl font-semibold text-white flex items-center">
-                <FaInfoCircle className="mr-2" /> Import Details
-              </h2>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
+            <div className="border-b border-gray-200 px-5 py-4 flex justify-between items-center">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <FaInfoCircle className="mr-2 text-primary-600" />
+                  Import Progress
+                </h2>
+                <div className="flex items-center gap-4 mt-1">
+                  <span className="text-xs text-gray-600">
+                    Total: <span className="font-semibold">{importResults.length}</span>
+                  </span>
+                  <span className="text-xs text-green-600">
+                    Valid: <span className="font-semibold">{importResults.filter(r => r.status === 'valid').length}</span>
+                  </span>
+                  <span className="text-xs text-red-600">
+                    Invalid: <span className="font-semibold">{importResults.filter(r => r.status === 'invalid').length}</span>
+                  </span>
+                </div>
+              </div>
               <button 
                 onClick={() => setShowImportDetails(false)}
-                className="text-white hover:text-gray-200"
+                className="text-gray-400 hover:text-gray-600 p-2"
               >
                 <FaTimes />
               </button>
             </div>
             
-            <div className="p-6">
-              <div className="mb-4 flex justify-between items-center">
-                <div>
-                  <span className="text-sm font-medium text-gray-700">
-                    Total SKUs: {importResults.length}
-                  </span>
-                  <span className="mx-2 text-gray-400">|</span>
-                  <span className="text-sm font-medium text-green-600">
-                    Valid: {importResults.filter(r => r.status === 'valid').length}
-                  </span>
-                  <span className="mx-2 text-gray-400">|</span>
-                  <span className="text-sm font-medium text-red-600">
-                    Invalid: {importResults.filter(r => r.status === 'invalid').length}
-                  </span>
-                </div>
-                {isValidating && (
-                  <div className="flex items-center text-blue-600">
-                    <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-2" />
-                    <span className="text-sm">Validating...</span>
+            <div className="p-5 max-h-96 overflow-y-auto">
+              <div className="space-y-2">
+                {importResults.map((result) => (
+                  <div key={`import-${result.sku}`} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono text-sm font-medium text-gray-900">{result.sku}</span>
+                      {result.status === 'valid' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                          <FaCheckCircle className="mr-1" /> Valid
+                        </span>
+                      ) : result.status === 'invalid' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                          <FaExclamationTriangle className="mr-1" /> Invalid
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                          <div className="w-2 h-2 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin mr-1" />
+                          Validating
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-gray-600">
+                      {result.stock !== undefined && <span>Stock: {result.stock}</span>}
+                      {result.variants && <span>Variants: {result.variants.length}</span>}
+                    </div>
                   </div>
-                )}
+                ))}
               </div>
-              
+            </div>
+          </div>
+        )}
+
+        {/* Selected Items Table */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+          <div className="border-b border-gray-200 px-5 py-4">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center justify-between">
+              <span className="flex items-center">
+                <div className="bg-primary-100 p-2 rounded-lg mr-3">
+                  <FaBoxOpen className="text-primary-600" />
+                </div>
+                Selected Items
+              </span>
+              {selectedSKUs.length > 0 && (
+                <span className="bg-primary-600 text-white px-3 py-1 rounded-full text-sm font-bold">
+                  {selectedSKUs.length}
+                </span>
+              )}
+            </h2>
+          </div>
+          
+          <div className="p-5">
+            {selectedSKUs.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <FaBoxOpen className="text-gray-400 text-3xl" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">No items selected</h3>
+                <p className="text-sm text-gray-500">Add items using the form above or import from Excel</p>
+              </div>
+            ) : (
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Variants</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
+                <table className="min-w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">SKU</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Stock</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Variants</th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {importResults.map((result) => (
-                      <tr key={result.sku} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {result.sku}
+                  <tbody className="divide-y divide-gray-200">
+                    {selectedSKUs.map((item) => (
+                      <tr key={`item-${item.sku}`} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm">
+                          <span className="font-mono font-medium text-gray-900">
+                            {item.sku}
+                          </span>
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          {result.status === 'valid' ? (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        <td className="px-4 py-3 text-sm">
+                          {item.exists ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
                               <FaCheckCircle className="mr-1" /> Valid
                             </span>
-                          ) : result.status === 'invalid' ? (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                              <FaExclamationTriangle className="mr-1" /> Invalid
-                            </span>
                           ) : (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                              <div className="w-2 h-2 border-2 border-yellow-600 border-t-transparent rounded-full animate-spin mr-1" />
-                              Pending
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                              <FaExclamationTriangle className="mr-1" /> Invalid
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                          {result.stock !== undefined ? result.stock : '-'}
+                        <td className="px-4 py-3 text-sm text-gray-900">
+                          {item.stock !== undefined ? item.stock : '-'}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                          {result.variants ? result.variants.length : '-'}
+                        <td className="px-4 py-3 text-sm">
+                          {item.variants ? (
+                            <div className="flex flex-wrap gap-1">
+                              {item.variants.map((variant, index) => (
+                                <span key={`variant-${item.sku}-${index}`} className="bg-primary-100 text-primary-700 px-2 py-0.5 rounded text-xs font-medium">
+                                  {variant.variantCode}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-500">
-                          {result.error || (result.status === 'valid' ? 'SKU found in Business Central' : 'Validating...')}
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            onClick={() => handleRemoveSKU(item.sku)}
+                            className="inline-flex items-center justify-center w-8 h-8 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Remove item"
+                          >
+                            <FaTrash className="text-sm" />
+                          </button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Selected SKUs Section */}
-        <div className="bg-white rounded-xl shadow-md overflow-hidden">
-          <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 px-6 py-4">
-            <h2 className="text-xl font-semibold text-white flex items-center justify-between">
-              <span className="flex items-center">
-                <FaBoxOpen className="mr-2" /> Selected SKUs
-              </span>
-              {selectedSKUs.length > 0 && (
-                <span className="bg-white text-emerald-600 px-3 py-1 rounded-full text-sm font-bold">
-                  {selectedSKUs.length} SKUs
-                </span>
-              )}
-            </h2>
-          </div>
-          
-          <div className="p-6">
-            {selectedSKUs.length === 0 ? (
-              <div className="text-center py-16">
-                <div className="bg-gray-100 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <FaBoxOpen className="text-gray-400 text-4xl" />
-                </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">No SKUs selected yet</h3>
-                <p className="text-gray-500 mb-6">Add SKUs using the form above or import from Excel</p>
-              </div>
-            ) : (
-              <>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">SKU</th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Stock</th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Variants</th>
-                        <th className="px-6 py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {selectedSKUs.map((item) => (
-                        <tr key={item.sku} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            <div className="bg-primary-100 text-primary-700 px-3 py-1 rounded text-xs font-mono font-semibold inline-block">
-                              {item.sku}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            {item.exists ? (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                <FaCheckCircle className="mr-1" /> Valid
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                <FaExclamationTriangle className="mr-1" /> Not Validated
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            {item.stock !== undefined ? (
-                              <span className="font-medium">{item.stock}</span>
-                            ) : (
-                              <span className="text-gray-400">-</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            {item.variants ? (
-                              <span className="font-medium">{item.variants.length} variants</span>
-                            ) : (
-                              <span className="text-gray-400">-</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-center">
-                            <button
-                              onClick={() => handleRemoveSKU(item.sku)}
-                              className="inline-flex items-center justify-center w-10 h-10 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Remove SKU"
-                            >
-                              <FaTrash />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                
-                {/* Continue Button at Bottom */}
-                <div className="mt-6 pt-6 border-t border-gray-200 flex justify-end">
-                  <button
-                    onClick={handleContinue}
-                    className="flex items-center px-8 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-lg hover:shadow-lg hover:scale-105 active:scale-95 transition-all duration-200 text-lg font-semibold"
-                  >
-                    Continue to Stock Input
-                    <FaArrowRight className="ml-2" />
-                  </button>
-                </div>
-              </>
             )}
           </div>
         </div>
       </div>
+
+      {/* Sticky Continue Button */}
+      {selectedSKUs.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-gray-600">
+                <span className="font-semibold text-gray-900">{selectedSKUs.length}</span> item(s) selected
+              </div>
+              <button
+                onClick={handleContinue}
+                className="flex items-center px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 active:scale-95 transition-all font-semibold shadow-md"
+              >
+                Continue to Stock Input
+                <FaArrowRight className="ml-2" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
