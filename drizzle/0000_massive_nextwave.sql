@@ -75,6 +75,9 @@ CREATE TABLE "clearance_forms" (
 	"rejection_reason" text,
 	"processed_at" timestamp,
 	"processed_by" uuid,
+	"pdf_path" text,
+	"scanned_form_path" text,
+	"physical_check_completed" boolean DEFAULT false NOT NULL,
 	CONSTRAINT "clearance_forms_form_number_unique" UNIQUE("form_number")
 );
 --> statement-breakpoint

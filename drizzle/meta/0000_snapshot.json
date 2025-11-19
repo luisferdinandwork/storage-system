@@ -1,5 +1,5 @@
 {
-  "id": "b58fca4b-95d4-4e63-8de1-3df92fc228e0",
+  "id": "c0b9f443-b4e3-482e-a9a9-ef55ead5a5e9",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -662,6 +662,25 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
+        },
+        "pdf_path": {
+          "name": "pdf_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scanned_form_path": {
+          "name": "scanned_form_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "physical_check_completed": {
+          "name": "physical_check_completed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         }
       },
       "indexes": {},

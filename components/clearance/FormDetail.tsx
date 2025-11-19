@@ -18,7 +18,9 @@ import {
   Clock,
   AlertCircle,
   Eye,
-  X
+  X,
+  Download,
+  Upload
 } from 'lucide-react';
 
 interface ClearanceForm {
@@ -47,6 +49,10 @@ interface ClearanceForm {
   } | null;
   itemCount: number;
   totalQuantity: number;
+  pdfPath: string | null;
+  scannedFormPath: string | null;
+  physicalCheckCompleted: boolean;
+  clearedItems?: ClearedItem[];
 }
 
 interface ClearanceFormItem {
@@ -85,6 +91,29 @@ interface ClearanceFormItem {
   };
 }
 
+interface ClearedItem {
+  id: string;
+  formId: string;
+  formNumber: string;
+  productCode: string;
+  description: string;
+  brandCode: string;
+  productDivision: string;
+  productCategory: string;
+  period: string;
+  season: string;
+  unitOfMeasure: string;
+  quantity: number;
+  condition: 'excellent' | 'good' | 'fair' | 'poor';
+  conditionNotes: string | null;
+  boxId: string | null;
+  boxNumber: string | null;
+  locationId: string | null;
+  locationName: string | null;
+  clearedAt: string;
+  clearedBy: string;
+}
+
 interface FormDetailProps {
   form: ClearanceForm;
   items: ClearanceFormItem[];
@@ -93,6 +122,8 @@ interface FormDetailProps {
   onReject?: (formId: string, reason: string) => void;
   onProcess?: (formId: string) => void;
   onSubmit?: (formId: string) => void;
+  onGeneratePDF?: (formId: string) => void;
+  onUploadScannedForm?: () => void;
   canApprove?: boolean;
   canManage?: boolean;
 }
@@ -105,17 +136,44 @@ export function FormDetail({
   onReject, 
   onProcess, 
   onSubmit,
+  onGeneratePDF,
+  onUploadScannedForm,
   canApprove = false,
   canManage = false 
 }: FormDetailProps) {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
 
+  // Determine which items to display and calculate stats
+  const isProcessed = form.status === 'processed';
+  const displayItems = isProcessed && form.clearedItems ? form.clearedItems : items;
+  
+  // Calculate item count and total quantity based on actual data
+  const itemCount = displayItems.length;
+  const totalQuantity = displayItems.reduce((sum, item) => sum + item.quantity, 0);
+  
+  // Calculate unique locations
+  const uniqueLocations = isProcessed && form.clearedItems
+    ? new Set(form.clearedItems.map(item => item.locationName || 'Unassigned')).size
+    : new Set(items.map(item => item.stock.box?.location.name || 'Unassigned')).size;
+
   const handleReject = () => {
     if (onReject && rejectionReason.trim()) {
       onReject(form.id, rejectionReason);
       setShowRejectModal(false);
       setRejectionReason('');
+    }
+  };
+
+  const handleDownloadPDF = () => {
+    if (form.pdfPath) {
+      window.open(`/api/clearance-forms/${form.id}/generate-pdf`, '_blank');
+    }
+  };
+
+  const handleViewScannedForm = () => {
+    if (form.scannedFormPath) {
+      window.open(form.scannedFormPath, '_blank');
     }
   };
 
@@ -177,92 +235,48 @@ export function FormDetail({
               <DialogTitle className="text-xl">{form.title}</DialogTitle>
               <p className="text-gray-500">Form #{form.formNumber}</p>
             </div>
-            <Button variant="ghost" size="sm" onClick={onClose}>
-              <X className="h-4 w-4" />
-            </Button>
           </div>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Form Header */}
           <Card>
-            <CardHeader>
-              <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle className="text-lg">Form Information</CardTitle>
-                  <CardDescription>Details about this clearance form</CardDescription>
-                </div>
+            <CardHeader className="pb-3">
+              <div className="flex justify-between items-center">
                 <div className="flex items-center space-x-2">
                   {getStatusIcon(form.status)}
                   <Badge className={getStatusColor(form.status)}>
                     {form.status.replace('_', ' ')}
                   </Badge>
                 </div>
+                <div className="text-sm text-gray-500">
+                  {form.period} • Created {new Date(form.createdAt).toLocaleDateString()}
+                </div>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <CardContent className="pt-0">
+              <p className="text-sm text-gray-600 mb-3">{form.description || 'No description provided'}</p>
+              
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                 <div>
-                  <p className="text-sm text-gray-500">Description</p>
-                  <p className="font-medium">{form.description || 'No description provided'}</p>
+                  <p className="text-gray-500">Created By</p>
+                  <p className="font-medium">{form.createdBy.name}</p>
                 </div>
-                <div>
-                  <p className="text-sm text-gray-500">Period</p>
-                  <p className="font-medium">{form.period}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Created</p>
-                  <div className="flex items-center space-x-2">
-                    <Calendar className="h-4 w-4 text-gray-400" />
-                    <p className="font-medium">{new Date(form.createdAt).toLocaleDateString()}</p>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Created By</p>
-                  <div className="flex items-center space-x-2">
-                    <User className="h-4 w-4 text-gray-400" />
-                    <p className="font-medium">{form.createdBy.name}</p>
-                  </div>
-                </div>
-                {form.approvedAt && (
-                  <div>
-                    <p className="text-sm text-gray-500">Approved</p>
-                    <div className="flex items-center space-x-2">
-                      <Calendar className="h-4 w-4 text-gray-400" />
-                      <p className="font-medium">{new Date(form.approvedAt).toLocaleDateString()}</p>
-                    </div>
-                  </div>
-                )}
                 {form.approvedBy && (
                   <div>
-                    <p className="text-sm text-gray-500">Approved By</p>
-                    <div className="flex items-center space-x-2">
-                      <User className="h-4 w-4 text-gray-400" />
-                      <p className="font-medium">{form.approvedBy.name}</p>
-                    </div>
-                  </div>
-                )}
-                {form.processedAt && (
-                  <div>
-                    <p className="text-sm text-gray-500">Processed</p>
-                    <div className="flex items-center space-x-2">
-                      <Calendar className="h-4 w-4 text-gray-400" />
-                      <p className="font-medium">{new Date(form.processedAt).toLocaleDateString()}</p>
-                    </div>
+                    <p className="text-gray-500">Approved By</p>
+                    <p className="font-medium">{form.approvedBy.name}</p>
                   </div>
                 )}
                 {form.processedBy && (
                   <div>
-                    <p className="text-sm text-gray-500">Processed By</p>
-                    <div className="flex items-center space-x-2">
-                      <User className="h-4 w-4 text-gray-400" />
-                      <p className="font-medium">{form.processedBy.name}</p>
-                    </div>
+                    <p className="text-gray-500">Processed By</p>
+                    <p className="font-medium">{form.processedBy.name}</p>
                   </div>
                 )}
                 {form.rejectionReason && (
                   <div className="md:col-span-2">
-                    <p className="text-sm text-gray-500">Rejection Reason</p>
+                    <p className="text-gray-500">Rejection Reason</p>
                     <p className="font-medium text-red-600">{form.rejectionReason}</p>
                   </div>
                 )}
@@ -270,40 +284,86 @@ export function FormDetail({
             </CardContent>
           </Card>
 
+          {/* PDF and Scanned Form Status */}
+          {(form.status === 'approved' || form.status === 'processed') && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Physical Verification</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex items-center space-x-2">
+                      <FileText className="h-5 w-5 text-blue-500" />
+                      <div>
+                        <p className="font-medium text-sm">PDF Form</p>
+                        <p className="text-xs text-gray-500">
+                          {form.pdfPath ? 'Generated' : 'Not generated'}
+                        </p>
+                      </div>
+                    </div>
+                    {form.pdfPath && (
+                      <Button variant="outline" size="sm" onClick={handleDownloadPDF}>
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex items-center space-x-2">
+                      <Upload className="h-5 w-5 text-purple-500" />
+                      <div>
+                        <p className="font-medium text-sm">Scanned Form</p>
+                        <p className="text-xs text-gray-500">
+                          {form.scannedFormPath ? 'Uploaded' : 'Not uploaded'}
+                        </p>
+                      </div>
+                    </div>
+                    {form.scannedFormPath ? (
+                      <Button variant="outline" size="sm" onClick={handleViewScannedForm}>
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    ) : (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={onUploadScannedForm}
+                        className="text-purple-600 border-purple-300"
+                      >
+                        <Upload className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Summary Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-3 gap-3">
             <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center space-x-2">
-                  <Package className="h-8 w-8 text-blue-500" />
-                  <div>
-                    <p className="text-2xl font-bold">{form.itemCount}</p>
-                    <p className="text-sm text-gray-500">Items</p>
-                  </div>
+              <CardContent className="p-4 flex items-center space-x-3">
+                <Package className="h-6 w-6 text-blue-500" />
+                <div className="flex gap-3 items-center">
+                  <p className="text-xl font-bold">{itemCount}</p>
+                  <p className="text-xs text-gray-500">Items</p>
                 </div>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center space-x-2">
-                  <FileText className="h-8 w-8 text-green-500" />
-                  <div>
-                    <p className="text-2xl font-bold">{form.totalQuantity}</p>
-                    <p className="text-sm text-gray-500">Total Quantity</p>
-                  </div>
+              <CardContent className="p-4 flex items-center space-x-3">
+                <FileText className="h-6 w-6 text-green-500" />
+                <div className="flex gap-3 items-center">
+                  <p className="text-xl font-bold">{totalQuantity}</p>
+                  <p className="text-xs text-gray-500">Quantity</p>
                 </div>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center space-x-2">
-                  <MapPin className="h-8 w-8 text-purple-500" />
-                  <div>
-                    <p className="text-2xl font-bold">
-                      {new Set(items.map(item => item.stock.box?.location.name || 'Unassigned')).size}
-                    </p>
-                    <p className="text-sm text-gray-500">Locations</p>
-                  </div>
+              <CardContent className="p-4 flex items-center space-x-3">
+                <MapPin className="h-6 w-6 text-purple-500" />
+                <div className="flex gap-3 items-center">
+                  <p className="text-xl font-bold">{uniqueLocations}</p>
+                  <p className="text-xs text-gray-500">Locations</p>
                 </div>
               </CardContent>
             </Card>
@@ -311,98 +371,174 @@ export function FormDetail({
 
           {/* Items Table */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Items in Clearance Form</CardTitle>
-              <CardDescription>List of all items included in this clearance form</CardDescription>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">
+                {isProcessed ? 'Cleared Items' : 'Items in Form'}
+              </CardTitle>
             </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Item</TableHead>
-                    <TableHead>Brand</TableHead>
-                    <TableHead>Division</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Quantity</TableHead>
-                    <TableHead>Condition</TableHead>
-                    <TableHead>Location</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="font-medium">{item.item.productCode}</span>
-                          <span className="text-sm text-gray-500">{item.item.description}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{item.item.brandCode}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{item.item.productDivision}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{item.item.productCategory}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-medium">{item.quantity}</span>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={getConditionColor(item.condition)}>
-                          {item.condition}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {item.stock.box ? (
-                          <div className="flex flex-col">
-                            <span className="font-medium">{item.stock.box.boxNumber}</span>
-                            <span className="text-sm text-gray-500">{item.stock.box.location.name}</span>
-                          </div>
-                        ) : (
-                          <span className="text-gray-500">Unassigned</span>
-                        )}
-                      </TableCell>
+            <CardContent className="pt-0">
+              <div className="overflow-x-auto">
+                <Table className="text-sm">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[25%]">Item</TableHead>
+                      <TableHead className="w-[15%]">Brand</TableHead>
+                      <TableHead className="w-[15%]">Category</TableHead>
+                      <TableHead className="w-[10%]">Qty</TableHead>
+                      <TableHead className="w-[15%]">Condition</TableHead>
+                      <TableHead className="w-[20%]">Location</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {isProcessed && form.clearedItems ? (
+                      form.clearedItems.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">{item.productCode}</div>
+                              <div className="text-xs text-gray-500 truncate max-w-[200px]">{item.description}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">{item.brandCode}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">{item.productCategory}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-medium">{item.quantity}</span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={`${getConditionColor(item.condition)} text-xs`}>
+                              {item.condition}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {item.boxNumber ? (
+                              <div>
+                                <div className="font-medium">{item.boxNumber}</div>
+                                <div className="text-xs text-gray-500">{item.locationName}</div>
+                              </div>
+                            ) : (
+                              <span className="text-gray-500">Unassigned</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      items.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">{item.item.productCode}</div>
+                              <div className="text-xs text-gray-500 truncate max-w-[200px]">{item.item.description}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">{item.item.brandCode}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">{item.item.productCategory}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-medium">{item.quantity}</span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={`${getConditionColor(item.condition)} text-xs`}>
+                              {item.condition}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {item.stock.box ? (
+                              <div>
+                                <div className="font-medium">{item.stock.box.boxNumber}</div>
+                                <div className="text-xs text-gray-500">{item.stock.box.location.name}</div>
+                              </div>
+                            ) : (
+                              <span className="text-gray-500">Unassigned</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
 
           {/* Action Buttons */}
-          <div className="flex justify-end space-x-2">
-            {form.status === 'draft' && canManage && (
-              <Button onClick={() => onSubmit && onSubmit(form.id)}>
-                Submit for Approval
-              </Button>
-            )}
-            {form.status === 'pending_approval' && canApprove && (
-              <>
-                <Button 
-                  variant="outline" 
-                  onClick={() => setShowRejectModal(true)}
-                  className="text-red-600 border-red-600 hover:bg-red-50"
-                >
-                  Reject
+          {form.status !== 'processed' && (
+            <div className="flex flex-wrap gap-2 justify-end pt-2">
+              {form.status === 'draft' && canManage && (
+                <Button onClick={() => onSubmit && onSubmit(form.id)} className="bg-green-600 hover:bg-green-700">
+                  Submit for Approval
                 </Button>
-                <Button onClick={() => onApprove && onApprove(form.id)}>
-                  Approve
-                </Button>
-              </>
-            )}
-            {form.status === 'approved' && canManage && (
-              <Button onClick={() => onProcess && onProcess(form.id)}>
-                Process Form
-              </Button>
-            )}
-          </div>
+              )}
+              {form.status === 'pending_approval' && canApprove && (
+                <>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setShowRejectModal(true)}
+                    className="text-red-600 border-red-600 hover:bg-red-50"
+                  >
+                    Reject
+                  </Button>
+                  <Button onClick={() => onApprove && onApprove(form.id)} className="bg-green-600 hover:bg-green-700">
+                    Approve
+                  </Button>
+                </>
+              )}
+              {form.status === 'approved' && canManage && (
+                <>
+                  <Button 
+                    variant="outline"
+                    onClick={() => onGeneratePDF && onGeneratePDF(form.id)}
+                    className="text-blue-600 border-blue-300"
+                  >
+                    <Download className="mr-1 h-4 w-4" />
+                    PDF
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    onClick={onUploadScannedForm}
+                    className="text-purple-600 border-purple-300"
+                  >
+                    <Upload className="mr-1 h-4 w-4" />
+                    Upload
+                  </Button>
+                  <Button 
+                    onClick={() => onProcess && onProcess(form.id)}
+                    disabled={!form.scannedFormPath}
+                    className={`${form.scannedFormPath ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-400 cursor-not-allowed'}`}
+                  >
+                    Process
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+          
+          {/* Status indicator for approved forms without scanned form */}
+          {form.status === 'approved' && canManage && !form.scannedFormPath && (
+            <div className="flex items-center p-2 bg-yellow-50 rounded-md text-yellow-700 text-sm">
+              <AlertCircle className="h-4 w-4 mr-2" />
+              Upload scanned form before processing
+            </div>
+          )}
+
+          {/* Success indicator for processed forms */}
+          {form.status === 'processed' && (
+            <div className="flex items-center p-2 bg-green-50 rounded-md text-green-700 text-sm">
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Form processed successfully
+            </div>
+          )}
         </div>
 
         {/* Reject Modal */}
         <Dialog open={showRejectModal} onOpenChange={setShowRejectModal}>
-          <DialogContent>
+          <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>Reject Form</DialogTitle>
             </DialogHeader>
@@ -415,7 +551,7 @@ export function FormDetail({
                   id="rejectionReason"
                   value={rejectionReason}
                   onChange={(e) => setRejectionReason(e.target.value)}
-                  className="w-full mt-1 p-2 border rounded-md"
+                  className="w-full mt-1 p-2 border rounded-md text-sm"
                   rows={3}
                   placeholder="Enter reason for rejection..."
                 />
