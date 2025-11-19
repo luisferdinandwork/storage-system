@@ -28,7 +28,7 @@ import { ImagePlus, X, Upload, CheckCircle, AlertCircle } from 'lucide-react';
 // Import the Item interface from items-table.tsx to ensure consistency
 interface ItemImage {
   id: string;
-  itemId: string;
+  itemId: string; // This is now the productCode
   fileName: string;
   originalName: string;
   mimeType: string;
@@ -38,15 +38,26 @@ interface ItemImage {
   createdAt: string;
 }
 
+interface Box {
+  id: string;
+  boxNumber: string;
+  description: string | null;
+  location: {
+    id: string;
+    name: string;
+    description: string | null;
+  } | null;
+}
+
 interface ItemStock {
   pending: number;
   id: string;
-  itemId: string;
+  itemId: string; // This is now the productCode
   inStorage: number;
   onBorrow: number;
   inClearance: number;
   seeded: number;
-  location: string | null;
+  boxId: string | null;
   condition: string;
   conditionNotes: string | null;
   createdAt: string;
@@ -54,13 +65,11 @@ interface ItemStock {
 }
 
 interface Item {
-  id: string;
-  productCode: string;
+  productCode: string; // This is now the primary key
   description: string;
   brandCode: string;
   productDivision: string;
   productCategory: string;
-  totalStock: number;
   period: string;
   season: string;
   unitOfMeasure: string;
@@ -80,6 +89,12 @@ interface Item {
   };
   images: ItemImage[];
   stock: ItemStock | null;
+  box?: Box | null;
+  location?: {
+    id: string;
+    name: string;
+    description: string | null;
+  } | null;
 }
 
 interface EditItemModalProps {
@@ -119,31 +134,49 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
   const [error, setError] = useState<string | null>(null);
   const [productCodeError, setProductCodeError] = useState<string | null>(null);
   const [parsedProductCode, setParsedProductCode] = useState<ParsedProductCode | null>(null);
+  const [boxes, setBoxes] = useState<Box[]>([]); // Added boxes state
   const [formData, setFormData] = useState({
     productCode: '',
     description: '',
-    totalStock: 0,
     period: '',
     season: '',
     unitOfMeasure: 'PCS',
     condition: 'good',
     conditionNotes: '',
-    location: '',
+    boxId: '', // Changed from location to boxId
   });
   const [images, setImages] = useState<UploadedImage[]>([]);
+
+  // Fetch boxes when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      fetchBoxes();
+    }
+  }, [isOpen]);
+
+  const fetchBoxes = async () => {
+    try {
+      const response = await fetch('/api/boxes');
+      if (response.ok) {
+        const data = await response.json();
+        setBoxes(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch boxes:', error);
+    }
+  };
 
   useEffect(() => {
     if (isOpen && item) {
       setFormData({
         productCode: item.productCode,
         description: item.description,
-        totalStock: item.totalStock,
         period: item.period,
         season: item.season,
         unitOfMeasure: item.unitOfMeasure,
         condition: item.stock?.condition || 'good',
         conditionNotes: item.stock?.conditionNotes || '',
-        location: item.stock?.location || '',
+        boxId: item.stock?.boxId || item.box?.id || 'none', // Use boxId from stock or box
       });
       
       // Convert existing images to the format expected by the form
@@ -170,7 +203,7 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'totalStock' ? parseInt(value) || 0 : value,
+      [name]: value,
     }));
     
     // If product code is changed, parse it
@@ -354,21 +387,19 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
     setError(null);
 
     try {
-      const response = await fetch(`/api/items/${item.id}`, {
+      const response = await fetch(`/api/items/${item.productCode}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          productCode: formData.productCode,
           description: formData.description,
-          totalStock: formData.totalStock,
           period: formData.period,
           season: formData.season,
           unitOfMeasure: formData.unitOfMeasure,
           condition: formData.condition,
           conditionNotes: formData.conditionNotes,
-          location: formData.location,
+          boxId: formData.boxId === 'none' ? null : formData.boxId, // Changed from location to boxId
           images: images,
         }),
       });
@@ -442,7 +473,7 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
                   value={formData.productCode}
                   onChange={handleInputChange}
                   required
-                  disabled={!canEditItem}
+                  disabled={true} // Disabled because it's the primary key
                   className={productCodeError ? "border-red-500" : parsedProductCode ? "border-green-500" : ""}
                 />
                 {parsedProductCode && (
@@ -481,19 +512,6 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
                 id="description"
                 name="description"
                 value={formData.description}
-                onChange={handleInputChange}
-                required
-                disabled={!canEditItem}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="totalStock">Total Stock</Label>
-              <Input
-                id="totalStock"
-                name="totalStock"
-                type="number"
-                min="0"
-                value={formData.totalStock}
                 onChange={handleInputChange}
                 required
                 disabled={!canEditItem}
@@ -561,23 +579,26 @@ export function EditItemModal({ isOpen, onClose, onSuccess, item }: EditItemModa
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="location">Storage Location</Label>
+            {/* <div className="space-y-2">
+              <Label htmlFor="boxId">Storage Box</Label>
               <Select 
-                value={formData.location} 
-                onValueChange={(value) => handleSelectChange('location', value)}
+                value={formData.boxId} 
+                onValueChange={(value) => handleSelectChange('boxId', value)}
                 disabled={!canEditItem}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select location" />
+                  <SelectValue placeholder="Select box" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Storage 1">Storage 1</SelectItem>
-                  <SelectItem value="Storage 2">Storage 2</SelectItem>
-                  <SelectItem value="Storage 3">Storage 3</SelectItem>
-                </SelectContent>
+                <SelectContent> 
+                  <SelectItem value="none">No Box</SelectItem> */}
+                  {/* {boxes.map((box) => (
+                    <SelectItem key={box.id} value={box.id}>
+                      {box.boxNumber} {box.location ? `(${box.location.name})` : ''}
+                    </SelectItem>
+                  ))} */}
+                {/* </SelectContent>
               </Select>
-            </div>
+            </div> */}
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="conditionNotes">Condition Notes</Label>
               <Textarea

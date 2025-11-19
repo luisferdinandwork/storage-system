@@ -20,20 +20,19 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const format = searchParams.get('format') || 'csv';
 
-    // Template headers
+    // Template headers (removed Box ID)
     const headers = [
       'Product Code',
       'Description',
-      'Total Stock',
+      'Initial Stock',
       'Period',
       'Season',
       'Unit of Measure',
       'Condition',
       'Condition Notes',
-      'Location'
     ];
 
-    // Example data rows
+    // Example data rows (removed Box ID)
     const exampleRows = [
       [
         'SPE110000001',
@@ -44,7 +43,6 @@ export async function GET(request: NextRequest) {
         'PRS',
         'excellent',
         'Brand new in box',
-        'Storage 1'
       ],
       [
         'SPE110100002',
@@ -55,7 +53,6 @@ export async function GET(request: NextRequest) {
         'PRS',
         'good',
         'Minor scuff marks on sole',
-        'Storage 2'
       ],
       [
         'PIE210200003',
@@ -66,7 +63,6 @@ export async function GET(request: NextRequest) {
         'PRS',
         'good',
         'Display model with slight wear',
-        'Storage 3'
       ],
       [
         'SPE120000004',
@@ -77,7 +73,6 @@ export async function GET(request: NextRequest) {
         'PCS',
         'excellent',
         '',
-        ''
       ]
     ];
 
@@ -193,18 +188,6 @@ export async function GET(request: NextRequest) {
             </style>
           </head>
           <body>
-            <h2>📦 Items Import Template</h2>
-            
-            <div class="instructions">
-              <strong>Instructions:</strong>
-              <ol>
-                <li>Fill in your item data below the example rows</li>
-                <li>You can delete the example rows (highlighted in gray)</li>
-                <li>Required fields are marked with * in the descriptions below</li>
-                <li>Save this file and upload it to the import function</li>
-              </ol>
-            </div>
-
             <table>
               <thead>
                 <tr>${headers.map(h => `<th>${escapeHtml(h)}</th>`).join('')}</tr>
@@ -218,60 +201,6 @@ export async function GET(request: NextRequest) {
                 <tr>${headers.map(() => '<td></td>').join('')}</tr>
               </tbody>
             </table>
-
-            <div class="field-desc">
-              <h3>📋 Field Descriptions</h3>
-              <ul>
-                <li>
-                  <strong>Product Code *</strong><br>
-                  12-character code format: XXX-YY-ZZ-NNNNN<br>
-                  Examples: SPE110000001 (Specs Footwear Lifestyle), PIE210200001 (Piero Footwear Futsal)
-                </li>
-                <li>
-                  <strong>Description *</strong><br>
-                  Detailed item description (e.g., "TEMPO SHIPYARD/EGRET/DOESKIN Lifestyle Shoes")
-                </li>
-                <li>
-                  <strong>Total Stock *</strong><br>
-                  Number of items in stock (must be a whole number)
-                </li>
-                <li>
-                  <strong>Period *</strong><br>
-                  Period code (e.g., 25Q1, 24Q4, 25Q2)
-                </li>
-                <li>
-                  <strong>Season *</strong><br>
-                  Season code: SS (Spring/Summer) or FW (Fall/Winter)
-                </li>
-                <li>
-                  <strong>Unit of Measure *</strong><br>
-                  PCS (Pieces) or PRS (Pairs)
-                </li>
-                <li>
-                  <strong>Condition *</strong><br>
-                  Item condition: excellent, good, fair, or poor
-                </li>
-                <li>
-                  <strong>Condition Notes</strong><br>
-                  Optional notes about the item's condition (e.g., "Brand new in box", "Minor scratches")
-                </li>
-                <li>
-                  <strong>Location</strong><br>
-                  Storage location: Storage 1, Storage 2, Storage 3, or leave empty
-                </li>
-              </ul>
-            </div>
-
-            <div class="note">
-              <strong>⚠️ Important Notes:</strong>
-              <ul>
-                <li>Fields marked with * are required</li>
-                <li>Product codes must be unique (no duplicates)</li>
-                <li>The product code format determines the brand, division, and category automatically</li>
-                <li>All imported items will have status "Pending Approval"</li>
-                <li>When saving for import, convert this file to CSV format</li>
-              </ul>
-            </div>
           </body>
         </html>
       `;

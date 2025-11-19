@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { items, itemStock, itemClearances, users } from '@/lib/db/schema';
+import { items, itemStock, itemClearances, users, boxes, locations } from '@/lib/db/schema';
 import { eq, and, isNotNull, gt, sql, desc } from 'drizzle-orm';
 
 export async function GET(request: NextRequest) {
@@ -22,7 +22,6 @@ export async function GET(request: NextRequest) {
     // Get items with stock in clearance
     const clearanceItems = await db
       .select({
-        id: items.id,
         productCode: items.productCode,
         description: items.description,
         brandCode: items.brandCode,
@@ -49,7 +48,7 @@ export async function GET(request: NextRequest) {
           onBorrow: itemStock.onBorrow,
           inClearance: itemStock.inClearance,
           seeded: itemStock.seeded,
-          location: itemStock.location,
+          boxId: itemStock.boxId,
           condition: itemStock.condition,
           conditionNotes: itemStock.conditionNotes,
           createdAt: itemStock.createdAt,
@@ -58,27 +57,30 @@ export async function GET(request: NextRequest) {
       })
       .from(items)
       .leftJoin(users, eq(items.createdBy, users.id))
-      .leftJoin(itemStock, eq(items.id, itemStock.itemId))
+      .leftJoin(itemStock, eq(items.productCode, itemStock.itemId))
       .where(and(
         isNotNull(itemStock.inClearance),
-        gt(itemStock.inClearance, 0) // Only show items with inClearance > 0
+        gt(itemStock.inClearance, 0)
       ))
       .limit(limit)
       .offset(offset);
 
     // Get total count for pagination
-    const [{ count }] = await db
+    const countResult = await db
       .select({ count: sql<number>`count(*)` })
       .from(items)
-      .leftJoin(itemStock, eq(items.id, itemStock.itemId))
+      .leftJoin(itemStock, eq(items.productCode, itemStock.itemId))
       .where(and(
         isNotNull(itemStock.inClearance),
         gt(itemStock.inClearance, 0)
       ));
 
-    // Get clearance details for each item
+    const count = countResult[0]?.count || 0;
+
+    // Get clearance details and location info for each item
     const itemsWithClearance = await Promise.all(
-      clearanceItems.map(async (item) => {
+      (clearanceItems || []).map(async (item) => {
+        // Get the latest clearance record
         const clearance = await db
           .select({
             id: itemClearances.id,
@@ -95,19 +97,36 @@ export async function GET(request: NextRequest) {
             metadata: itemClearances.metadata,
           })
           .from(itemClearances)
-          .where(eq(itemClearances.itemId, item.id))
-          .orderBy(desc(itemClearances.requestedAt)) // Fixed: use desc() function
+          .where(eq(itemClearances.itemId, item.productCode))
+          .orderBy(desc(itemClearances.requestedAt))
           .limit(1);
+
+        // Get location information if boxId exists
+        let locationInfo = null;
+        if (item.stock?.boxId) {
+          locationInfo = await db.query.boxes.findFirst({
+            where: eq(boxes.id, item.stock.boxId),
+            with: {
+              location: true
+            }
+          });
+        }
 
         return {
           ...item,
           clearances: clearance,
+          location: locationInfo ? {
+            id: locationInfo.location.id,
+            name: locationInfo.location.name,
+            boxId: locationInfo.id,
+            boxNumber: locationInfo.boxNumber,
+          } : null,
         };
       })
     );
 
     return NextResponse.json({
-      items: itemsWithClearance,
+      items: itemsWithClearance || [],
       pagination: {
         page,
         limit,
@@ -118,7 +137,16 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Failed to fetch clearance items:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch clearance items' },
+      { 
+        error: 'Failed to fetch clearance items',
+        items: [],
+        pagination: {
+          page: 1,
+          limit: 10,
+          total: 0,
+          totalPages: 0,
+        }
+      },
       { status: 500 }
     );
   }

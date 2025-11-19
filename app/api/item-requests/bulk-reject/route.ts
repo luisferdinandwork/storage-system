@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { itemRequests, items, itemStock, itemImages, borrowRequestItems, itemClearances, stockMovements } from '@/lib/db/schema';
+import { itemRequests, items, itemStock, itemImages, borrowRequestItems, itemClearances, stockMovements, users } from '@/lib/db/schema';
 import { eq, inArray } from 'drizzle-orm';
 
 export async function POST(request: NextRequest) {
@@ -17,6 +17,18 @@ export async function POST(request: NextRequest) {
     const allowedRoles = ['superadmin', 'storage-master', 'storage-master-manager'];
     if (!allowedRoles.includes(session.user.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    // Verify the user exists in the database
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, session.user.id),
+    });
+
+    if (!user) {
+      return NextResponse.json({ 
+        error: 'User not found in database',
+        userId: session.user.id 
+      }, { status: 404 });
     }
 
     const { requestIds, reason } = await request.json();
@@ -57,49 +69,67 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get the IDs of pending requests and their corresponding item IDs
+    // Get the IDs of pending requests and their corresponding product codes
     const pendingRequestIds = pendingRequests.map(req => req.id);
-    const itemIds = pendingRequests.map(req => req.itemId);
+    const productCodes = pendingRequests.map(req => req.itemId); // These are product codes
+
+    // Update all pending item requests to rejected
+    await db
+      .update(itemRequests)
+      .set({
+        status: 'rejected',
+        approvedBy: user.id,
+        approvedAt: new Date(),
+        rejectionReason: reason,
+      })
+      .where(inArray(itemRequests.id, pendingRequestIds));
+
+    // Update all items to rejected
+    await db
+      .update(items)
+      .set({
+        status: 'rejected',
+        approvedBy: user.id,
+        approvedAt: new Date(),
+      })
+      .where(inArray(items.productCode, productCodes)); // Use productCode instead of id
 
     // Delete all related records in the correct order to avoid foreign key constraint errors
     // 1. Delete stock movements
     await db.delete(stockMovements)
-      .where(inArray(stockMovements.itemId, itemIds));
+      .where(inArray(stockMovements.itemId, productCodes));
     
     // 2. Delete borrow request items
     await db.delete(borrowRequestItems)
-      .where(inArray(borrowRequestItems.itemId, itemIds));
+      .where(inArray(borrowRequestItems.itemId, productCodes));
     
     // 3. Delete item clearances
     await db.delete(itemClearances)
-      .where(inArray(itemClearances.itemId, itemIds));
+      .where(inArray(itemClearances.itemId, productCodes));
     
     // 4. Delete item images
     await db.delete(itemImages)
-      .where(inArray(itemImages.itemId, itemIds));
+      .where(inArray(itemImages.itemId, productCodes));
     
     // 5. Delete item stock
     await db.delete(itemStock)
-      .where(inArray(itemStock.itemId, itemIds));
+      .where(inArray(itemStock.itemId, productCodes));
     
-    // 6. Delete item requests
-    await db.delete(itemRequests)
-      .where(inArray(itemRequests.id, pendingRequestIds));
-    
-    // 7. Finally, delete the items
+    // 6. Finally, delete the items using productCode
     const deletedItems = await db.delete(items)
-      .where(inArray(items.id, itemIds))
-      .returning({ id: items.id });
+      .where(inArray(items.productCode, productCodes))
+      .returning({ productCode: items.productCode });
 
     return NextResponse.json({ 
       message: `${deletedItems.length} items rejected and removed successfully`,
       rejectedCount: deletedItems.length,
+      rejectedProductCodes: deletedItems.map(item => item.productCode),
       reason: reason
     });
   } catch (error) {
     console.error('Failed to reject and remove items:', error);
     return NextResponse.json(
-      { error: 'Failed to reject and remove items' },
+      { error: 'Failed to reject and remove items', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }

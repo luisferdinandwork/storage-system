@@ -33,7 +33,22 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { MoreHorizontal, Edit, Image, Trash2, Eye, Package, Download, FileDown, ChevronLeft, ChevronRight, Archive } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { 
+  MoreHorizontal, 
+  Edit, 
+  Image, 
+  Trash2, 
+  Eye, 
+  Package, 
+  Download, 
+  FileDown, 
+  ChevronLeft, 
+  ChevronRight, 
+  Archive,
+  Calendar,
+  Clock
+} from 'lucide-react';
 import { UniversalBadge } from '@/components/ui/universal-badge';
 import { EditItemModal } from '@/components/items/edit-item-modal';
 import React from 'react';
@@ -42,7 +57,7 @@ import { Select, SelectContent, SelectTrigger, SelectValue, SelectItem  } from '
 
 interface ItemImage {
   id: string;
-  itemId: string;
+  itemId: string; // This is now the productCode
   fileName: string;
   originalName: string;
   mimeType: string;
@@ -52,15 +67,32 @@ interface ItemImage {
   createdAt: string;
 }
 
+interface Box {
+  id: string;
+  boxNumber: string;
+  description: string | null;
+  location: {
+    id: string;
+    name: string;
+    description: string | null;
+  } | null;
+}
+
+interface Location {
+  id: string;
+  name: string;
+  description: string | null;
+}
+
 interface ItemStock {
   pending: number;
   id: string;
-  itemId: string;
+  itemId: string; // This is now the productCode
   inStorage: number;
   onBorrow: number;
   inClearance: number;
   seeded: number;
-  location: string | null;
+  boxId: string | null;
   condition: string;
   conditionNotes: string | null;
   createdAt: string;
@@ -68,13 +100,11 @@ interface ItemStock {
 }
 
 export interface Item {
-  id: string;
-  productCode: string;
+  productCode: string; // This is now the primary key
   description: string;
   brandCode: string;
   productDivision: string;
   productCategory: string;
-  totalStock: number;
   period: string;
   season: string;
   unitOfMeasure: string;
@@ -94,6 +124,9 @@ export interface Item {
   };
   images: ItemImage[];
   stock: ItemStock | null;
+  box?: Box | null; // Added box object
+  location?: Location | null; // Added location object
+  totalStock?: number; // Added total stock
 }
 
 export interface Column {
@@ -110,17 +143,17 @@ interface ItemsTableProps {
   emptyMessage?: string;
   emptyDescription?: string;
   onEditItem?: (item: Item) => void;
-  onDeleteItem?: (itemId: string) => void;
+  onDeleteItem?: (productCode: string) => void; // Changed to productCode
   onViewImage?: (image: ItemImage) => void;
-  onApproveItem?: (itemId: string) => void;
-  onRejectItem?: (itemId: string) => void;
-  onExportItems?: (itemIds: string[]) => void;
-  onClearanceItems?: (itemIds: string[]) => void; // New prop for clearance
+  onApproveItem?: (productCode: string) => void; // Changed to productCode
+  onRejectItem?: (productCode: string) => void; // Changed to productCode
+  onExportItems?: (productCodes: string[]) => void; // Changed to productCodes
+  onClearanceItems?: (productCodes: string[]) => void; // Changed to productCodes
   canEditItem?: boolean;
   canDeleteItem?: boolean;
   canApproveItem?: boolean;
   canExportItems?: boolean;
-  canClearanceItems?: boolean; // New prop for clearance permission
+  canClearanceItems?: boolean;
   showActions?: boolean;
   customActions?: (item: Item) => React.ReactNode;
   renderCustomCell?: (item: Item, columnId: string) => React.ReactNode;
@@ -132,8 +165,8 @@ interface ItemsTableProps {
   onItemsPerPageChange?: (itemsPerPage: number) => void;
   totalItems?: number;
   // New props for selected items
-  selectedItems?: string[];
-  onSelectionChange?: (selectedItems: string[]) => void;
+  selectedItems?: string[]; // These are now productCodes
+  onSelectionChange?: (selectedItems: string[]) => void; // These are now productCodes
 }
 
 export function ItemsTable({
@@ -149,12 +182,12 @@ export function ItemsTable({
   onApproveItem,
   onRejectItem,
   onExportItems,
-  onClearanceItems, // Add the new prop
+  onClearanceItems,
   canEditItem = false,
   canDeleteItem = false,
   canApproveItem = false,
   canExportItems = false,
-  canClearanceItems = false, // Add the new prop
+  canClearanceItems = false,
   showActions = true,
   customActions,
   renderCustomCell,
@@ -244,8 +277,8 @@ export function ItemsTable({
     }
   };
 
-  const handleRemoveItem = (itemId: string) => {
-    setRemovingItemId(itemId);
+  const handleRemoveItem = (productCode: string) => {
+    setRemovingItemId(productCode);
   };
 
   const confirmRemoveItem = () => {
@@ -255,29 +288,29 @@ export function ItemsTable({
     }
   };
 
-  const handleApproveItem = (itemId: string) => {
+  const handleApproveItem = (productCode: string) => {
     if (onApproveItem) {
-      onApproveItem(itemId);
+      onApproveItem(productCode);
     }
   };
 
-  const handleRejectItem = (itemId: string) => {
+  const handleRejectItem = (productCode: string) => {
     if (onRejectItem) {
-      onRejectItem(itemId);
+      onRejectItem(productCode);
     }
   };
 
-  const handleSelectItem = (itemId: string, checked: boolean) => {
+  const handleSelectItem = (productCode: string, checked: boolean) => {
     if (checked) {
-      setSelectedItems([...selectedItems, itemId]);
+      setSelectedItems([...selectedItems, productCode]);
     } else {
-      setSelectedItems(selectedItems.filter(id => id !== itemId));
+      setSelectedItems(selectedItems.filter(id => id !== productCode));
     }
   };
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedItems(items.map(item => item.id));
+      setSelectedItems(items.map(item => item.productCode));
     } else {
       setSelectedItems([]);
     }
@@ -342,7 +375,7 @@ export function ItemsTable({
     switch (columnId) {
       case 'item':
         return (
-          <TableCell key={`item-${item.id}`}>
+          <TableCell key={`item-${item.productCode}`}>
             <div className="flex items-center space-x-3">
               {item.images.length > 0 && (
                 <div 
@@ -367,63 +400,83 @@ export function ItemsTable({
         );
       case 'brandCode':
         return (
-          <TableCell key={`brandCode-${item.id}`}>
+          <TableCell key={`brandCode-${item.productCode}`}>
             <UniversalBadge type="brand" value={item.brandCode} />
           </TableCell>
         );
       case 'productDivision':
         return (
-          <TableCell key={`productDivision-${item.id}`}>
+          <TableCell key={`productDivision-${item.productCode}`}>
             <UniversalBadge type="division" value={item.productDivision} />
           </TableCell>
         );
       case 'category':
         return (
-          <TableCell key={`category-${item.id}`}>
+          <TableCell key={`category-${item.productCode}`}>
             <UniversalBadge type="category" value={item.productCategory} />
+          </TableCell>
+        );
+      case 'season':
+        return (
+          <TableCell key={`season-${item.productCode}`}>
+            <Badge variant="outline" className="bg-purple-50 text-purple-800 border-purple-200">
+              <Calendar className="mr-1 h-3 w-3" />
+              {item.season}
+            </Badge>
+          </TableCell>
+        );
+      case 'period':
+        return (
+          <TableCell key={`period-${item.productCode}`}>
+            <Badge variant="outline" className="bg-indigo-50 text-indigo-800 border-indigo-200">
+              <Clock className="mr-1 h-3 w-3" />
+              {item.period}
+            </Badge>
           </TableCell>
         );
       case 'unit':
         return (
-          <TableCell key={`unit-${item.id}`}>
+          <TableCell key={`unit-${item.productCode}`}>
             <UniversalBadge type="unit" value={item.unitOfMeasure} />
           </TableCell>
         );
       case 'stock':
         return (
-          <TableCell key={`stock-${item.id}`}>
+          <TableCell key={`stock-${item.productCode}`}>
             {item.stock ? (
               <TooltipProvider>
-                <div className="flex items-center space-x-2">
-                  {/* Calculate available stock (pending + inStorage) */}
-                  {(item.stock.pending > 0 || item.stock.inStorage > 0) && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex items-center space-x-1 px-2 py-1 rounded-full bg-green-100 text-green-800 text-xs font-medium">
-                          <span>{item.stock.pending + item.stock.inStorage}</span>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Total: {item.stock.pending + item.stock.inStorage} items</p>
-                        {item.stock.pending > 0 && <p>Pending: {item.stock.pending} items</p>}
-                        {item.stock.inStorage > 0 && <p>In Storage: {item.stock.inStorage} items</p>}
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
-                  
-                  {/* Show borrowed stock only if all stock is borrowed (no pending or inStorage) */}
-                  {item.stock.onBorrow > 0 && item.stock.pending === 0 && item.stock.inStorage === 0 && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex items-center space-x-1 px-2 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-medium">
-                          <span>{item.stock.onBorrow}</span>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>On Borrow: {item.stock.onBorrow} items</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
+                <div className="flex flex-col space-y-2">
+                  <div className="flex flex-wrap gap-1">
+                    {/* Calculate available stock (pending + inStorage) */}
+                    {(item.stock.pending > 0 || item.stock.inStorage > 0) && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex items-center space-x-1 px-2 py-1 rounded-full bg-green-100 text-green-800 text-xs font-medium">
+                            <span>{item.stock.pending + item.stock.inStorage}</span>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Total: {item.stock.pending + item.stock.inStorage} items</p>
+                          {item.stock.pending > 0 && <p>Pending: {item.stock.pending} items</p>}
+                          {item.stock.inStorage > 0 && <p>In Storage: {item.stock.inStorage} items</p>}
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                    
+                    {/* Show borrowed stock only if all stock is borrowed (no pending or inStorage) */}
+                    {item.stock.onBorrow > 0 && item.stock.pending === 0 && item.stock.inStorage === 0 && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex items-center space-x-1 px-2 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-medium">
+                            <span>{item.stock.onBorrow}</span>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>On Borrow: {item.stock.onBorrow} items</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                  </div>
                 </div>
               </TooltipProvider>
             ) : (
@@ -431,49 +484,19 @@ export function ItemsTable({
             )}
           </TableCell>
         );
-      case 'condition':
-        return (
-          <TableCell key={`condition-${item.id}`}>
-            {item.stock ? (
-              <div className="flex flex-col space-y-1">
-                <UniversalBadge type="condition" value={item.stock.condition} />
-                {item.stock.conditionNotes && (
-                  <span className="text-xs text-gray-500 truncate max-w-[200px]">
-                    {item.stock.conditionNotes}
-                  </span>
-                )}
-              </div>
-            ) : (
-              <div className="text-gray-500">No condition data</div>
-            )}
-          </TableCell>
-        );
-      case 'location':
-        return (
-          <TableCell key={`location-${item.id}`}>
-            {item.stock && item.stock.location ? (
-              <UniversalBadge type="location" value={item.stock.location} />
-            ) : (
-              <div className="text-gray-500">No location</div>
-            )}
-          </TableCell>
-        );
       case 'totalStock':
         return (
-          <TableCell key={`totalStock-${item.id}`}>
+          <TableCell key={`totalStock-${item.productCode}`}>
             <div className="flex justify-center">
               <div className="font-medium">
-                {item.stock ? 
-                  (item.stock.pending > 0 || item.stock.inStorage > 0 ? 
-                    item.stock.pending + item.stock.inStorage : 0) : 
-                  0}
+                {item.totalStock || 0}
               </div>
             </div>
           </TableCell>
         );
       case 'createdBy':
         return (
-          <TableCell key={`createdBy-${item.id}`}>
+          <TableCell key={`createdBy-${item.productCode}`}>
             <div className="text-sm">
               {item.createdByUser?.name || 'Unknown'}
             </div>
@@ -481,7 +504,7 @@ export function ItemsTable({
         );
       case 'approvedBy':
         return (
-          <TableCell key={`approvedBy-${item.id}`}>
+          <TableCell key={`approvedBy-${item.productCode}`}>
             <div className="text-sm">
               {item.approvedByUser?.name || item.approvedBy ? 'Unknown' : 'Not approved'}
             </div>
@@ -489,52 +512,59 @@ export function ItemsTable({
         );
       case 'status':
         return (
-          <TableCell key={`status-${item.id}`}>
+          <TableCell key={`status-${item.productCode}`}>
             <UniversalBadge type="status" value={item.status} />
           </TableCell>
         );
       case 'actions':
         return (
-          <TableCell key={`actions-${item.id}`} className="text-right">
+          <TableCell key={`actions-${item.productCode}`} className="text-right">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-8 w-8 p-0">
+                <Button variant="ghost" className="h-8 w-8 p-0 rounded-full hover:bg-gray-100">
                   <span className="sr-only">Open menu</span>
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel className="text-xs font-normal text-gray-500">Item Actions</DropdownMenuLabel>
                 
                 {item.images.length > 0 && (
-                  <DropdownMenuItem onClick={() => handleViewImage(getPrimaryImage(item.images))}>
+                  <DropdownMenuItem 
+                    onClick={() => handleViewImage(getPrimaryImage(item.images))}
+                    className="cursor-pointer"
+                  >
                     <Image className="mr-2 h-4 w-4" />
                     View Images
                   </DropdownMenuItem>
                 )}
                 
                 {canEditItem && (
-                  <DropdownMenuItem
-                    onClick={() => handleEditItem(item)}
-                  >
-                    <Edit className="mr-2 h-4 w-4" />
-                    Edit
-                  </DropdownMenuItem>
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => handleEditItem(item)}
+                      className="cursor-pointer"
+                    >
+                      <Edit className="mr-2 h-4 w-4" />
+                      Edit
+                    </DropdownMenuItem>
+                  </>
                 )}
                 
                 {canApproveItem && item.status === 'pending_approval' && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
-                      onClick={() => handleApproveItem(item.id)}
-                      className="text-green-600"
+                      onClick={() => handleApproveItem(item.productCode)}
+                      className="cursor-pointer text-green-600"
                     >
                       <Package className="mr-2 h-4 w-4" />
                       Approve
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      onClick={() => handleRejectItem(item.id)}
-                      className="text-red-600"
+                      onClick={() => handleRejectItem(item.productCode)}
+                      className="cursor-pointer text-red-600"
                     >
                       <Trash2 className="mr-2 h-4 w-4" />
                       Reject
@@ -548,9 +578,10 @@ export function ItemsTable({
                     <DropdownMenuItem
                       onClick={() => {
                         if (onExportItems) {
-                          onExportItems([item.id]);
+                          onExportItems([item.productCode]);
                         }
                       }}
+                      className="cursor-pointer"
                     >
                       <Download className="mr-2 h-4 w-4" />
                       Export
@@ -564,10 +595,10 @@ export function ItemsTable({
                     <DropdownMenuItem
                       onClick={() => {
                         if (onClearanceItems) {
-                          onClearanceItems([item.id]);
+                          onClearanceItems([item.productCode]);
                         }
                       }}
-                      className="text-orange-600"
+                      className="cursor-pointer text-orange-600"
                     >
                       <Archive className="mr-2 h-4 w-4" />
                       Move to Clearance
@@ -581,8 +612,8 @@ export function ItemsTable({
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
-                      onClick={() => handleRemoveItem(item.id)}
-                      className="text-red-600"
+                      onClick={() => handleRemoveItem(item.productCode)}
+                      className="cursor-pointer text-red-600"
                     >
                       <Trash2 className="mr-2 h-4 w-4" />
                       Delete
@@ -622,49 +653,49 @@ export function ItemsTable({
 
   return (
     <>
-      <div className="border rounded-md overflow-x-auto">
+      <div className="border rounded-md overflow-hidden bg-white">
         <Table>
-          <TableHeader>
+          <TableHeader className="bg-gray-50">
             <TableRow>
               <TableHead key="checkbox" className="w-12">
                 <input
                   type="checkbox"
                   checked={selectedItems.length === items.length && items.length > 0}
                   onChange={(e) => handleSelectAll(e.target.checked)}
-                  className="h-4 w-4"
+                  className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                 />
               </TableHead>
               {visibleColumns
                 .filter(col => col !== 'actions')
                 .map(columnId => {
                   const column = columns.find(col => col.id === columnId);
-                  return column ? <TableHead key={columnId}>{column.label}</TableHead> : null;
+                  return column ? <TableHead key={columnId} className="font-medium text-gray-900">{column.label}</TableHead> : null;
                 })}
               {showActions && visibleColumns.includes('actions') && (
-                <TableHead key="actions" className="text-right">Actions</TableHead>
+                <TableHead key="actions" className="text-right font-medium text-gray-900">Actions</TableHead>
               )}
             </TableRow>
           </TableHeader>
           <TableBody>
             {items.map((item) => (
-              <TableRow key={item.id}>
-                <TableCell key={`checkbox-${item.id}`}>
+              <TableRow key={item.productCode} className="hover:bg-gray-50">
+                <TableCell key={`checkbox-${item.productCode}`}>
                   <input
                     type="checkbox"
-                    checked={selectedItems.includes(item.id)}
-                    onChange={(e) => handleSelectItem(item.id, e.target.checked)}
-                    className="h-4 w-4"
+                    checked={selectedItems.includes(item.productCode)}
+                    onChange={(e) => handleSelectItem(item.productCode, e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                   />
                 </TableCell>
                 {visibleColumns
                   .filter(col => col !== 'actions')
                   .map(columnId => (
-                    <React.Fragment key={`${item.id}-${columnId}`}>
+                    <React.Fragment key={`${item.productCode}-${columnId}`}>
                       {renderTableCell(item, columnId)}
                     </React.Fragment>
                   ))}
                 {showActions && visibleColumns.includes('actions') && (
-                  <React.Fragment key={`${item.id}-actions`}>
+                  <React.Fragment key={`${item.productCode}-actions`}>
                     {renderTableCell(item, 'actions')}
                   </React.Fragment>
                 )}
@@ -705,7 +736,7 @@ export function ItemsTable({
             size="sm"
             onClick={() => handlePageChange(activeCurrentPage - 1)}
             disabled={activeCurrentPage === 1}
-            className="h-8 w-8 p-0"
+            className="h-8 w-8 p-0 rounded-full"
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -713,13 +744,13 @@ export function ItemsTable({
           {generatePageNumbers().map((page, index) => (
             <React.Fragment key={index}>
               {page === '...' ? (
-                <span className="px-3 py-1 text-sm">...</span>
+                <span className="px-3 py-1 text-sm text-gray-500">...</span>
               ) : (
                 <Button
                   variant={activeCurrentPage === page ? "default" : "outline"}
                   size="sm"
                   onClick={() => handlePageChange(Number(page))}
-                  className="h-8 w-8 p-0"
+                  className="h-8 w-8 p-0 rounded-full"
                 >
                   {page}
                 </Button>
@@ -732,7 +763,7 @@ export function ItemsTable({
             size="sm"
             onClick={() => handlePageChange(activeCurrentPage + 1)}
             disabled={activeCurrentPage === activeTotalPages}
-            className="h-8 w-8 p-0"
+            className="h-8 w-8 p-0 rounded-full"
           >
             <ChevronRight className="h-4 w-4" />
           </Button>

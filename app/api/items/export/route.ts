@@ -3,8 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { items, users, itemStock } from '@/lib/db/schema';
+import { items, users } from '@/lib/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
+import { parseProductCode } from '@/lib/db/schema';
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,14 +22,15 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { itemIds, format = 'csv', statusFilter, categoryFilter, locationFilter } = body;
+    const { itemIds, format = 'csv', statusFilter, categoryFilter } = body;
 
     // Build query with filters
     const conditions = [];
     
     // If specific item IDs are provided, filter by those
     if (itemIds && itemIds.length > 0) {
-      conditions.push(inArray(items.id, itemIds));
+      // Use productCode instead of id
+      conditions.push(inArray(items.productCode, itemIds));
     }
     
     if (statusFilter && statusFilter !== 'all') {
@@ -38,43 +40,36 @@ export async function POST(request: NextRequest) {
     if (categoryFilter && categoryFilter !== 'all') {
       conditions.push(eq(items.productCategory, categoryFilter));
     }
-    
-    if (locationFilter && locationFilter !== 'all') {
-      if (locationFilter === '') {
-        // Handle "Not Assigned" case
-        conditions.push(eq(itemStock.location, null as any));
-      } else {
-        conditions.push(eq(itemStock.location, locationFilter as any));
-      }
-    }
 
-    // Fetch items with creator information and stock data
+    // Fetch items with creator information
     const itemsData = await db
       .select({
-        id: items.id,
-        productCode: items.productCode,
+        productCode: items.productCode, // Changed from id to productCode
         description: items.description,
         brandCode: items.brandCode,
         productDivision: items.productDivision,
         productCategory: items.productCategory,
-        totalStock: items.totalStock,
         period: items.period,
         season: items.season,
         unitOfMeasure: items.unitOfMeasure,
         status: items.status,
         createdAt: items.createdAt,
         createdByName: users.name,
-        location: itemStock.location,
-        pending: itemStock.pending,
-        inStorage: itemStock.inStorage,
-        onBorrow: itemStock.onBorrow,
-        inClearance: itemStock.inClearance,
-        seeded: itemStock.seeded,
       })
       .from(items)
       .leftJoin(users, eq(items.createdBy, users.id))
-      .leftJoin(itemStock, eq(items.id, itemStock.itemId))
       .where(conditions.length > 0 ? and(...conditions) : undefined);
+
+    // Parse product codes to get brand, division, and category names
+    const itemsWithParsedData = itemsData.map(item => {
+      const parsed = parseProductCode(item.productCode);
+      return {
+        ...item,
+        brandName: parsed.brandName,
+        divisionName: parsed.divisionName,
+        categoryName: parsed.categoryName
+      };
+    });
 
     if (format === 'csv') {
       // Create CSV content with proper escaping
@@ -82,19 +77,15 @@ export async function POST(request: NextRequest) {
         'Product Code',
         'Description',
         'Brand Code',
+        'Brand Name',
         'Product Division',
+        'Division Name',
         'Product Category',
-        'Total Stock',
+        'Category Name',
         'Period',
         'Season',
         'Unit of Measure',
         'Status',
-        'Location',
-        'Pending',
-        'In Storage',
-        'On Borrow',
-        'In Clearance',
-        'Seeded',
         'Created By',
         'Created At'
       ];
@@ -112,23 +103,19 @@ export async function POST(request: NextRequest) {
 
       const csvContent = [
         headers.join(','),
-        ...itemsData.map(item => [
+        ...itemsWithParsedData.map(item => [
           escapeCsvField(item.productCode),
           escapeCsvField(item.description),
           escapeCsvField(item.brandCode),
+          escapeCsvField(item.brandName),
           escapeCsvField(item.productDivision),
+          escapeCsvField(item.divisionName),
           escapeCsvField(item.productCategory),
-          escapeCsvField(item.totalStock),
+          escapeCsvField(item.categoryName),
           escapeCsvField(item.period),
           escapeCsvField(item.season),
           escapeCsvField(item.unitOfMeasure),
           escapeCsvField(item.status),
-          escapeCsvField(item.location),
-          escapeCsvField(item.pending),
-          escapeCsvField(item.inStorage),
-          escapeCsvField(item.onBorrow),
-          escapeCsvField(item.inClearance),
-          escapeCsvField(item.seeded),
           escapeCsvField(item.createdByName),
           escapeCsvField(new Date(item.createdAt).toISOString())
         ].join(','))
@@ -146,19 +133,15 @@ export async function POST(request: NextRequest) {
         'Product Code',
         'Description',
         'Brand Code',
+        'Brand Name',
         'Product Division',
+        'Division Name',
         'Product Category',
-        'Total Stock',
+        'Category Name',
         'Period',
         'Season',
         'Unit of Measure',
         'Status',
-        'Location',
-        'Pending',
-        'In Storage',
-        'On Borrow',
-        'In Clearance',
-        'Seeded',
         'Created By',
         'Created At'
       ];
@@ -174,23 +157,19 @@ export async function POST(request: NextRequest) {
           .replace(/'/g, '&#039;');
       };
 
-      const rows = itemsData.map(item => [
+      const rows = itemsWithParsedData.map(item => [
         item.productCode,
         item.description,
         item.brandCode,
+        item.brandName,
         item.productDivision,
+        item.divisionName,
         item.productCategory,
-        item.totalStock,
+        item.categoryName,
         item.period,
         item.season,
         item.unitOfMeasure,
         item.status,
-        item.location || '',
-        item.pending || 0,
-        item.inStorage || 0,
-        item.onBorrow || 0,
-        item.inClearance || 0,
-        item.seeded || 0,
         item.createdByName || '',
         new Date(item.createdAt).toISOString()
       ]);

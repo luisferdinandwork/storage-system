@@ -6,7 +6,7 @@ import { db } from '@/lib/db';
 import { borrowRequests, borrowRequestItems, items, itemStock, users, departments } from '@/lib/db/schema';
 import { eq, and, lt, gte, inArray, desc } from 'drizzle-orm';
 
-// Helper function to generate the next BRW ID
+// Helper function to generate the next BRW ID (unchanged)
 async function generateBorrowRequestId(): Promise<string> {
   // Get the latest borrow request with BRW prefix
   const latestRequest = await db.query.borrowRequests.findFirst({
@@ -45,8 +45,8 @@ export async function POST(request: NextRequest) {
 
     const { 
       items: requestedItems, 
-      startDate, 
-      endDate, 
+      // startDate, 
+      // endDate, 
       reason 
     } = await request.json();
 
@@ -58,31 +58,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!startDate || !endDate || !reason) {
-      return NextResponse.json(
-        { error: 'Start date, end date, and reason are required' },
-        { status: 400 }
-      );
-    }
+    // if (!startDate || !endDate || !reason) {
+    //   return NextResponse.json(
+    //     { error: 'Start date, end date, and reason are required' },
+    //     { status: 400 }
+    //   );
+    // }
 
-    // Validate dates
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const now = new Date();
+    // // Validate dates
+    // const start = new Date(startDate);
+    // const end = new Date(endDate);
+    // const now = new Date();
 
-    if (start < now) {
-      return NextResponse.json(
-        { error: 'Start date cannot be in the past' },
-        { status: 400 }
-      );
-    }
+    // if (start < now) {
+    //   return NextResponse.json(
+    //     { error: 'Start date cannot be in the past' },
+    //     { status: 400 }
+    //   );
+    // }
 
-    if (end <= start) {
-      return NextResponse.json(
-        { error: 'End date must be after start date' },
-        { status: 400 }
-      );
-    }
+    // if (end <= start) {
+    //   return NextResponse.json(
+    //     { error: 'End date must be after start date' },
+    //     { status: 400 }
+    //   );
+    // }
 
     // Get user information with department
     const user = await db.query.users.findFirst({
@@ -102,10 +102,19 @@ export async function POST(request: NextRequest) {
     // For multiple items, we need to fetch them one by one or use inArray
     const allDbItems = [];
     for (const itemId of itemIds) {
+      // Updated: Use productCode instead of id
       const dbItem = await db.query.items.findFirst({
-        where: eq(items.id, itemId),
+        where: eq(items.productCode, itemId), // Changed from items.id to items.productCode
         with: {
-          stock: true,
+          stock: {
+            with: {
+              box: {
+                with: {
+                  location: true,
+                },
+              },
+            },
+          },
         },
       });
       if (dbItem) allDbItems.push(dbItem);
@@ -120,7 +129,7 @@ export async function POST(request: NextRequest) {
 
     // Check stock availability for each item
     for (const requestedItem of requestedItems) {
-      const dbItem = allDbItems.find(item => item.id === requestedItem.itemId);
+      const dbItem = allDbItems.find(item => item.productCode === requestedItem.itemId); // Changed from item.id to item.productCode
       if (!dbItem?.stock || dbItem.stock.inStorage < requestedItem.quantity) {
         return NextResponse.json(
           { error: `Insufficient stock for item ${dbItem?.description || 'Unknown'}` },
@@ -136,12 +145,14 @@ export async function POST(request: NextRequest) {
     const userRole = session.user.role;
     const initialStatus = userRole === 'user' ? 'pending_manager' : 'pending_storage';
 
+    const placeholderDate = new Date('1970-01-01');
+
     // Create the borrow request
     const [borrowRequest] = await db.insert(borrowRequests).values({
       id: borrowRequestId, // Use the generated ID
       userId: session.user.id,
-      startDate: start,
-      endDate: end,
+      startDate: placeholderDate,
+      endDate: placeholderDate,
       reason,
       status: initialStatus,
     }).returning();
@@ -150,7 +161,7 @@ export async function POST(request: NextRequest) {
     for (const requestedItem of requestedItems) {
       await db.insert(borrowRequestItems).values({
         borrowRequestId: borrowRequestId, // Use the generated ID
-        itemId: requestedItem.itemId,
+        itemId: requestedItem.itemId, // This is now the productCode
         quantity: requestedItem.quantity,
         status: initialStatus,
       });
@@ -213,6 +224,15 @@ export async function GET(request: NextRequest) {
             item: {
               with: {
                 images: true,
+                stock: { // Include stock information
+                  with: {
+                    box: { // Include box information
+                      with: {
+                        location: true, // Include location information
+                      },
+                    },
+                  },
+                },
               },
             },
           },

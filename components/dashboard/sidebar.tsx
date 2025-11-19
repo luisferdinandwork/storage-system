@@ -64,7 +64,7 @@ const navigation: NavigationItem[] = [
   
   // Items Management - different access levels for different roles
   { 
-    name: 'Items', 
+    name: 'Barang', 
     href: '/dashboard/items', 
     icon: Package, 
     roles: ['superadmin', 'item-master', 'storage-master', 'storage-manager', 'manager', 'user'] 
@@ -78,39 +78,47 @@ const navigation: NavigationItem[] = [
     roles: ['superadmin', 'storage-master', 'storage-manager']
   },
   { 
-    name: 'Inventory Locations', 
+    name: 'Lokasi Inventori', 
     href: '/dashboard/stock-locations', 
     icon: MapPin, 
     roles: ['superadmin', 'storage-master', 'storage-manager'] 
   },
+  
+  // Clearance Management - Storage Master and Storage Manager specific
   { 
-    name: 'Inventory Clearance', 
+    name: 'Form Clearence', 
     href: '/dashboard/clearance', 
+    icon: FileText, 
+    roles: ['superadmin', 'storage-master', 'storage-manager'] 
+  },
+  { 
+    name: 'Items in Clearence', 
+    href: '/dashboard/item-clearance', 
     icon: Trash2, 
     roles: ['superadmin', 'storage-master', 'storage-manager'] 
   },
   
   // Lending Requests - different views for different roles
   { 
-    name: 'New Lending Requests', 
+    name: 'Peminjaman Baru', 
     href: '/dashboard/requests/new-requests', 
     icon: Plus, 
     roles: ['superadmin', 'manager', 'user'] 
   },
   { 
-    name: 'My Lending Requests', 
+    name: 'Peminjaman Saya', 
     href: '/dashboard/requests/my-requests', 
     icon: ClipboardList, 
     roles: ['superadmin', 'manager', 'user'] 
   },
   { 
-    name: 'Pending List', 
+    name: 'Daftar Tertunda', 
     href: '/dashboard/requests/pending', 
     icon: CheckSquare, 
     roles: ['superadmin', 'storage-master', 'storage-manager', 'manager'] 
   },
   { 
-    name: 'Active Lending', 
+    name: 'Peminjaman Aktif', 
     href: '/dashboard/requests/active', 
     icon: Truck, 
     roles: ['superadmin', 'storage-master', 'storage-manager'] 
@@ -118,7 +126,7 @@ const navigation: NavigationItem[] = [
   
   // Reports
   { 
-    name: 'Reports', 
+    name: 'Laporan', 
     href: '/dashboard/reports', 
     icon: BarChart3, 
     roles: ['superadmin', 'storage-manager'] 
@@ -126,13 +134,13 @@ const navigation: NavigationItem[] = [
   
   // User Management - Superadmin only
   { 
-    name: 'Departments', 
+    name: 'Departemen', 
     href: '/dashboard/departments', 
     icon: Building, 
     roles: ['superadmin'] 
   },
   { 
-    name: 'Users', 
+    name: 'Pengguna', 
     href: '/dashboard/users', 
     icon: Users, 
     roles: ['superadmin'] 
@@ -140,7 +148,7 @@ const navigation: NavigationItem[] = [
   
   // Settings - Superadmin only
   { 
-    name: 'Settings', 
+    name: 'Pengaturan', 
     href: '/dashboard/settings', 
     icon: Settings, 
     roles: ['superadmin'] 
@@ -162,30 +170,37 @@ export function Sidebar({ userRole }: SidebarProps) {
   // Group navigation items by category
   const groupedNavigation = [
     {
-      title: 'Main',
+      title: 'Utama',
       items: filteredNavigation.filter(item => 
-        ['Dashboard', 'Items', 'Add Item'].includes(item.name)
+        ['Dashboard', 'Barang', 'Tambah Barang'].includes(item.name)
       ),
       show: true
     },
     {
-      title: 'Inventory Management',
+      title: 'Manajemen Inventori',
       items: filteredNavigation.filter(item => 
-        ['Warehousing', 'Inventory Locations', 'Inventory Clearance'].includes(item.name)
+        ['Warehousing', 'Lokasi Inventori'].includes(item.name)
       ),
       show: userRole === 'storage-master' || userRole === 'storage-manager' || userRole === 'superadmin'
     },
     {
-      title: 'Lending Management',
+      title: 'Manajemen Clearence',
       items: filteredNavigation.filter(item => 
-        ['New Lending Requests','My Lending Requests', 'Pending List', 'Active Lending'].includes(item.name)
+        ['Form Clearence', 'Items in Clearence'].includes(item.name)
+      ),
+      show: userRole === 'storage-master' || userRole === 'storage-manager' || userRole === 'superadmin'
+    },
+    {
+      title: 'Manajemen Peminjaman',
+      items: filteredNavigation.filter(item => 
+        ['Peminjaman Baru','Peminjaman Saya', 'Daftar Tertunda', 'Peminjaman Aktif'].includes(item.name)
       ),
       show: true
     },
     {
-      title: 'Administration',
+      title: 'Administrasi',
       items: filteredNavigation.filter(item => 
-        ['Reports', 'Departments', 'Users', 'Settings'].includes(item.name)
+        ['Laporan', 'Departemen', 'Pengguna', 'Pengaturan'].includes(item.name)
       ),
       show: userRole === 'superadmin' || userRole === 'storage-manager'
     }
@@ -222,7 +237,7 @@ export function Sidebar({ userRole }: SidebarProps) {
           <div className="p-6 border-b flex items-center justify-between">
             {!isCollapsed && (
               <h1 className="text-2xl font-bold text-primary-500 truncate">
-                Storage System
+                Sistem Penyimpanan
               </h1>
             )}
             <button
@@ -231,7 +246,7 @@ export function Sidebar({ userRole }: SidebarProps) {
                 'hidden lg:flex p-1.5 hover:bg-gray-100 rounded-md transition-colors',
                 isCollapsed && 'mx-auto'
               )}
-              title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              title={isCollapsed ? 'Perluas sidebar' : 'Ciutkan sidebar'}
             >
               {isCollapsed ? (
                 <ChevronRight className="h-5 w-5" />
@@ -260,9 +275,9 @@ export function Sidebar({ userRole }: SidebarProps) {
                         const isActive = pathname === item.href || 
                                        (item.href !== '/dashboard' && pathname.startsWith(item.href));
                         
-                        // Show pending count badges for Warehousing and Pending List
+                        // Show pending count badges for Warehousing and Daftar Tertunda
                         const warehouseCount = item.name === 'Warehousing' ? pendingItemRequestsCount : 0;
-                        const borrowRequestCount = item.name === 'Pending List' ? pendingBorrowRequestsCount : 0;
+                        const borrowRequestCount = item.name === 'Daftar Tertunda' ? pendingBorrowRequestsCount : 0;
                         const badgeCount = warehouseCount > 0 ? warehouseCount : borrowRequestCount;
                         const showBadge = badgeCount > 0;
 
@@ -350,7 +365,7 @@ export function Sidebar({ userRole }: SidebarProps) {
                   className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-100 w-full transition-colors"
                 >
                   <LogOut className="mr-3 h-5 w-5" />
-                  Sign out
+                  Keluar
                 </button>
               </>
             ) : (
@@ -364,7 +379,7 @@ export function Sidebar({ userRole }: SidebarProps) {
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="right">
-                  <p>Sign out</p>
+                  <p>Keluar</p>
                 </TooltipContent>
               </Tooltip>
             )}

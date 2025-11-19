@@ -5,6 +5,8 @@ import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { items, itemStock, itemImages, itemRequests, borrowRequestItems, itemClearances, stockMovements } from '@/lib/db/schema';
 import { eq, inArray } from 'drizzle-orm';
+import { unlink } from 'fs/promises';
+import { join } from 'path';
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,62 +22,84 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { itemIds } = body;
+    const { productCodes } = body; // Changed from itemIds to productCodes
 
-    if (!itemIds || !Array.isArray(itemIds) || itemIds.length === 0) {
-      return NextResponse.json({ error: 'No item IDs provided' }, { status: 400 });
+    if (!productCodes || !Array.isArray(productCodes) || productCodes.length === 0) {
+      return NextResponse.json({ error: 'No product codes provided' }, { status: 400 });
     }
 
     // Check which items actually exist before attempting to delete
     const existingItems = await db
-      .select({ id: items.id })
+      .select({ productCode: items.productCode }) // Changed from id to productCode
       .from(items)
-      .where(inArray(items.id, itemIds));
+      .where(inArray(items.productCode, productCodes)); // Changed from id to productCode
     
-    const existingItemIds = existingItems.map(item => item.id);
-    const nonExistingItemIds = itemIds.filter(id => !existingItemIds.includes(id));
+    const existingProductCodes = existingItems.map(item => item.productCode); // Changed to productCode
+    const nonExistingProductCodes = productCodes.filter(code => !existingProductCodes.includes(code)); // Changed to productCode
     
-    if (existingItemIds.length === 0) {
+    if (existingProductCodes.length === 0) {
       return NextResponse.json({ 
-        error: 'None of the provided item IDs exist',
-        nonExistingItemIds 
+        error: 'None of the provided product codes exist',
+        nonExistingProductCodes 
       }, { status: 404 });
+    }
+
+    // Get all images for these items to delete from filesystem
+    const imagesToDelete = await db
+      .select({ fileName: itemImages.fileName })
+      .from(itemImages)
+      .where(inArray(itemImages.itemId, existingProductCodes)); // Changed to productCode
+
+    // Delete image files from filesystem
+    const deletionErrors: string[] = [];
+    for (const image of imagesToDelete) {
+      try {
+        const imagePath = join(process.cwd(), 'public', 'uploads', image.fileName);
+        await unlink(imagePath);
+        console.log(`Successfully deleted image file: ${image.fileName}`);
+      } catch (error) {
+        console.error(`Failed to delete image file ${image.fileName}:`, error);
+        deletionErrors.push(image.fileName);
+        // Continue with deletion even if file removal fails
+      }
     }
 
     // Delete all related records in the correct order to avoid foreign key constraint errors
     // 1. Delete stock movements
     await db.delete(stockMovements)
-      .where(inArray(stockMovements.itemId, existingItemIds));
+      .where(inArray(stockMovements.itemId, existingProductCodes)); // Changed to productCode
     
     // 2. Delete borrow request items
     await db.delete(borrowRequestItems)
-      .where(inArray(borrowRequestItems.itemId, existingItemIds));
+      .where(inArray(borrowRequestItems.itemId, existingProductCodes)); // Changed to productCode
     
     // 3. Delete item clearances
     await db.delete(itemClearances)
-      .where(inArray(itemClearances.itemId, existingItemIds));
+      .where(inArray(itemClearances.itemId, existingProductCodes)); // Changed to productCode
     
     // 4. Delete item requests
     await db.delete(itemRequests)
-      .where(inArray(itemRequests.itemId, existingItemIds));
+      .where(inArray(itemRequests.itemId, existingProductCodes)); // Changed to productCode
     
     // 5. Delete item images
     await db.delete(itemImages)
-      .where(inArray(itemImages.itemId, existingItemIds));
+      .where(inArray(itemImages.itemId, existingProductCodes)); // Changed to productCode
     
     // 6. Delete item stock
     await db.delete(itemStock)
-      .where(inArray(itemStock.itemId, existingItemIds));
+      .where(inArray(itemStock.itemId, existingProductCodes)); // Changed to productCode
     
     // 7. Finally, delete the items
     const deletedItems = await db.delete(items)
-      .where(inArray(items.id, existingItemIds))
-      .returning({ id: items.id });
+      .where(inArray(items.productCode, existingProductCodes)) // Changed from id to productCode
+      .returning({ productCode: items.productCode }); // Changed from id to productCode
 
     return NextResponse.json({ 
       message: `${deletedItems.length} items deleted successfully`,
       deletedCount: deletedItems.length,
-      nonExistingItemIds: nonExistingItemIds.length > 0 ? nonExistingItemIds : undefined
+      deletedItems: deletedItems.map(item => item.productCode), // Added deleted product codes
+      nonExistingProductCodes: nonExistingProductCodes.length > 0 ? nonExistingProductCodes : undefined,
+      deletionErrors: deletionErrors.length > 0 ? deletionErrors : undefined
     });
   } catch (error) {
     console.error('Error bulk deleting items:', error);

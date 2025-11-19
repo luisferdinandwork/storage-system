@@ -3,21 +3,42 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { items, itemStock, itemRequests, stockMovements } from '@/lib/db/schema'; // Added itemRequests and stockMovements
+import { items, itemStock, itemImages, itemRequests, stockMovements, users } from '@/lib/db/schema';
 import { parseProductCode } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
+import * as XLSX from 'xlsx';
 
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     
-    if (!session) {
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Check if email exists
+    if (!session.user.email) {
+      return NextResponse.json({ error: 'User email not found in session' }, { status: 401 });
     }
 
     // Only superadmin and item-master can import items
     if (session.user.role !== 'superadmin' && session.user.role !== 'item-master') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    // Get the actual user ID from the database
+    const userEmail = session.user.email;
+    const [currentUser] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, userEmail))
+      .limit(1);
+
+    if (!currentUser) {
+      return NextResponse.json(
+        { error: 'User not found in database' },
+        { status: 404 }
+      );
     }
 
     const formData = await request.formData();
@@ -38,30 +59,35 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Read file content
-    const fileContent = await file.text();
+    let rows: any[][] = [];
     
     if (isExcel) {
-      return NextResponse.json({ 
-        error: 'Excel files must be converted to CSV format before importing. Please save your Excel file as CSV and try again.' 
-      }, { status: 400 });
+      // Handle Excel file
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+      
+      rows = jsonData;
+    } else {
+      // Handle CSV file
+      const fileContent = await file.text();
+      rows = parseCsv(fileContent);
     }
-
-    // Parse CSV
-    const rows = parseCsv(fileContent);
 
     if (rows.length < 2) {
       return NextResponse.json({ error: 'File is empty or contains no data rows' }, { status: 400 });
     }
 
     // Extract and validate headers
-    const headers = rows[0].map(h => h.trim());
+    const headers = rows[0].map((h: any) => String(h).trim());
     
-    // Required headers
+    // Required headers (removed Box ID)
     const requiredHeaders = [
       'Product Code',
       'Description',
-      'Total Stock',
+      'Initial Stock',
       'Period',
       'Season',
       'Unit of Measure'
@@ -87,32 +113,32 @@ export async function POST(request: NextRequest) {
     
     const productCodeIdx = getColumnIndex('Product Code');
     const descriptionIdx = getColumnIndex('Description');
-    const totalStockIdx = getColumnIndex('Total Stock');
+    const initialStockIdx = getColumnIndex('Initial Stock');
     const periodIdx = getColumnIndex('Period');
     const seasonIdx = getColumnIndex('Season');
     const unitIdx = getColumnIndex('Unit of Measure');
     const conditionIdx = getColumnIndex('Condition');
     const conditionNotesIdx = getColumnIndex('Condition Notes');
-    const locationIdx = getColumnIndex('Location');
+    // Removed boxIdIdx
 
     // Process each data row
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
       
       // Skip empty rows
-      if (row.every(cell => !cell.trim())) continue;
+      if (row.every((cell: any) => !String(cell).trim())) continue;
       
       try {
         // Extract data from row
-        const productCode = row[productCodeIdx]?.trim();
-        const description = row[descriptionIdx]?.trim();
-        const totalStockStr = row[totalStockIdx]?.trim();
-        const period = row[periodIdx]?.trim();
-        const season = row[seasonIdx]?.trim();
-        const unitOfMeasure = row[unitIdx]?.trim();
-        const condition = conditionIdx >= 0 ? row[conditionIdx]?.trim()?.toLowerCase() : null;
-        const conditionNotes = conditionNotesIdx >= 0 ? row[conditionNotesIdx]?.trim() : null;
-        const location = locationIdx >= 0 ? row[locationIdx]?.trim() : null;
+        const productCode = String(row[productCodeIdx] || '').trim();
+        const description = String(row[descriptionIdx] || '').trim();
+        const initialStockStr = String(row[initialStockIdx] || '').trim();
+        const period = String(row[periodIdx] || '').trim();
+        const season = String(row[seasonIdx] || '').trim();
+        const unitOfMeasure = String(row[unitIdx] || '').trim();
+        const condition = conditionIdx >= 0 ? String(row[conditionIdx] || '').trim().toLowerCase() : null;
+        const conditionNotes = conditionNotesIdx >= 0 ? String(row[conditionNotesIdx] || '').trim() : null;
+        // Removed boxId extraction
 
         // Validate required fields
         if (!productCode) {
@@ -134,17 +160,17 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        if (!totalStockStr || isNaN(parseInt(totalStockStr))) {
+        if (!initialStockStr || isNaN(parseInt(initialStockStr))) {
           results.failed++;
           results.errors.push({
             row: i + 1,
             productCode,
-            error: 'Total Stock must be a valid number'
+            error: 'Initial Stock must be a valid number'
           });
           continue;
         }
 
-        const totalStock = parseInt(totalStockStr);
+        const initialStock = parseInt(initialStockStr);
 
         if (!period || !season || !unitOfMeasure) {
           results.failed++;
@@ -181,17 +207,7 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Validate location if provided
-        const validLocations = ['Storage 1', 'Storage 2', 'Storage 3'];
-        if (location && location !== '' && !validLocations.includes(location)) {
-          results.failed++;
-          results.errors.push({
-            row: i + 1,
-            productCode,
-            error: `Location must be one of: ${validLocations.join(', ')}, or empty`
-          });
-          continue;
-        }
+        // Removed Box ID validation
 
         // Parse product code to extract auto-generated fields
         const parsed = parseProductCode(productCode);
@@ -208,7 +224,7 @@ export async function POST(request: NextRequest) {
 
         // Check for duplicate product code
         const existingItem = await db
-          .select({ id: items.id })
+          .select({ productCode: items.productCode })
           .from(items)
           .where(eq(items.productCode, productCode))
           .limit(1);
@@ -230,45 +246,45 @@ export async function POST(request: NextRequest) {
           brandCode: parsed.brandCode,
           productDivision: parsed.productDivision,
           productCategory: parsed.productCategory,
-          totalStock,
           period,
           season,
           unitOfMeasure: unitOfMeasure as 'PCS' | 'PRS',
           status: 'pending_approval',
-          createdBy: session.user.id,
+          createdBy: currentUser.id,
         }).returning();
 
-        // Create item stock record with initial stock in pending state
+        // Create item stock record with initial stock in pending state (boxId set to null)
         const [newStock] = await db.insert(itemStock).values({
-          itemId: newItem.id,
-          pending: totalStock, // Set initial stock as pending
-          inStorage: 0,       // Not in storage until approved
+          itemId: newItem.productCode,
+          pending: initialStock,
+          inStorage: 0,
           onBorrow: 0,
           inClearance: 0,
           seeded: 0,
-          location: location && location !== '' ? location as 'Storage 1' | 'Storage 2' | 'Storage 3' : null,
-          condition: condition as 'excellent' | 'good' | 'fair' | 'poor' || 'good', // Default to 'good' if not provided
+          boxId: null, // Explicitly set to null
+          condition: (condition as 'excellent' | 'good' | 'fair' | 'poor') || 'good',
           conditionNotes: conditionNotes || null,
         }).returning();
 
         // Create item request for approval workflow
         await db.insert(itemRequests).values({
-          itemId: newItem.id,
-          requestedBy: session.user.id,
+          itemId: newItem.productCode,
+          requestedBy: currentUser.id,
           status: 'pending',
           notes: 'Item imported, awaiting approval from Storage Master',
         });
 
-        // Record initial stock movement if totalStock > 0
-        if (totalStock > 0) {
+        // Record initial stock movement if initialStock > 0 (boxId set to null)
+        if (initialStock > 0) {
           await db.insert(stockMovements).values({
-            itemId: newItem.id,
+            itemId: newItem.productCode,
             stockId: newStock.id,
             movementType: 'initial_stock',
-            quantity: totalStock,
+            quantity: initialStock,
             fromState: 'none',
             toState: 'pending',
-            performedBy: session.user.id,
+            boxId: null, // Explicitly set to null
+            performedBy: currentUser.id,
             notes: 'Initial stock from import - pending approval',
           });
         }
@@ -278,7 +294,7 @@ export async function POST(request: NextRequest) {
         results.failed++;
         results.errors.push({
           row: i + 1,
-          productCode: row[productCodeIdx]?.trim(),
+          productCode: String(row[productCodeIdx] || '').trim(),
           error: error instanceof Error ? error.message : 'Unknown error occurred'
         });
       }
@@ -297,7 +313,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// parseCsv function remains unchanged
 function parseCsv(content: string): string[][] {
   const rows: string[][] = [];
   let currentRow: string[] = [];
@@ -312,12 +327,10 @@ function parseCsv(content: string): string[][] {
     if (inQuotes) {
       if (char === '"') {
         if (nextChar === '"') {
-          // Escaped quote
           currentField += '"';
           i += 2;
           continue;
         } else {
-          // End of quoted field
           inQuotes = false;
           i++;
           continue;
@@ -328,23 +341,19 @@ function parseCsv(content: string): string[][] {
       }
     } else {
       if (char === '"') {
-        // Start of quoted field
         inQuotes = true;
         i++;
       } else if (char === ',') {
-        // Field separator
         currentRow.push(currentField);
         currentField = '';
         i++;
       } else if (char === '\r' && nextChar === '\n') {
-        // Windows line ending
         currentRow.push(currentField);
         rows.push(currentRow);
         currentRow = [];
         currentField = '';
         i += 2;
       } else if (char === '\n' || char === '\r') {
-        // Unix/Mac line ending
         currentRow.push(currentField);
         rows.push(currentRow);
         currentRow = [];
@@ -357,7 +366,6 @@ function parseCsv(content: string): string[][] {
     }
   }
 
-  // Add last field and row if not empty
   if (currentField || currentRow.length > 0) {
     currentRow.push(currentField);
     rows.push(currentRow);

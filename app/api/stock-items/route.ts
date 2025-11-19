@@ -3,10 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { items, itemStock, itemImages } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { items, itemStock, itemImages, boxes, locations } from '@/lib/db/schema';
+import { eq, ilike, desc } from 'drizzle-orm';
 
-// GET /api/stock-items - List all items with stock information
+// GET /api/stock-items - List all items with aggregated stock from all locations
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -22,24 +22,119 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const location = searchParams.get('location');
+    const boxId = searchParams.get('boxId');
+    const locationId = searchParams.get('locationId');
     const search = searchParams.get('search');
+    const status = searchParams.get('status');
 
-    // Build the query using Drizzle ORM
-    const itemsWithStock = await db.query.items.findMany({
-      with: {
-        stock: true,
-        images: true,
-      },
-      orderBy: [items.productCode],
-    });
+    // First, get all items with basic info
+    let itemsQuery = db
+      .select({
+        productCode: items.productCode,
+        description: items.description,
+        brandCode: items.brandCode,
+        productDivision: items.productDivision,
+        productCategory: items.productCategory,
+        period: items.period,
+        season: items.season,
+        unitOfMeasure: items.unitOfMeasure,
+        status: items.status,
+        createdBy: items.createdBy,
+        createdAt: items.createdAt,
+        updatedAt: items.updatedAt,
+        approvedBy: items.approvedBy,
+        approvedAt: items.approvedAt,
+      })
+      .from(items)
+      .orderBy(desc(items.updatedAt));
+
+    // Apply status filter if specified
+    let itemsData;
+    if (status) {
+      itemsData = await itemsQuery.where(eq(items.status, status as any));
+    } else {
+      itemsData = await itemsQuery;
+    }
+
+    // Fetch all images
+    const allImages = await db
+      .select()
+      .from(itemImages);
+
+    // Group images by itemId (productCode)
+    const imagesByItemId: Record<string, any[]> = {};
+    for (const image of allImages) {
+      if (!imagesByItemId[image.itemId]) {
+        imagesByItemId[image.itemId] = [];
+      }
+      imagesByItemId[image.itemId].push(image);
+    }
+
+    // For each item, aggregate stock from all locations
+    const itemsWithAggregatedStock = await Promise.all(
+      itemsData.map(async (item) => {
+        // Get all stock records for this item
+        const stockRecords = await db
+          .select({
+            stock: itemStock,
+            box: boxes,
+            location: locations,
+          })
+          .from(itemStock)
+          .leftJoin(boxes, eq(itemStock.boxId, boxes.id))
+          .leftJoin(locations, eq(boxes.locationId, locations.id))
+          .where(eq(itemStock.itemId, item.productCode));
+
+        // Aggregate quantities across all locations
+        const aggregatedStock = stockRecords.reduce(
+          (totals, record) => ({
+            pending: totals.pending + record.stock.pending,
+            inStorage: totals.inStorage + record.stock.inStorage,
+            onBorrow: totals.onBorrow + record.stock.onBorrow,
+            inClearance: totals.inClearance + record.stock.inClearance,
+            seeded: totals.seeded + record.stock.seeded,
+          }),
+          { pending: 0, inStorage: 0, onBorrow: 0, inClearance: 0, seeded: 0 }
+        );
+
+        // Calculate total stock
+        const totalStock = 
+          aggregatedStock.pending + 
+          aggregatedStock.inStorage + 
+          aggregatedStock.onBorrow + 
+          aggregatedStock.inClearance + 
+          aggregatedStock.seeded;
+
+        return {
+          ...item,
+          stock: aggregatedStock, // Aggregated stock quantities
+          stockRecords: stockRecords.map(r => ({
+            ...r.stock,
+            box: r.box,
+            location: r.location,
+          })), // Individual stock records with location details
+          totalStock,
+          images: imagesByItemId[item.productCode] || [],
+        };
+      })
+    );
 
     // Filter results if needed
-    let filteredItems = itemsWithStock;
+    let filteredItems = itemsWithAggregatedStock;
     
-    if (location) {
+    if (boxId) {
       filteredItems = filteredItems.filter(item => 
-        item.stock && item.stock.location === location
+        item.stockRecords.some((record: any) => 
+          record.box && record.box.id === boxId
+        )
+      );
+    }
+    
+    if (locationId) {
+      filteredItems = filteredItems.filter(item => 
+        item.stockRecords.some((record: any) => 
+          record.location && record.location.id === locationId
+        )
       );
     }
     
@@ -51,38 +146,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Format the response
-    const formattedItems = filteredItems.map((item) => ({
-      id: item.id,
-      productCode: item.productCode,
-      description: item.description,
-      brandCode: item.brandCode,
-      productDivision: item.productDivision,
-      productCategory: item.productCategory,
-      totalStock: item.totalStock,
-      period: item.period,
-      season: item.season,
-      unitOfMeasure: item.unitOfMeasure,
-      status: item.status,
-      images: item.images || [],
-      stock: item.stock ? {
-        id: item.stock.id,
-        pending: item.stock.pending,
-        inStorage: item.stock.inStorage,
-        onBorrow: item.stock.onBorrow,
-        inClearance: item.stock.inClearance,
-        seeded: item.stock.seeded,
-        location: item.stock.location,
-        condition: item.stock.condition,
-        conditionNotes: item.stock.conditionNotes,
-      } : null,
-    }));
-
-    return NextResponse.json(formattedItems);
+    return NextResponse.json(filteredItems);
   } catch (error) {
     console.error('Failed to fetch stock items:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch stock items' },
+      { error: 'Failed to fetch stock items', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }

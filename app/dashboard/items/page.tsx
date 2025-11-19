@@ -1,11 +1,10 @@
-// app/dashboard/items/page.tsx
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Package, Plus, Search, Filter, Columns, Upload, Download, Trash2, Archive } from 'lucide-react';
+import { Package, Plus, Search, Filter, Columns, Upload, Download, Trash2, Archive, ChevronRight, MoreHorizontal, Edit, Eye, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AddItemModal } from '@/components/items/add-item-modal';
 import { MessageContainer } from '@/components/ui/message';
@@ -14,9 +13,28 @@ import { ItemsTable } from '@/components/items/items-table';
 import { ColumnSelector } from '@/components/items/column-selector';
 import { BulkDeleteDialog } from '@/components/items/bulk-delete-dialog';
 import { BulkClearanceDialog, BulkClearanceItem } from '@/components/items/bulk-clearance-dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuLabel, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent
+} from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useExportItems } from '@/hooks/use-export-items';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // Define all possible columns
 const ALL_COLUMNS = [
@@ -24,12 +42,12 @@ const ALL_COLUMNS = [
   { id: 'brandCode', label: 'Brand', defaultVisible: true },
   { id: 'productDivision', label: 'Division', defaultVisible: true },
   { id: 'category', label: 'Category', defaultVisible: true },
+  { id: 'season', label: 'Season', defaultVisible: true },
+  { id: 'period', label: 'Period', defaultVisible: true },
   { id: 'unit', label: 'Unit', defaultVisible: true },
-  { id: 'location', label: 'Location', defaultVisible: true },
   { id: 'createdBy', label: 'Created By', defaultVisible: true },
   { id: 'stock', label: 'Stock', defaultVisible: true },
-  { id: 'status', label: 'Status', defaultVisible: false },
-  { id: 'condition', label: 'Condition', defaultVisible: false },
+  { id: 'status', label: 'Status', defaultVisible: true },
   { id: 'actions', label: 'Actions', defaultVisible: true },
 ];
 
@@ -37,11 +55,14 @@ export default function ItemsPage() {
   const { data: session } = useSession();
   const { messages, addMessage, dismissMessage } = useMessages();
   const [items, setItems] = useState<any[]>([]);
+  const [boxes, setBoxes] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [locationFilter, setLocationFilter] = useState<string>('all');
+  const [divisionFilter, setDivisionFilter] = useState<string>('all');
+  const [brandFilter, setBrandFilter] = useState<string>('all');
+  const [seasonFilter, setSeasonFilter] = useState<string>('all');
+  const [periodFilter, setPeriodFilter] = useState<string>('all');
   const [unitFilter, setUnitFilter] = useState<string>('all');
-  const [conditionFilter, setConditionFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -68,6 +89,7 @@ export default function ItemsPage() {
 
   useEffect(() => {
     fetchItems();
+    fetchBoxes();
   }, []);
 
   const fetchItems = async () => {
@@ -76,7 +98,7 @@ export default function ItemsPage() {
       if (response.ok) {
         const data = await response.json();
         setItems(data);
-        setCurrentPage(1); // Reset to first page when items change
+        setCurrentPage(1);
       } else {
         addMessage('error', 'Failed to fetch items', 'Error');
       }
@@ -88,15 +110,28 @@ export default function ItemsPage() {
     }
   };
 
-  // Prepare selected items for clearance dialog
+  const fetchBoxes = async () => {
+    try {
+      const response = await fetch('/api/boxes');
+      if (response.ok) {
+        const data = await response.json();
+        setBoxes(data);
+      } else {
+        console.error('Failed to fetch boxes');
+      }
+    } catch (error) {
+      console.error('Failed to fetch boxes:', error);
+    }
+  };
+
   useEffect(() => {
     const clearanceItems = selectedItems
-      .map(itemId => {
-        const item = items.find(i => i.id === itemId);
+      .map(productCode => {
+        const item = items.find(i => i.productCode === productCode);
         if (!item || !item.stock) return null;
         
         return {
-          itemId: item.id,
+          itemId: item.productCode,
           productCode: item.productCode,
           description: item.description,
           availableStock: item.stock.pending + item.stock.inStorage,
@@ -114,9 +149,9 @@ export default function ItemsPage() {
     addMessage('success', 'Item added successfully', 'Success');
   };
 
-  const handleRemoveItem = async (itemId: string) => {
+  const handleRemoveItem = async (productCode: string) => {
     try {
-      const response = await fetch(`/api/items/${itemId}`, {
+      const response = await fetch(`/api/items/${productCode}`, {
         method: 'DELETE',
       });
 
@@ -143,7 +178,7 @@ export default function ItemsPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ itemIds: selectedItems }),
+        body: JSON.stringify({ productCodes: selectedItems }),
       });
 
       if (response.ok) {
@@ -219,22 +254,16 @@ export default function ItemsPage() {
   };
 
   const handleExport = async (format: 'csv' | 'excel') => {
-    // Get filtered item IDs based on current filters
-    const filteredItemIds = filteredItems.map(item => item.id);
-    
-    // Export the filtered items
-    await exportItems(filteredItemIds, format);
+    const filteredProductCodes = filteredItems.map(item => item.productCode);
+    await exportItems(filteredProductCodes, format);
   };
 
   const handleExportAll = async (format: 'csv' | 'excel') => {
-    // Export all items
     await exportItems([], format);
   };
 
   const handleExportSelected = async (format: 'csv' | 'excel') => {
-    // Export selected items
     await exportItems(selectedItems, format);
-    // Clear selection after export
     setSelectedItems([]);
   };
 
@@ -243,7 +272,7 @@ export default function ItemsPage() {
   };
 
   const handleEditItem = () => {
-    fetchItems(); // Refetch items after edit
+    fetchItems();
     addMessage('success', 'Item updated successfully', 'Success');
   };
 
@@ -283,26 +312,33 @@ export default function ItemsPage() {
       addMessage('error', 'Failed to import items', 'Error');
     } finally {
       setIsImporting(false);
-      // Reset the file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
     }
   };
 
+  // Get unique values for filters
+  const uniqueDivisions = Array.from(new Set(items.map(item => item.productDivision))).sort();
+  const uniqueBrands = Array.from(new Set(items.map(item => item.brandCode))).sort();
+  const uniqueSeasons = Array.from(new Set(items.map(item => item.season))).sort();
+  const uniquePeriods = Array.from(new Set(items.map(item => item.period))).sort();
+
   const filteredItems = items.filter(item => {
     const matchesSearch = item.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
                        item.productCode.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilter === 'all' || item.productCategory === categoryFilter;
-    const matchesLocation = locationFilter === 'all' || item.stock?.location === locationFilter;
+    const matchesDivision = divisionFilter === 'all' || item.productDivision === divisionFilter;
+    const matchesBrand = brandFilter === 'all' || item.brandCode === brandFilter;
+    const matchesSeason = seasonFilter === 'all' || item.season === seasonFilter;
+    const matchesPeriod = periodFilter === 'all' || item.period === periodFilter;
     const matchesUnit = unitFilter === 'all' || item.unitOfMeasure === unitFilter;
-    const matchesCondition = conditionFilter === 'all' || item.stock?.condition === conditionFilter;
     const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
 
-    return matchesSearch && matchesCategory && matchesLocation && matchesUnit && matchesCondition && matchesStatus;
+    return matchesSearch && matchesCategory && matchesDivision && matchesBrand && 
+           matchesSeason && matchesPeriod && matchesUnit && matchesStatus;
   });
 
-  // Calculate pagination
   const totalItems = filteredItems.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -319,125 +355,144 @@ export default function ItemsPage() {
   const canExportItems = isSuperAdmin || isItemMaster;
   const canClearance = isSuperAdmin || isItemMaster;
 
-  // Custom action for borrowing items (example)
-  const renderBorrowAction = (item: any) => {
-    if (item.status === 'available' && item.stock?.location) {
-      return (
-        <DropdownMenuItem>
-          Borrow Item
-        </DropdownMenuItem>
-      );
-    }
-    return null;
-  };
-
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* Message Container */}
       <MessageContainer messages={messages} onDismiss={dismissMessage} />
       
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-gray-900">Items</h1>
-        <div className="flex space-x-2">
-          <Button 
-            variant="outline"
-            onClick={() => setShowColumnSelector(true)}
-          >
-            <Columns className="mr-2 h-4 w-4" />
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Items</h1>
+          <p className="text-gray-500 mt-1">Manage your inventory items</p>
+        </div>
+        
+        <div className="flex flex-wrap gap-2">
+          {/* Actions Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <MoreHorizontal className="h-4 w-4" />
+                Actions
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Item Actions</DropdownMenuLabel>
+              
+              {/* Export All Submenu */}
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <Download className="mr-2 h-4 w-4" />
+                  Export All
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem onClick={() => handleExportAll('csv')} disabled={isExporting}>
+                    Export All as CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExportAll('excel')} disabled={isExporting}>
+                    Export All as Excel
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              
+              {/* Export Selected Submenu */}
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger className={cn(
+                  selectedItems.length === 0 || isExporting ? "opacity-50 cursor-not-allowed" : ""
+                )}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Export Selected ({selectedItems.length})
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem 
+                    onClick={() => {
+                      if (selectedItems.length > 0 && !isExporting) {
+                        handleExportSelected('csv');
+                      }
+                    }} 
+                    className={cn(
+                      selectedItems.length === 0 || isExporting ? "opacity-50 cursor-not-allowed" : ""
+                    )}
+                  >
+                    Export Selected as CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => {
+                      if (selectedItems.length > 0 && !isExporting) {
+                        handleExportSelected('excel');
+                      }
+                    }} 
+                    className={cn(
+                      selectedItems.length === 0 || isExporting ? "opacity-50 cursor-not-allowed" : ""
+                    )}
+                  >
+                    Export Selected as Excel
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              
+              {/* Move to Clearance */}
+              {canClearance && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem 
+                    disabled={selectedItems.length === 0 || isBulkClearing}
+                    onClick={() => setShowBulkClearanceDialog(true)}
+                  >
+                    <Archive className="mr-2 h-4 w-4" />
+                    Move to Clearance ({selectedItems.length})
+                  </DropdownMenuItem>
+                </>
+              )}
+              
+              {/* Import Submenu */}
+              <DropdownMenuSeparator />
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Import
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem onClick={() => handleDownloadTemplate('csv')}>
+                    Download CSV Template
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleDownloadTemplate('excel')}>
+                    Download Excel Template
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => fileInputRef.current?.click()} className="bg-primary-100 text-primary-500 hover:bg-primary-200">
+                    Import from File
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          
+          {/* Columns Button */}
+          <Button onClick={() => setShowColumnSelector(true)} variant="outline" className="gap-2">
+            <Columns className="h-4 w-4" />
             Columns
           </Button>
           
-          {/* Export All Button */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" disabled={isExporting}>
-                <Download className="mr-2 h-4 w-4" />
-                Export All
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Export Format</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => handleExportAll('csv')} disabled={isExporting}>
-                Export All as CSV
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExportAll('excel')} disabled={isExporting}>
-                Export All as Excel
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          
-          {/* Export Selected Button */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" disabled={selectedItems.length === 0 || isExporting}>
-                <Download className="mr-2 h-4 w-4" />
-                Export Selected ({selectedItems.length})
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Export Format</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => handleExportSelected('csv')} disabled={isExporting}>
-                Export Selected as CSV
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleExportSelected('excel')} disabled={isExporting}>
-                Export Selected as Excel
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          
-          {/* Bulk Clearance Button - Only for SuperAdmin and ItemMaster */}
-          {canClearance && (
-            <Button 
-              variant="outline" 
-              disabled={selectedItems.length === 0 || isBulkClearing}
-              onClick={() => setShowBulkClearanceDialog(true)}
-            >
-              <Archive className="mr-2 h-4 w-4" />
-              Move to Clearance ({selectedItems.length})
-            </Button>
-          )}
-          
-          {/* Bulk Delete Button - Only for SuperAdmin */}
+          {/* Delete Button - Only visible for SuperAdmin */}
           {canDeleteItem && (
             <Button 
-              variant="outline" 
+              variant="destructive" 
+              className="bg-red-600 hover:bg-red-700 gap-2"
               disabled={selectedItems.length === 0 || isBulkDeleting}
               onClick={() => setShowBulkDeleteDialog(true)}
-              className="text-red-600 hover:text-red-700"
             >
-              <Trash2 className="mr-2 h-4 w-4" />
+              <Trash2 className="h-4 w-4" />
               Delete Selected ({selectedItems.length})
             </Button>
           )}
           
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline">
-                <Upload className="mr-2 h-4 w-4" />
-                Import
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Import Options</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => handleDownloadTemplate('csv')}>
-                Download CSV Template
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleDownloadTemplate('excel')}>
-                Download Excel Template
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
-                Import from File
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          
+          {/* Add Item Button */}
           {canAddItem && (
             <Button 
               onClick={() => setShowAddModal(true)} 
-              className="bg-primary-500 hover:bg-primary-600"
+              className="bg-primary-600 hover:bg-primary-700 gap-2"
             >
-              <Plus className="mr-2 h-4 w-4" />
+              <Plus className="h-4 w-4" />
               Add Item
             </Button>
           )}
@@ -453,11 +508,12 @@ export default function ItemsPage() {
         className="hidden"
       />
 
+      {/* Search and Filters */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
           <Input
-            placeholder="Search items..."
+            placeholder="Search items by name or code..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
@@ -476,100 +532,172 @@ export default function ItemsPage() {
       {/* Filter Panel */}
       {showFilterPanel && (
         <div className="bg-gray-50 p-4 rounded-md space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-              <select
+              <Select
                 value={categoryFilter}
-                onChange={(e) => {
-                  setCategoryFilter(e.target.value);
-                  setCurrentPage(1); // Reset to first page when filter changes
-                }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="all">All Categories</option>
-                <option value="00">Lifestyle</option>
-                <option value="01">Football</option>
-                <option value="02">Futsal</option>
-                <option value="03">Street Soccer</option>
-                <option value="04">Running</option>
-                <option value="05">Training</option>
-                <option value="06">Volley</option>
-                <option value="08">Badminton</option>
-                <option value="09">Tennis</option>
-                <option value="10">Basketball</option>
-                <option value="12">Skateboard</option>
-                <option value="14">Swimming</option>
-                <option value="17">Back to school</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
-              <select
-                value={locationFilter}
-                onChange={(e) => {
-                  setLocationFilter(e.target.value);
+                onValueChange={(value) => {
+                  setCategoryFilter(value);
                   setCurrentPage(1);
                 }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
-                <option value="all">All Locations</option>
-                <option value="Storage 1">Storage 1</option>
-                <option value="Storage 2">Storage 2</option>
-                <option value="Storage 3">Storage 3</option>
-                <option value="">Not Assigned</option>
-              </select>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  <SelectItem value="00">Lifestyle</SelectItem>
+                  <SelectItem value="01">Football</SelectItem>
+                  <SelectItem value="02">Futsal</SelectItem>
+                  <SelectItem value="03">Street Soccer</SelectItem>
+                  <SelectItem value="04">Running</SelectItem>
+                  <SelectItem value="05">Training</SelectItem>
+                  <SelectItem value="06">Volley</SelectItem>
+                  <SelectItem value="08">Badminton</SelectItem>
+                  <SelectItem value="09">Tennis</SelectItem>
+                  <SelectItem value="10">Basketball</SelectItem>
+                  <SelectItem value="12">Skateboard</SelectItem>
+                  <SelectItem value="14">Swimming</SelectItem>
+                  <SelectItem value="17">Back to school</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Division</label>
+              <Select
+                value={divisionFilter}
+                onValueChange={(value) => {
+                  setDivisionFilter(value);
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All Divisions" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Divisions</SelectItem>
+                  {uniqueDivisions.map(division => (
+                    <SelectItem key={division} value={division}>
+                      {division}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Brand</label>
+              <Select
+                value={brandFilter}
+                onValueChange={(value) => {
+                  setBrandFilter(value);
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All Brands" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Brands</SelectItem>
+                  {uniqueBrands.map(brand => (
+                    <SelectItem key={brand} value={brand}>
+                      {brand}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Season</label>
+              <Select
+                value={seasonFilter}
+                onValueChange={(value) => {
+                  setSeasonFilter(value);
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All Seasons" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Seasons</SelectItem>
+                  {uniqueSeasons.map(season => (
+                    <SelectItem key={season} value={season}>
+                      {season}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Period</label>
+              <Select
+                value={periodFilter}
+                onValueChange={(value) => {
+                  setPeriodFilter(value);
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All Periods" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Periods</SelectItem>
+                  {uniquePeriods.map(period => (
+                    <SelectItem key={period} value={period}>
+                      {period}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
-              <select
+              <Select
                 value={unitFilter}
-                onChange={(e) => {
-                  setUnitFilter(e.target.value);
+                onValueChange={(value) => {
+                  setUnitFilter(value);
                   setCurrentPage(1);
                 }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
-                <option value="all">All Units</option>
-                <option value="PCS">Pieces (PCS)</option>
-                <option value="PRS">Pairs (PRS)</option>
-              </select>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Units" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Units</SelectItem>
+                  <SelectItem value="PCS">Pieces (PCS)</SelectItem>
+                  <SelectItem value="PRS">Pairs (PRS)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Condition</label>
-              <select
-                value={conditionFilter}
-                onChange={(e) => {
-                  setConditionFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="all">All Conditions</option>
-                <option value="excellent">Excellent</option>
-                <option value="good">Good</option>
-                <option value="fair">Fair</option>
-                <option value="poor">Poor</option>
-              </select>
-            </div>
+            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-              <select
+              <Select
                 value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value);
+                onValueChange={(value) => {
+                  setStatusFilter(value);
                   setCurrentPage(1);
                 }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
-                <option value="all">All Status</option>
-                <option value="pending_approval">Pending Approval</option>
-                <option value="approved">Approved</option>
-                <option value="available">Available</option>
-                <option value="borrowed">Borrowed</option>
-                <option value="in_clearance">In Clearance</option>
-                <option value="rejected">Rejected</option>
-              </select>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="pending_approval">Pending Approval</SelectItem>
+                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="available">Available</SelectItem>
+                  <SelectItem value="borrowed">Borrowed</SelectItem>
+                  <SelectItem value="in_clearance">In Clearance</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>
@@ -590,9 +718,8 @@ export default function ItemsPage() {
         canClearanceItems={canClearance}
         canExportItems={canExportItems}
         showActions={true}
-        customActions={renderBorrowAction}
         onExportItems={exportItems}
-        onClearanceItems={(itemIds) => setShowBulkClearanceDialog(true)}
+        onClearanceItems={(productCodes) => setShowBulkClearanceDialog(true)}
         isExporting={isExporting}
         currentPage={currentPage}
         totalPages={totalPages}

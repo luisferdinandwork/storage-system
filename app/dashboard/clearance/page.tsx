@@ -1,557 +1,477 @@
 // app/dashboard/clearance/page.tsx
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { 
-  Archive, 
-  Search, 
-  RefreshCw, 
-  Eye, 
-  RotateCcw,
-  ChevronLeft,
-  ChevronRight,
-  ArrowUpRight,
-  Trash2,
-  Undo
-} from 'lucide-react';
-import { format } from 'date-fns';
-import { ClearanceDetailsModal } from '@/components/items/clearance-details-modal';
-import Link from 'next/link';
-import { UniversalBadge } from '@/components/ui/universal-badge';
-import { Checkbox } from '@/components/ui/checkbox';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { MessageContainer } from '@/components/ui/message';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useMessages } from '@/hooks/use-messages';
-import { BulkDeleteDialog } from '@/components/items/bulk-delete-dialog';
-import { BulkRevertDialog } from '@/components/items/bulk-revert-dialog';
+import { FormDetail } from '@/components/clearance/FormDetail';
+import { 
+  FileText, 
+  Eye, 
+  CheckCircle, 
+  XCircle,
+  Send,
+  Clock,
+  AlertCircle,
+  MoreHorizontal,
+  Package,
+  MapPin,
+  Calendar,
+  User
+} from 'lucide-react';
 
-interface ItemImage {
+// Interfaces remain the same as in the original page
+interface ClearanceForm {
   id: string;
-  itemId: string;
-  fileName: string;
-  originalName: string;
-  mimeType: string;
-  size: number;
-  altText: string | null;
-  isPrimary: boolean;
-  createdAt: string;
-}
-
-interface ItemStock {
-  id: string;
-  itemId: string;
-  pending: number;
-  inStorage: number;
-  onBorrow: number;
-  inClearance: number;
-  seeded: number;
-  location: string | null;
-  condition: string;
-  conditionNotes: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface ItemClearance {
-  id: string;
-  itemId: string;
-  quantity: number;
-  requestedBy: string;
-  requestedAt: string;
-  reason: string;
-  status: string;
-  approvedBy: string | null;
-  approvedAt: string | null;
-  rejectionReason: string | null;
-  clearedAt: string | null;
-  metadata: any;
-}
-
-interface Item {
-  id: string;
-  productCode: string;
+  formNumber: string;
+  title: string;
   description: string;
-  brandCode: string;
-  productDivision: string;
-  productCategory: string;
   period: string;
-  season: string;
-  unitOfMeasure: string;
-  status: string;
-  createdBy: string;
+  status: 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'processed';
   createdAt: string;
   updatedAt: string;
-  approvedBy: string | null;
   approvedAt: string | null;
-  createdByUser?: {
+  processedAt: string | null;
+  rejectionReason: string | null;
+  createdBy: {
     id: string;
     name: string;
   };
-  stock: ItemStock | null;
-  clearances: ItemClearance[];
+  approvedBy: {
+    id: string;
+    name: string;
+  } | null;
+  processedBy: {
+    id: string;
+    name: string;
+  } | null;
+  itemCount: number;
+  totalQuantity: number;
 }
 
-interface ClearancePageProps {
-  searchParams: Promise<{
-    page?: string;
-    limit?: string;
-  }>;
+interface ClearanceFormItem {
+  id: string;
+  itemId: string;
+  quantity: number;
+  condition: 'excellent' | 'good' | 'fair' | 'poor';
+  conditionNotes: string | null;
+  item: {
+    productCode: string;
+    description: string;
+    brandCode: string;
+    productDivision: string;
+    productCategory: string;
+    period: string;
+    season: string;
+    unitOfMeasure: string;
+  };
+  stock: {
+    id: string;
+    pending: number;
+    inStorage: number;
+    onBorrow: number;
+    inClearance: number;
+    seeded: number;
+    condition: 'excellent' | 'good' | 'fair' | 'poor';
+    conditionNotes: string | null;
+    box: {
+      id: string;
+      boxNumber: string;
+      location: {
+        id: string;
+        name: string;
+      }
+    } | null;
+  };
 }
-export default function ClearancePage({ searchParams }: ClearancePageProps) {
-  const { page, limit } = use(searchParams);
+
+export default function ClearanceFormsPage() {
   const { data: session } = useSession();
   const { messages, addMessage, dismissMessage } = useMessages();
-  const [items, setItems] = useState<Item[]>([]);
+  const [clearanceForms, setClearanceForms] = useState<ClearanceForm[]>([]);
+  const [selectedForm, setSelectedForm] = useState<ClearanceForm | null>(null);
+  const [formItems, setFormItems] = useState<ClearanceFormItem[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [currentPage, setCurrentPage] = useState(parseInt(page || '1'));
-  const [itemsPerPage, setItemsPerPage] = useState(parseInt(limit || '10'));
-  const [totalPages, setTotalPages] = useState(0);
-  const [totalItems, setTotalItems] = useState(0);
-  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [selectedItems, setSelectedItems] = useState<string[]>([]);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
-  const [isReverting, setIsReverting] = useState(false);
-  const [showBulkRevertDialog, setShowBulkRevertDialog] = useState(false);
-
-  const userRole = session?.user?.role;
-  const isStorageMaster = userRole === 'storage-master';
-  const isSuperAdmin = userRole === 'superadmin';
-  const isStorageManager = userRole === 'storage-manager';
-  const canManageClearance = isStorageMaster || isSuperAdmin || isStorageManager;
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
-    fetchClearanceItems();
-  }, [currentPage, itemsPerPage]);
+    fetchClearanceForms();
+  }, []);
 
-  const fetchClearanceItems = async () => {
-    setIsLoading(true);
+  const fetchClearanceForms = async () => {
     try {
-      const response = await fetch(
-        `/api/items/clearance?page=${currentPage}&limit=${itemsPerPage}`
-      );
-      
+      const response = await fetch('/api/clearance-forms');
       if (response.ok) {
         const data = await response.json();
-        setItems(data.items);
-        setTotalPages(data.pagination.totalPages);
-        setTotalItems(data.pagination.total);
+        setClearanceForms(data.forms || []);
       } else {
-        addMessage('error', 'Failed to fetch clearance items', 'Error');
+        addMessage('error', 'Failed to fetch clearance forms', 'Error');
+        setClearanceForms([]);
       }
     } catch (error) {
-      console.error('Error fetching clearance items:', error);
-      addMessage('error', 'Error fetching clearance items', 'Error');
+      console.error('Failed to fetch clearance forms:', error);
+      addMessage('error', 'Failed to fetch clearance forms', 'Error');
+      setClearanceForms([]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-  };
-
-  const handleRefresh = () => {
-    fetchClearanceItems();
-  };
-
-  const handleViewDetails = (item: Item) => {
-    setSelectedItem(item);
-    setShowDetailsModal(true);
-  };
-
-  const handleSelectItem = (itemId: string, checked: boolean) => {
-    if (checked) {
-      setSelectedItems([...selectedItems, itemId]);
-    } else {
-      setSelectedItems(selectedItems.filter(id => id !== itemId));
-    }
-  };
-
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedItems(filteredItems.map(item => item.id));
-    } else {
-      setSelectedItems([]);
-    }
-  };
-
-  const handleBulkDelete = async () => {
-    if (selectedItems.length === 0) return;
-    
-    setIsDeleting(true);
+  // app/dashboard/clearance/page.tsx
+  const fetchFormDetails = async (formId: string) => {
     try {
-      const response = await fetch('/api/items/clearance/bulk-delete', {
+      const response = await fetch(`/api/clearance-forms/${formId}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.id) {
+          setSelectedForm(data);
+          setFormItems(data.items || []);
+        } else {
+          addMessage('error', 'Invalid form data received', 'Error');
+        }
+      } else {
+        addMessage('error', 'Failed to fetch form details', 'Error');
+      }
+    } catch (error) {
+      console.error('Failed to fetch form details:', error);
+      addMessage('error', 'Failed to fetch form details', 'Error');
+    }
+  };
+
+  const handleSubmitForm = async (formId: string) => {
+    setIsProcessing(true);
+    try {
+      const response = await fetch('/api/clearance-forms/submit-for-approval', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ itemIds: selectedItems }),
+        body: JSON.stringify({ formId }),
       });
 
       if (response.ok) {
-        const result = await response.json();
-        addMessage('success', `${selectedItems.length} clearance records deleted successfully`, 'Success');
-        setSelectedItems([]);
-        fetchClearanceItems();
+        setSelectedForm(null);
+        fetchClearanceForms();
+        addMessage('success', 'Form submitted for approval successfully', 'Success');
       } else {
-        const error = await response.json();
-        addMessage('error', error.error || 'Failed to delete clearance records', 'Error');
+        const errorData = await response.json();
+        addMessage('error', errorData.error || 'Failed to submit form', 'Error');
       }
     } catch (error) {
-      console.error('Error deleting clearance records:', error);
-      addMessage('error', 'An error occurred while deleting clearance records', 'Error');
+      console.error('Failed to submit form:', error);
+      addMessage('error', 'Failed to submit form', 'Error');
     } finally {
-      setIsDeleting(false);
-      setShowBulkDeleteDialog(false);
+      setIsProcessing(false);
     }
   };
 
-  const handleDeleteSingle = async (itemId: string) => {
+  const handleApproveForm = async (formId: string) => {
+    setIsProcessing(true);
     try {
-      const response = await fetch('/api/items/clearance/bulk-delete', {
-        method: 'POST',
+      const response = await fetch(`/api/clearance-forms/${formId}`, {
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ itemIds: [itemId] }),
+        body: JSON.stringify({ action: 'approve' }),
       });
 
       if (response.ok) {
-        addMessage('success', 'Clearance record deleted successfully', 'Success');
-        fetchClearanceItems();
+        setSelectedForm(null);
+        fetchClearanceForms();
+        addMessage('success', 'Form approved successfully', 'Success');
       } else {
-        const error = await response.json();
-        addMessage('error', error.error || 'Failed to delete clearance record', 'Error');
+        const errorData = await response.json();
+        addMessage('error', errorData.error || 'Failed to approve form', 'Error');
       }
     } catch (error) {
-      console.error('Error deleting clearance record:', error);
-      addMessage('error', 'An error occurred while deleting the clearance record', 'Error');
-    }
-  };
-
-  const handleBulkRevert = async () => {
-    if (selectedItems.length === 0) return;
-    
-    setIsReverting(true);
-    try {
-      const response = await fetch('/api/items/clearance/bulk-revert', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ itemIds: selectedItems }),
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        addMessage('success', `${selectedItems.length} items reverted from clearance successfully`, 'Success');
-        setSelectedItems([]);
-        fetchClearanceItems();
-      } else {
-        const error = await response.json();
-        addMessage('error', error.error || 'Failed to revert items from clearance', 'Error');
-      }
-    } catch (error) {
-      console.error('Error reverting items from clearance:', error);
-      addMessage('error', 'An error occurred while reverting items from clearance', 'Error');
+      console.error('Failed to approve form:', error);
+      addMessage('error', 'Failed to approve form', 'Error');
     } finally {
-      setIsReverting(false);
-      setShowBulkRevertDialog(false);
+      setIsProcessing(false);
     }
   };
 
-  const handleRevertSingle = async (itemId: string) => {
+  const handleRejectForm = async (formId: string, reason: string) => {
+    setIsProcessing(true);
     try {
-      const response = await fetch('/api/items/clearance/bulk-revert', {
-        method: 'POST',
+      const response = await fetch(`/api/clearance-forms/${formId}`, {
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ itemIds: [itemId] }),
+        body: JSON.stringify({ action: 'reject', rejectionReason: reason }),
       });
 
       if (response.ok) {
-        addMessage('success', 'Item reverted from clearance successfully', 'Success');
-        fetchClearanceItems();
+        setSelectedForm(null);
+        fetchClearanceForms();
+        addMessage('success', 'Form rejected successfully', 'Success');
       } else {
-        const error = await response.json();
-        addMessage('error', error.error || 'Failed to revert item from clearance', 'Error');
+        const errorData = await response.json();
+        addMessage('error', errorData.error || 'Failed to reject form', 'Error');
       }
     } catch (error) {
-      console.error('Error reverting item from clearance:', error);
-      addMessage('error', 'An error occurred while reverting the item from clearance', 'Error');
+      console.error('Failed to reject form:', error);
+      addMessage('error', 'Failed to reject form', 'Error');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
-  const filteredItems = items.filter(item => {
-    return (
-      item.productCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.description.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+  const handleProcessForm = async (formId: string) => {
+    setIsProcessing(true);
+    try {
+      const response = await fetch(`/api/clearance-forms/${formId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: 'process' }),
+      });
+
+      if (response.ok) {
+        setSelectedForm(null);
+        fetchClearanceForms();
+        addMessage('success', 'Form processed successfully', 'Success');
+      } else {
+        const errorData = await response.json();
+        addMessage('error', errorData.error || 'Failed to process form', 'Error');
+      }
+    } catch (error) {
+      console.error('Failed to process form:', error);
+      addMessage('error', 'Failed to process form', 'Error');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleViewFormDetails = async (form: ClearanceForm) => {
+    await fetchFormDetails(form.id);
+  };
+
+  const filteredForms = clearanceForms.filter(form => {
+    const matchesStatus = statusFilter === 'all' || form.status === statusFilter;
+    return matchesStatus;
   });
+
+  const userRole = session?.user?.role;
+  const canManageClearance = userRole === 'storage-master' || userRole === 'storage-master-manager' || userRole === 'superadmin';
+  const canApproveClearance = userRole === 'storage-master-manager' || userRole === 'superadmin';
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'draft':
+        return <FileText className="h-5 w-5" />;
+      case 'pending_approval':
+        return <Clock className="h-5 w-5" />;
+      case 'approved':
+        return <CheckCircle className="h-5 w-5" />;
+      case 'rejected':
+        return <XCircle className="h-5 w-5" />;
+      case 'processed':
+        return <Package className="h-5 w-5" />;
+      default:
+        return <AlertCircle className="h-5 w-5" />;
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'draft':
+        return 'bg-gray-100 text-gray-800 border-gray-200';
+      case 'pending_approval':
+        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'approved':
+        return 'bg-green-100 text-green-800 border-green-200';
+      case 'rejected':
+        return 'bg-red-100 text-red-800 border-red-200';
+      case 'processed':
+        return 'bg-blue-100 text-blue-800 border-blue-200';
+      default:
+        return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
 
   return (
     <div className="space-y-6">
-      {/* Message Container */}
       <MessageContainer messages={messages} onDismiss={dismissMessage} />
       
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Inventory Clearance</h1>
-          <p className="text-muted-foreground">
-            Manage items that have been moved to clearance
-          </p>
+          <h1 className="text-3xl font-bold text-gray-900">Clearance Forms</h1>
+          <p className="text-gray-600 mt-1">Manage item clearance forms and processes</p>
         </div>
         <div className="flex items-center space-x-2">
-          <Button variant="outline" onClick={handleRefresh} disabled={isLoading}>
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Refresh
-          </Button>
-          {selectedItems.length > 0 && (
-            <>
-              <Button 
-                variant="outline" 
-                onClick={() => setShowBulkRevertDialog(true)}
-                disabled={isReverting || isLoading}
-              >
-                <Undo className="mr-2 h-4 w-4" />
-                Revert Selected ({selectedItems.length})
-              </Button>
-              <Button 
-                variant="destructive" 
-                onClick={() => setShowBulkDeleteDialog(true)}
-                disabled={isDeleting || isLoading}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete Selected ({selectedItems.length})
-              </Button>
-            </>
-          )}
-          {canManageClearance && (
-            <Link href="/dashboard/items">
-              <Button>
-                <Archive className="mr-2 h-4 w-4" />
-                Manage Items
-              </Button>
-            </Link>
-          )}
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="draft">Draft</SelectItem>
+              <SelectItem value="pending_approval">Pending Approval</SelectItem>
+              <SelectItem value="approved">Approved</SelectItem>
+              <SelectItem value="rejected">Rejected</SelectItem>
+              <SelectItem value="processed">Processed</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Archive className="h-5 w-5" />
-            Clearance Items
-          </CardTitle>
-          <CardDescription>
-            View and manage items that are currently in clearance
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center py-4">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-              <Input
-                placeholder="Search items..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-          </div>
-
-          {isLoading ? (
-            <div className="flex justify-center items-center h-64">
-              <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <>
-              {filteredItems.length === 0 ? (
-                <div className="text-center py-12">
-                  <Archive className="mx-auto h-12 w-12 text-muted-foreground" />
-                  <h3 className="mt-2 text-lg font-medium">No clearance items found</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    There are currently no items in clearance.
-                  </p>
+      {isLoading ? (
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredForms.map((form) => (
+            <Card key={form.id} className="overflow-hidden border-l-4" style={{
+              borderLeftColor: 
+                form.status === 'draft' ? '#9CA3AF' :
+                form.status === 'pending_approval' ? '#FBBF24' :
+                form.status === 'approved' ? '#10B981' :
+                form.status === 'rejected' ? '#EF4444' :
+                '#3B82F6'
+            }}>
+              <CardHeader className="pb-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle className="text-lg">{form.title}</CardTitle>
+                    <CardDescription className="text-sm">Form #{form.formNumber}</CardDescription>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    {getStatusIcon(form.status)}
+                    <Badge className={getStatusColor(form.status)} variant="outline">
+                      {form.status.replace('_', ' ')}
+                    </Badge>
+                  </div>
                 </div>
-              ) : (
-                <>
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-12">
-                            <Checkbox
-                              checked={selectedItems.length === filteredItems.length && filteredItems.length > 0}
-                              onCheckedChange={handleSelectAll}
-                            />
-                          </TableHead>
-                          <TableHead>Item</TableHead>
-                          <TableHead>Brand</TableHead>
-                          <TableHead>Division</TableHead>
-                          <TableHead>Category</TableHead>
-                          <TableHead>Condition</TableHead>
-                          <TableHead>Clearance Quantity</TableHead>
-                          <TableHead>Latest Clearance</TableHead>
-                          <TableHead>Status</TableHead>
-                          {canManageClearance && <TableHead className="w-32">Actions</TableHead>}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredItems.map((item) => (
-                          <TableRow key={item.id}>
-                            <TableCell>
-                              <Checkbox
-                                checked={selectedItems.includes(item.id)}
-                                onCheckedChange={(checked) => handleSelectItem(item.id, checked as boolean)}
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <div>
-                                <div className="font-medium">{item.productCode}</div>
-                                <div className="text-sm text-muted-foreground">
-                                  {item.description}
-                                </div>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <UniversalBadge type="brand" value={item.brandCode} />
-                            </TableCell>
-                            <TableCell>
-                              <UniversalBadge type="division" value={item.productDivision} />
-                            </TableCell>
-                            <TableCell>
-                              <UniversalBadge type="category" value={item.productCategory} />
-                            </TableCell>
-                            <TableCell>
-                              {item.stock ? (
-                                <UniversalBadge type="condition" value={item.stock.condition} />
-                              ) : (
-                                'N/A'
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {item.stock ? item.stock.inClearance : 0}
-                            </TableCell>
-                            <TableCell>
-                              {item.clearances && item.clearances.length > 0 ? (
-                                <div>
-                                  <div className="text-sm">
-                                    {format(new Date(item.clearances[0].requestedAt), 'MMM dd, yyyy')}
-                                  </div>
-                                  <div className="text-xs text-muted-foreground">
-                                    {item.clearances[0].reason}
-                                  </div>
-                                </div>
-                              ) : (
-                                <span className="text-muted-foreground">No clearance records</span>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {item.clearances && item.clearances.length > 0 ? (
-                                <UniversalBadge type="status" value={item.clearances[0].status} />
-                              ) : (
-                                'N/A'
-                              )}
-                            </TableCell>
-                            {canManageClearance && (
-                              <TableCell>
-                                <div className="flex space-x-1">
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm"
-                                    onClick={() => handleViewDetails(item)}
-                                  >
-                                    <Eye className="h-4 w-4" />
-                                  </Button>
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm"
-                                    onClick={() => handleRevertSingle(item.id)}
-                                  >
-                                    <Undo className="h-4 w-4" />
-                                  </Button>
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm"
-                                    onClick={() => handleDeleteSingle(item.id)}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            )}
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <p className="text-sm text-gray-600">{form.description}</p>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <p className="text-gray-500">Period</p>
+                    <p className="font-medium">{form.period}</p>
                   </div>
-
-                  {/* Pagination */}
-                  <div className="flex items-center justify-between space-x-2 py-4">
-                    <div className="text-sm text-muted-foreground">
-                      Showing {filteredItems.length} of {totalItems} items
-                    </div>
-                    <div className="flex space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handlePageChange(currentPage - 1)}
-                        disabled={currentPage <= 1}
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                        Previous
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handlePageChange(currentPage + 1)}
-                        disabled={currentPage >= totalPages}
-                      >
-                        Next
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </div>
+                  <div>
+                    <p className="text-gray-500">Items</p>
+                    <p className="font-medium">{form.itemCount}</p>
                   </div>
-                </>
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
+                  <div>
+                    <p className="text-gray-500">Quantity</p>
+                    <p className="font-medium">{form.totalQuantity}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Created</p>
+                    <p className="font-medium">{new Date(form.createdAt).toLocaleDateString()}</p>
+                  </div>
+                </div>
+                
+                <div className="flex justify-between items-center pt-2">
+                  <div className="text-xs text-gray-500">
+                    Created by {form.createdBy.name}
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" className="h-8 w-8 p-0">
+                        <span className="sr-only">Open menu</span>
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                      <DropdownMenuItem onClick={() => handleViewFormDetails(form)}>
+                        <Eye className="mr-2 h-4 w-4" />
+                        View Details
+                      </DropdownMenuItem>
+                      
+                      {form.status === 'draft' && canManageClearance && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => handleSubmitForm(form.id)}>
+                            <Send className="mr-2 h-4 w-4" />
+                            Submit for Approval
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                      
+                      {form.status === 'pending_approval' && canApproveClearance && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => handleApproveForm(form.id)} className="text-green-600">
+                            <CheckCircle className="mr-2 h-4 w-4" />
+                            Approve
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleRejectForm(form.id, '')} className="text-red-600">
+                            <XCircle className="mr-2 h-4 w-4" />
+                            Reject
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                      
+                      {form.status === 'approved' && canManageClearance && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => handleProcessForm(form.id)} className="text-blue-600">
+                            <Clock className="mr-2 h-4 w-4" />
+                            Process Form
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
-      {/* Clearance Details Modal */}
-      <ClearanceDetailsModal
-        open={showDetailsModal}
-        onOpenChange={setShowDetailsModal}
-        item={selectedItem}
-      />
+      {!isLoading && filteredForms.length === 0 && (
+        <div className="text-center py-12">
+          <FileText className="mx-auto h-12 w-12 text-gray-400" />
+          <h3 className="mt-2 text-sm font-medium text-gray-900">No clearance forms found</h3>
+          <p className="mt-1 text-sm text-gray-500">
+            {statusFilter !== 'all' 
+              ? 'Try selecting a different status filter' 
+              : 'Create a new clearance form to get started'}
+          </p>
+        </div>
+      )}
 
-      {/* Bulk Delete Dialog */}
-      <BulkDeleteDialog
-        open={showBulkDeleteDialog}
-        onOpenChange={setShowBulkDeleteDialog}
-        selectedItemsCount={selectedItems.length}
-        onConfirm={handleBulkDelete}
-        isDeleting={isDeleting}
-      />
-
-      {/* Bulk Revert Dialog */}
-      <BulkRevertDialog
-        open={showBulkRevertDialog}
-        onOpenChange={setShowBulkRevertDialog}
-        selectedItemsCount={selectedItems.length}
-        onConfirm={handleBulkRevert}
-        isReverting={isReverting}
-      />
+      {/* Form Detail Modal */}
+      {selectedForm && (
+        <FormDetail
+          form={selectedForm}
+          items={formItems}
+          onClose={() => setSelectedForm(null)}
+          onSubmit={handleSubmitForm}
+          onApprove={handleApproveForm}
+          onReject={handleRejectForm}
+          onProcess={handleProcessForm}
+          canApprove={canApproveClearance}
+          canManage={canManageClearance}
+        />
+      )}
     </div>
   );
 }

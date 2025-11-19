@@ -104,7 +104,14 @@ export default function MyRequestsPage() {
     }
   };
 
-  const calculateDaysLeft = (endDate: string): number => {
+  const isPlaceholderDate = (dateString: string): boolean => {
+    const date = new Date(dateString);
+    return date.getFullYear() === 1970;
+  };
+
+  const calculateDaysLeft = (endDate: string): number | null => {
+    if (isPlaceholderDate(endDate)) return null;
+    
     const end = new Date(endDate);
     const today = new Date();
     const diffTime = end.getTime() - today.getTime();
@@ -112,7 +119,8 @@ export default function MyRequestsPage() {
     return diffDays;
   };
 
-  const getDaysLeftColor = (daysLeft: number): string => {
+  const getDaysLeftColor = (daysLeft: number | null): string => {
+    if (daysLeft === null) return 'text-gray-400';
     if (daysLeft < 0) return 'text-gray-600';
     if (daysLeft <= 3) return 'text-red-600 font-semibold';
     if (daysLeft <= 7) return 'text-orange-600 font-semibold';
@@ -337,10 +345,29 @@ export default function MyRequestsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className={`text-sm font-medium ${getDaysLeftColor(daysLeft)}`}>
-                        {daysLeft < 0 ? `Ended (${Math.abs(daysLeft)} days ago)` : `${daysLeft} day${daysLeft !== 1 ? 's' : ''}`}
-                      </div>
-                      <div className="text-xs text-gray-500">End: {formatDate(request.endDate, { format: 'short' })}</div>
+                      {(() => {
+                        const daysLeft = calculateDaysLeft(request.endDate);
+                        if (daysLeft === null) {
+                          return (
+                            <div className="text-sm text-gray-400">
+                              Pending approval
+                            </div>
+                          );
+                        }
+                        return (
+                          <>
+                            <div className={`text-sm font-medium ${getDaysLeftColor(daysLeft)}`}>
+                              {daysLeft < 0 
+                                ? `Ended (${Math.abs(daysLeft)} days ago)` 
+                                : `${daysLeft} day${daysLeft !== 1 ? 's' : ''}`
+                              }
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              End: {formatDate(request.endDate, { format: 'short' })}
+                            </div>
+                          </>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>{getStatusBadge(request.status)}</TableCell>
                     <TableCell className="text-right">
@@ -384,13 +411,38 @@ export default function MyRequestsPage() {
                   <span className="font-medium">End Date:</span> {formatDate(selectedRequest.endDate, { format: 'datetime' })}
                 </div>
                 <div>
+                  <span className="font-medium">Start Date:</span> 
+                  {isPlaceholderDate(selectedRequest.startDate) 
+                    ? <span className="ml-2 text-gray-400">Will be set upon approval</span>
+                    : formatDate(selectedRequest.startDate, { format: 'datetime' })
+                  }
+                </div>
+                <div>
+                  <span className="font-medium">End Date:</span> 
+                  {isPlaceholderDate(selectedRequest.endDate)
+                    ? <span className="ml-2 text-gray-400">Will be set upon approval</span>
+                    : formatDate(selectedRequest.endDate, { format: 'datetime' })
+                  }
+                </div>
+                <div>
                   <span className="font-medium">Days Left:</span> 
-                  <span className={`ml-2 ${getDaysLeftColor(calculateDaysLeft(selectedRequest.endDate))}`}>
-                    {(() => {
-                      const daysLeft = calculateDaysLeft(selectedRequest.endDate);
-                      return daysLeft < 0 ? `Ended (${Math.abs(daysLeft)} days ago)` : `${daysLeft} day${daysLeft !== 1 ? 's' : ''}`;
-                    })()}
-                  </span>
+                  {(() => {
+                    if (isPlaceholderDate(selectedRequest.endDate)) {
+                      return <span className="ml-2 text-gray-400">Pending approval</span>;
+                    }
+                    const daysLeft = calculateDaysLeft(selectedRequest.endDate);
+                    if (daysLeft === null) {
+                      return <span className="ml-2 text-gray-400">Pending approval</span>;
+                    }
+                    return (
+                      <span className={`ml-2 ${getDaysLeftColor(daysLeft)}`}>
+                        {daysLeft < 0 
+                          ? `Ended (${Math.abs(daysLeft)} days ago)` 
+                          : `${daysLeft} day${daysLeft !== 1 ? 's' : ''}`
+                        }
+                      </span>
+                    );
+                  })()}
                 </div>
                 <div>
                   <span className="font-medium">Requested At:</span> {formatDate(selectedRequest.requestedAt, { format: 'datetime' })}

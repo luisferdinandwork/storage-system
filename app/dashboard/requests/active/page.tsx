@@ -44,12 +44,24 @@ import {
   Eye,
   Package,
   CheckCircle,
-  PackageX
+  PackageX,
+  Box
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDate } from '@/lib/utils';
 import React from 'react';
 import { borrowRequests } from '@/lib/db/schema';
+
+// Updated Box interface to match API response
+interface Box {
+  id: string;
+  boxNumber: string;
+  description: string | null;
+  location: {
+    id: string;
+    name: string;
+  } | null;
+}
 
 interface BorrowRequestItem {
   id: string;
@@ -82,11 +94,21 @@ interface BorrowRequestItem {
       onBorrow: number;
       inClearance: number;
       seeded: number;
-      location: string | null;
+      boxId: string | null;
       condition: string;
       conditionNotes: string | null;
       createdAt: string;
       updatedAt: string;
+      box?: {
+        id: string;
+        boxNumber: string;
+        description: string | null;
+        location: {
+          id: string;
+          name: string;
+          description: string | null;
+        };
+      };
     };
     images: Array<{
       id: string;
@@ -146,6 +168,7 @@ export default function ActiveLoansPage() {
   const { data: session } = useSession();
   const { messages, addMessage, dismissMessage } = useMessages();
   const [groupedRequests, setGroupedRequests] = useState<GroupedRequest[]>([]);
+  const [boxes, setBoxes] = useState<Box[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(true);
@@ -161,8 +184,10 @@ export default function ActiveLoansPage() {
   const [seedNotes, setSeedNotes] = useState('');
   const [returnCondition, setReturnCondition] = useState('');
   const [returnNotes, setReturnNotes] = useState('');
+  const [selectedBoxId, setSelectedBoxId] = useState<string>('none'); // Changed from empty string to 'none'
   const [completeAllCondition, setCompleteAllCondition] = useState('');
   const [completeAllNotes, setCompleteAllNotes] = useState('');
+  const [selectedAllBoxId, setSelectedAllBoxId] = useState<string>('none'); // Changed from empty string to 'none'
   const [seedAllReason, setSeedAllReason] = useState('');
   const [seedAllNotes, setSeedAllNotes] = useState('');
 
@@ -184,6 +209,7 @@ export default function ActiveLoansPage() {
 
   useEffect(() => {
     fetchRequests();
+    fetchBoxes();
   }, []);
 
   const fetchRequests = async () => {
@@ -220,6 +246,21 @@ export default function ActiveLoansPage() {
       addMessage('error', 'Failed to fetch requests', 'Error');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchBoxes = async () => {
+    try {
+      const response = await fetch('/api/boxes');
+      if (response.ok) {
+        const data = await response.json();
+        setBoxes(data);
+      } else {
+        addMessage('error', 'Failed to fetch boxes', 'Error');
+      }
+    } catch (error) {
+      console.error('Failed to fetch boxes:', error);
+      addMessage('error', 'Failed to fetch boxes', 'Error');
     }
   };
 
@@ -266,6 +307,9 @@ export default function ActiveLoansPage() {
 
     setIsProcessing(true);
     try {
+      // Convert 'none' to undefined for the API call
+      const boxId = selectedBoxId === 'none' ? undefined : selectedBoxId;
+      
       const response = await fetch(`/api/borrow-requests/${selectedRequestItem.borrowRequestId}/complete`, {
         method: 'POST',
         headers: {
@@ -276,7 +320,8 @@ export default function ActiveLoansPage() {
             borrowRequestItemId: selectedRequestItem.id,
             status: 'complete',
             returnCondition,
-            returnNotes
+            returnNotes,
+            boxId
           }]
         }),
       });
@@ -285,6 +330,7 @@ export default function ActiveLoansPage() {
         setShowCompleteModal(false);
         setReturnCondition('');
         setReturnNotes('');
+        setSelectedBoxId('none'); // Reset to 'none' instead of empty string
         setSelectedRequestItem(null);
         fetchRequests();
         addMessage('success', 'Item marked as complete', 'Success');
@@ -342,11 +388,15 @@ export default function ActiveLoansPage() {
 
     setIsProcessing(true);
     try {
+      // Convert 'none' to undefined for the API call
+      const boxId = selectedAllBoxId === 'none' ? undefined : selectedAllBoxId;
+      
       const itemsToComplete = selectedRequest.items.map(item => ({
         borrowRequestItemId: item.id,
         status: 'complete',
         returnCondition: completeAllCondition,
         returnNotes: completeAllNotes,
+        boxId
       }));
 
       const response = await fetch(`/api/borrow-requests/${selectedRequest.borrowRequest.id}/complete`, {
@@ -361,6 +411,7 @@ export default function ActiveLoansPage() {
         setShowCompleteAllModal(false);
         setCompleteAllCondition('');
         setCompleteAllNotes('');
+        setSelectedAllBoxId('none'); // Reset to 'none' instead of empty string
         setSelectedRequest(null);
         fetchRequests();
         addMessage('success', 'All items marked as complete', 'Success');
@@ -442,6 +493,17 @@ export default function ActiveLoansPage() {
   const getPrimaryImage = (images: any[]) => {
     if (!images || images.length === 0) return null;
     return images.find(img => img.isPrimary) || images[0];
+  };
+
+  // Helper function to get box display text
+  const getBoxDisplayText = (stock: any) => {
+    if (!stock.boxId) return null;
+    
+    if (stock.box) {
+      return `${stock.box.location.name} - ${stock.box.boxNumber}`;
+    }
+    
+    return stock.boxId;
   };
 
   const canSeedItem = session?.user?.role === 'storage-master' || 
@@ -636,6 +698,7 @@ export default function ActiveLoansPage() {
                 <div className="mt-2 space-y-3">
                   {selectedRequest.items.map((item) => {
                     const primaryImage = getPrimaryImage(item.item.images);
+                    const boxDisplayText = getBoxDisplayText(item.item.stock || {});
                     return (
                       <div key={item.id} className="border rounded-md p-3">
                         <div className="flex items-start justify-between">
@@ -656,10 +719,10 @@ export default function ActiveLoansPage() {
                                 {getBrandBadge(item.item.brandCode)}
                                 {getCategoryBadge(item.item.productCategory)}
                               </div>
-                              {item.item.stock?.location && (
+                              {boxDisplayText && (
                                 <div className="flex items-center text-xs text-gray-500 mt-1">
-                                  <MapPin className="h-3 w-3 mr-1" />
-                                  {item.item.stock.location}
+                                  <Box className="h-3 w-3 mr-1" />
+                                  {boxDisplayText}
                                 </div>
                               )}
                               <div className="text-sm font-medium mt-1">
@@ -736,6 +799,22 @@ export default function ActiveLoansPage() {
                     <SelectItem value="good">Good</SelectItem>
                     <SelectItem value="fair">Fair</SelectItem>
                     <SelectItem value="poor">Poor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="boxSelect">Return to Box</Label>
+                <Select value={selectedBoxId} onValueChange={setSelectedBoxId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a box" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No specific box</SelectItem>
+                    {boxes.map((box) => (
+                      <SelectItem key={box.id} value={box.id}>
+                        {box.location?.name} - {box.boxNumber} {box.description ? `(${box.description})` : ''}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -844,6 +923,22 @@ export default function ActiveLoansPage() {
                     <SelectItem value="good">Good</SelectItem>
                     <SelectItem value="fair">Fair</SelectItem>
                     <SelectItem value="poor">Poor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="boxSelectAll">Return to Box</Label>
+                <Select value={selectedAllBoxId} onValueChange={setSelectedAllBoxId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a box" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No specific box</SelectItem>
+                    {boxes.map((box) => (
+                      <SelectItem key={box.id} value={box.id}>
+                        {box.location?.name} - {box.boxNumber} {box.description ? `(${box.description})` : ''}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

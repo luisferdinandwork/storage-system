@@ -39,7 +39,9 @@ import {
   Eye, 
   Calendar,
   User,
-  Clock
+  Clock,
+  MapPin,
+  Package
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDate } from '@/lib/utils';
@@ -49,7 +51,6 @@ interface BorrowRequest {
   items: Array<{
     id: string;
     item: {
-      id: string;
       productCode: string;
       description: string;
       images: Array<{
@@ -58,6 +59,23 @@ interface BorrowRequest {
         altText: string | null;
         isPrimary: boolean;
       }>;
+      stock: {
+        id: string;
+        inStorage: number;
+        onBorrow: number;
+        inClearance: number;
+        seeded: number;
+        boxId: string | null;
+        condition: string;
+        box: {
+          id: string;
+          boxNumber: string;
+          location: {
+            id: string;
+            name: string;
+          } | null;
+        } | null;
+      } | null;
     };
     quantity: number;
     status: string;
@@ -102,8 +120,14 @@ export default function PendingApprovalsPage() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [approvalType, setApprovalType] = useState<'manager' | 'storage'>('manager');
 
-  // Helper functions to calculate days left and determine color
-  const calculateDaysLeft = (endDate: string): number => {
+  const isPlaceholderDate = (dateString: string): boolean => {
+    const date = new Date(dateString);
+    return date.getFullYear() === 1970;
+  };               
+
+  const calculateDaysLeft = (endDate: string): number | null => {
+    if (isPlaceholderDate(endDate)) return null;
+    
     const end = new Date(endDate);
     const today = new Date();
     const diffTime = end.getTime() - today.getTime();
@@ -111,7 +135,8 @@ export default function PendingApprovalsPage() {
     return diffDays;
   };
 
-  const getDaysLeftColor = (daysLeft: number): string => {
+  const getDaysLeftColor = (daysLeft: number | null): string => {
+    if (daysLeft === null) return 'text-gray-400';
     if (daysLeft < 0) return 'text-gray-600';
     if (daysLeft <= 3) return 'text-red-600 font-semibold';
     if (daysLeft <= 7) return 'text-orange-600 font-semibold';
@@ -227,7 +252,8 @@ export default function PendingApprovalsPage() {
   const filteredRequests = requests.filter(request => {
     const matchesSearch = request.items.some(reqItem => 
       reqItem.item.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      reqItem.item.productCode.toLowerCase().includes(searchTerm.toLowerCase())
+      reqItem.item.productCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (reqItem.item.stock?.box?.location?.name && reqItem.item.stock.box.location.name.toLowerCase().includes(searchTerm.toLowerCase()))
     ) || request.user.name.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesStatus = statusFilter === 'all' || request.status === statusFilter;
@@ -321,70 +347,89 @@ export default function PendingApprovalsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>ID</TableHead>
-              <TableHead>Items</TableHead>
-              <TableHead>Quantity</TableHead>
+              <TableHead className="w-24">Request ID</TableHead>
+              <TableHead>Items & Quantity</TableHead>
               <TableHead>Requested By</TableHead>
               <TableHead>Reason</TableHead>
-              <TableHead>Start Date</TableHead>
-              <TableHead>Days Left</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead className="w-40">Status</TableHead>
+              <TableHead className="text-right w-32">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredRequests.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-gray-500 py-8">
+                <TableCell colSpan={6} className="text-center text-gray-500 py-8">
                   No pending requests found
                 </TableCell>
               </TableRow>
             ) : (
               filteredRequests.map((request) => {
-                const daysLeft = calculateDaysLeft(request.endDate);
                 return (
-                  <TableRow key={request.id}>
-                    <TableCell className="font-medium">{request.id}</TableCell>
+                  <TableRow key={request.id} className="align-top">
+                    <TableCell className="font-medium text-sm">{request.id}</TableCell>
                     <TableCell>
-                      <div className="space-y-2">
-                        {request.items.map((reqItem) => (
-                          <div key={reqItem.id} className="flex items-center space-x-3">
-                            {reqItem.item.images && reqItem.item.images.length > 0 && (
-                              <div className="w-10 h-10 rounded-md overflow-hidden flex-shrink-0">
+                      <div className="space-y-3">
+                        {request.items.map((reqItem, index) => (
+                          <div key={reqItem.id} className={cn(
+                            "flex items-center gap-3 pb-3",
+                            index < request.items.length - 1 && "border-b border-gray-300"
+                          )}>
+                            {/* {reqItem.item.images && reqItem.item.images.length > 0 && (
+                              <div className="w-12 h-12 rounded-md overflow-hidden flex-shrink-0 border border-gray-200">
                                 <img
                                   src={getPrimaryImage(reqItem.item.images).fileName ? `/uploads/${getPrimaryImage(reqItem.item.images).fileName}` : '/placeholder.jpg'}
                                   alt={getPrimaryImage(reqItem.item.images).altText || reqItem.item.description}
                                   className="w-full h-full object-cover"
                                 />
                               </div>
-                            )}
-                            <div className="min-w-0 flex-1">
-                              <div className="font-bold text-sm">{reqItem.item.productCode}</div>
-                              <div className="text-sm text-gray-600 truncate">{reqItem.item.description}</div>
+                            )} */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-semibold text-sm text-gray-900">{reqItem.item.productCode}</div>
+                                  <div className="text-sm text-gray-600 line-clamp-2">{reqItem.item.description}</div>
+                                </div>
+                                
+                              </div>
+                              <div className="mt-2 space-y-1">
+                                {reqItem.item.stock?.box?.location && (
+                                  <div className="inline-flex items-center px-2.5 py-1 bg-green-50 border border-green-300 rounded-md">
+                                    <MapPin className="h-3.5 w-3.5 text-green-700 mr-1.5" />
+                                    <span className="text-xs font-semibold text-green-900">
+                                      {reqItem.item.stock.box.location.name}
+                                    </span>
+                                  </div>
+                                )}
+                                {reqItem.item.stock?.box && (
+                                  <div className="inline-flex items-center px-2.5 py-1 bg-purple-50 border border-purple-300 rounded-md ml-2">
+                                    <Package className="h-3.5 w-3.5 text-purple-700 mr-1.5" />
+                                    <span className="text-xs font-semibold text-purple-900">
+                                      Box: {reqItem.item.stock.box.boxNumber}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                              
                             </div>
+                            <div className="flex items-center">
+                                  <div className="inline-flex items-center px-3 py-1 bg-blue-50 border-2 rounded-lg">
+                                    <span className="text-base font-bold text-blue-900">{reqItem.quantity}</span>
+                                  </div>
+                                </div>
                           </div>
                         ))}
                       </div>
                     </TableCell>
                     <TableCell>
-                      {request.items.map((reqItem) => (
-                        <div key={reqItem.id} className="text-sm">{reqItem.quantity}</div>
-                      ))}
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-gray-400" />
+                        <span className="text-sm font-medium">{request.user.name}</span>
+                      </div>
                     </TableCell>
-                    <TableCell className="text-sm">{request.user.name}</TableCell>
                     <TableCell>
-                      <div className="max-w-xs truncate text-sm" title={request.reason}>
+                      <div className="max-w-xs text-sm text-gray-600 line-clamp-2" title={request.reason}>
                         {request.reason}
                       </div>
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {new Date(request.startDate).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>
-                      <div className={`text-sm font-medium ${getDaysLeftColor(daysLeft)}`}>
-                        {daysLeft < 0 ? `Ended (${Math.abs(daysLeft)} days ago)` : `${daysLeft} day${daysLeft !== 1 ? 's' : ''}`}
-                      </div>
-                      <div className="text-xs text-gray-500">End: {formatDate(request.endDate, { format: 'short' })}</div>
                     </TableCell>
                     <TableCell>{getStatusBadge(request.status)}</TableCell>
                     <TableCell className="text-right">
@@ -427,51 +472,61 @@ export default function PendingApprovalsPage() {
         </Table>
       </div>
 
-      {/* Details Modal */}
+      {/* Details Modal - Simplified */}
       <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Request Details</DialogTitle>
+            <DialogTitle className="text-xl">Request Details</DialogTitle>
           </DialogHeader>
           {selectedRequest && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="space-y-6">
+              {/* Key Information Grid */}
+              <div className="grid grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
                 <div>
-                  <span className="font-medium">Requested By:</span> {selectedRequest.user.name}
+                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Days Left</div>
+                  {(() => {
+                    if (isPlaceholderDate(selectedRequest.endDate)) {
+                      return <div className="text-sm font-semibold text-gray-400">Pending Approval</div>;
+                    }
+                    const daysLeft = calculateDaysLeft(selectedRequest.endDate);
+                    if (daysLeft === null) {
+                      return <div className="text-sm font-semibold text-gray-400">Pending Approval</div>;
+                    }
+                    return (
+                      <div className={`text-lg font-bold ${getDaysLeftColor(daysLeft)}`}>
+                        {daysLeft < 0 
+                          ? `Ended ${Math.abs(daysLeft)}d ago` 
+                          : `${daysLeft} day${daysLeft !== 1 ? 's' : ''}`
+                        }
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div>
-                  <span className="font-medium">Status:</span> {getStatusBadge(selectedRequest.status)}
+                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Requested By</div>
+                  <div className="text-sm font-semibold text-gray-900">{selectedRequest.user.name}</div>
+                  <div className="text-xs text-gray-500">{selectedRequest.user.email}</div>
                 </div>
                 <div>
-                  <span className="font-medium">Start Date:</span> {new Date(selectedRequest.startDate).toLocaleDateString()}
-                </div>
-                <div>
-                  <span className="font-medium">Days Left:</span> 
-                  <span className={`ml-2 ${getDaysLeftColor(calculateDaysLeft(selectedRequest.endDate))}`}>
-                    {(() => {
-                      const daysLeft = calculateDaysLeft(selectedRequest.endDate);
-                      return daysLeft < 0 ? `Ended (${Math.abs(daysLeft)} days ago)` : `${daysLeft} day${daysLeft !== 1 ? 's' : ''}`;
-                    })()}
-                  </span>
-                </div>
-                <div>
-                  <span className="font-medium">Requested At:</span> {new Date(selectedRequest.requestedAt).toLocaleDateString()}
-                </div>
-                <div>
-                  <span className="font-medium">End Date:</span> {new Date(selectedRequest.endDate).toLocaleDateString()}
+                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Status</div>
+                  <div>{getStatusBadge(selectedRequest.status)}</div>
                 </div>
               </div>
-              <div>
-                <span className="font-medium">Reason:</span>
-                <p className="text-sm text-gray-600 mt-1">{selectedRequest.reason}</p>
+
+              {/* Reason */}
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="text-sm font-semibold text-amber-900 mb-2">Reason for Request</div>
+                <p className="text-sm text-amber-800">{selectedRequest.reason}</p>
               </div>
+
+              {/* Items Detail */}
               <div>
-                <span className="font-medium">Items:</span>
-                <div className="mt-2 space-y-2">
+                <div className="text-sm font-semibold text-gray-900 mb-3">Items Requested</div>
+                <div className="space-y-3">
                   {selectedRequest.items.map((reqItem) => (
-                    <div key={reqItem.id} className="flex items-center space-x-3 p-2 border rounded">
+                    <div key={reqItem.id} className="flex gap-4 p-4 border-2 border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
                       {reqItem.item.images && reqItem.item.images.length > 0 && (
-                        <div className="w-12 h-12 rounded-md overflow-hidden">
+                        <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 border-2 border-gray-300">
                           <img
                             src={getPrimaryImage(reqItem.item.images).fileName ? `/uploads/${getPrimaryImage(reqItem.item.images).fileName}` : '/placeholder.jpg'}
                             alt={reqItem.item.description}
@@ -479,10 +534,38 @@ export default function PendingApprovalsPage() {
                           />
                         </div>
                       )}
-                      <div>
-                        <div className="font-bold">{reqItem.item.productCode}</div>
-                        <div className="text-sm text-gray-600">{reqItem.item.description}</div>
-                        <div className="text-xs text-gray-500">Quantity: {reqItem.quantity}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-3 mb-2">
+                          <div className="flex-1">
+                            <div className="text-base font-bold text-gray-900">{reqItem.item.productCode}</div>
+                            <div className="text-sm text-gray-600 mt-0.5">{reqItem.item.description}</div>
+                          </div>
+                          <div className="flex-shrink-0">
+                            <div className="inline-flex items-center px-4 py-2 bg-blue-50 border-2 border-blue-500 rounded-lg">
+                              <Package className="h-5 w-5 text-blue-600 mr-2" />
+                              <span className="text-lg font-bold text-blue-900">×{reqItem.quantity}</span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex flex-wrap gap-2 mt-3">
+                          {reqItem.item.stock?.box?.location && (
+                            <div className="inline-flex items-center px-3 py-1.5 bg-green-50 border-2 border-green-400 rounded-lg">
+                              <MapPin className="h-4 w-4 text-green-700 mr-2" />
+                              <span className="text-sm font-bold text-green-900">
+                                {reqItem.item.stock.box.location.name}
+                              </span>
+                            </div>
+                          )}
+                          {reqItem.item.stock?.box && (
+                            <div className="inline-flex items-center px-3 py-1.5 bg-purple-50 border-2 border-purple-400 rounded-lg">
+                              <Package className="h-4 w-4 text-purple-700 mr-2" />
+                              <span className="text-sm font-bold text-purple-900">
+                                Box: {reqItem.item.stock.box.boxNumber}
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -506,16 +589,17 @@ export default function PendingApprovalsPage() {
             </DialogDescription>
           </DialogHeader>
           {selectedRequest && (
-            <div className="space-y-4">
-              <div className="bg-gray-50 p-4 rounded-md">
-                <h4 className="font-medium">Request Details</h4>
-                <p className="text-sm text-gray-600 mt-1">
-                  {selectedRequest.items.length} item(s) requested by {selectedRequest.user.name}
-                </p>
-                <p className="text-sm text-gray-600">
-                  Period: {new Date(selectedRequest.startDate).toLocaleDateString()} - {new Date(selectedRequest.endDate).toLocaleDateString()}
-                </p>
-              </div>
+            <div className="bg-gray-50 p-4 rounded-md">
+              <h4 className="font-medium">Request Details</h4>
+              <p className="text-sm text-gray-600 mt-1">
+                {selectedRequest.items.length} item(s) requested by {selectedRequest.user.name}
+              </p>
+              <p className="text-sm text-gray-600">
+                {isPlaceholderDate(selectedRequest.startDate) 
+                  ? 'Period: Will be set to 14 days upon approval'
+                  : `Period: ${new Date(selectedRequest.startDate).toLocaleDateString()} - ${new Date(selectedRequest.endDate).toLocaleDateString()}`
+                }
+              </p>
             </div>
           )}
           <DialogFooter>

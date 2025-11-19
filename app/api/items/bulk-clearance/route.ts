@@ -3,8 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { items, itemStock, itemClearances, stockMovements } from '@/lib/db/schema';
-import { eq, inArray } from 'drizzle-orm';
+import { items, itemStock, itemClearances, stockMovements, boxes, locations } from '@/lib/db/schema';
+import { eq, inArray, and, isNull } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
 
 // Helper function to generate a short ID
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
 
     // Process each item
     for (const item of clearanceItems) {
-      const { itemId, quantity } = item;
+      const { itemId, quantity, stockId } = item;
 
       if (!itemId || !quantity || quantity <= 0) {
         errors.push({ itemId, error: 'Invalid item ID or quantity' });
@@ -58,9 +58,21 @@ export async function POST(request: NextRequest) {
       }
 
       // Get the current stock for the item
-      const stock = await db.query.itemStock.findFirst({
-        where: eq(itemStock.itemId, itemId),
-      });
+      // If stockId is provided, get that specific stock record
+      // Otherwise, get any available stock record for the item
+      let stock;
+      if (stockId) {
+        stock = await db.query.itemStock.findFirst({
+          where: and(
+            eq(itemStock.id, stockId),
+            eq(itemStock.itemId, itemId)
+          ),
+        });
+      } else {
+        stock = await db.query.itemStock.findFirst({
+          where: eq(itemStock.itemId, itemId),
+        });
+      }
 
       if (!stock) {
         errors.push({ itemId, error: 'Item stock not found' });
@@ -88,7 +100,7 @@ export async function POST(request: NextRequest) {
         inStorageToClear = quantity - stock.pending;
       }
 
-      // Update item stock
+      // Update item stock - location (boxId) remains unchanged
       const updatedStock = await db
         .update(itemStock)
         .set({
@@ -97,8 +109,19 @@ export async function POST(request: NextRequest) {
           inClearance: stock.inClearance + quantity,
           updatedAt: new Date(),
         })
-        .where(eq(itemStock.itemId, itemId))
+        .where(eq(itemStock.id, stock.id))
         .returning();
+
+      // Get location information for the stock record
+      let locationInfo = null;
+      if (stock.boxId) {
+        locationInfo = await db.query.boxes.findFirst({
+          where: eq(boxes.id, stock.boxId),
+          with: {
+            location: true
+          }
+        });
+      }
 
       // Create clearance record
       const [clearance] = await db
@@ -112,6 +135,11 @@ export async function POST(request: NextRequest) {
           metadata: {
             pendingCleared: pendingToClear,
             inStorageCleared: inStorageToClear,
+            stockId: stock.id,
+            boxId: stock.boxId,
+            locationId: locationInfo?.location?.id,
+            locationName: locationInfo?.location?.name,
+            boxNumber: locationInfo?.boxNumber,
           },
         })
         .returning();
@@ -119,7 +147,7 @@ export async function POST(request: NextRequest) {
       // Generate a short reference ID
       const shortReferenceId = generateShortId(10);
 
-      // Record stock movement
+      // Record stock movement - include location information
       await db.insert(stockMovements).values({
         itemId,
         stockId: updatedStock[0].id,
@@ -127,10 +155,11 @@ export async function POST(request: NextRequest) {
         quantity,
         fromState: pendingToClear > 0 ? 'pending' : 'storage',
         toState: 'clearance',
-        referenceId: shortReferenceId, // Use the short ID
+        referenceId: shortReferenceId,
         referenceType: 'clearance',
         performedBy: session.user.id,
         notes: `Moved to clearance: ${reason}`,
+        boxId: stock.boxId, // Include the boxId in the movement record
       });
 
       results.push({
@@ -140,6 +169,10 @@ export async function POST(request: NextRequest) {
         inStorageCleared: inStorageToClear,
         clearanceId: clearance.id,
         referenceId: shortReferenceId,
+        stockId: stock.id,
+        boxId: stock.boxId,
+        locationName: locationInfo?.location?.name,
+        boxNumber: locationInfo?.boxNumber,
       });
     }
 

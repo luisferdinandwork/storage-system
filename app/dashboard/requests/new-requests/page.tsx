@@ -19,8 +19,7 @@ import { cn } from '@/lib/utils';
 import { UniversalBadge } from '@/components/ui/universal-badge';
 
 interface Item {
-  id: string;
-  productCode: string;
+  productCode: string; // Changed from id to productCode
   description: string;
   brandCode: string;
   productDivision: string;
@@ -33,12 +32,12 @@ interface Item {
     onBorrow: number;
     inClearance: number;
     seeded: number;
-    location: string | null;
+    boxId: string | null; // Changed from location to boxId
     condition: string;
   } | null;
   images: {
     id: string;
-    itemId: string;
+    itemId: string; // This should be productCode
     fileName: string;
     originalName: string;
     mimeType: string;
@@ -50,7 +49,7 @@ interface Item {
 }
 
 interface RequestedItem {
-  itemId: string;
+  itemId: string; // This will be the productCode
   quantity: number;
   item: Item;
 }
@@ -64,8 +63,6 @@ export default function NewBorrowRequestPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredItems, setFilteredItems] = useState<Item[]>([]);
   const [requestedItems, setRequestedItems] = useState<RequestedItem[]>([]);
-  const [startDate, setStartDate] = useState<Date>();
-  const [endDate, setEndDate] = useState<Date>();
   const [reason, setReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -74,15 +71,6 @@ export default function NewBorrowRequestPage() {
   useEffect(() => {
     fetchItems();
   }, []);
-
-  // Update end date when start date changes
-  useEffect(() => {
-    if (startDate) {
-      setEndDate(addDays(startDate, 14));
-    } else {
-      setEndDate(undefined);
-    }
-  }, [startDate]);
 
   useEffect(() => {
     if (searchTerm) {
@@ -115,7 +103,7 @@ export default function NewBorrowRequestPage() {
 
   const handleAddItem = (item: Item) => {
     // Check if item is already in the request
-    if (requestedItems.find(reqItem => reqItem.itemId === item.id)) {
+    if (requestedItems.find(reqItem => reqItem.itemId === item.productCode)) { // Changed from item.id to item.productCode
       addMessage('warning', 'Item already added to request', 'Duplicate Item');
       return;
     }
@@ -128,7 +116,7 @@ export default function NewBorrowRequestPage() {
 
     // Add item with default quantity of 1
     setRequestedItems([...requestedItems, {
-      itemId: item.id,
+      itemId: item.productCode, // Changed from item.id to item.productCode
       quantity: 1,
       item
     }]);
@@ -159,11 +147,6 @@ export default function NewBorrowRequestPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!startDate) {
-      addMessage('error', 'Please select a start date', 'Missing Information');
-      return;
-    }
-    
     if (!reason.trim()) {
       addMessage('error', 'Please provide a reason for the request', 'Missing Information');
       return;
@@ -184,8 +167,6 @@ export default function NewBorrowRequestPage() {
         },
         body: JSON.stringify({
           items: requestedItems.map(({ itemId, quantity }) => ({ itemId, quantity })),
-          startDate: startDate.toISOString(),
-          endDate: endDate?.toISOString(),
           reason: reason.trim(),
         }),
       });
@@ -231,7 +212,7 @@ export default function NewBorrowRequestPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Date Selection */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="start-date">Start Date</Label>
                 <Popover>
@@ -271,7 +252,7 @@ export default function NewBorrowRequestPage() {
                 </div>
                 <p className="text-xs text-gray-500">Automatically set to 14 days from start date</p>
               </div>
-            </div>
+            </div> */}
             
             {/* Reason */}
             <div className="space-y-2">
@@ -316,7 +297,7 @@ export default function NewBorrowRequestPage() {
                     <div className="max-h-60 overflow-y-auto space-y-2">
                       {filteredItems.map((item) => (
                         <div
-                          key={item.id}
+                          key={item.productCode} // Changed from item.id to item.productCode
                           className="flex items-center justify-between p-2 border rounded-md hover:bg-gray-50"
                         >
                           <div className="flex items-center space-x-3">
@@ -365,7 +346,7 @@ export default function NewBorrowRequestPage() {
                   <div className="space-y-2">
                     {requestedItems.map((requestedItem) => (
                       <div
-                        key={requestedItem.itemId}
+                        key={requestedItem.itemId} // This is the productCode
                         className="flex items-center justify-between p-3 border rounded-md"
                       >
                         <div className="flex items-center space-x-3">

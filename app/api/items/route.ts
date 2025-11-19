@@ -3,11 +3,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db/';
-import { items, users, itemImages, itemRequests, stockMovements } from '@/lib/db/schema';
-import { eq, and, or, desc } from 'drizzle-orm';
+import { items, users, itemImages, itemRequests, stockMovements, boxes, locations } from '@/lib/db/schema';
+import { eq, and, or, desc, sum } from 'drizzle-orm';
 import { itemStock } from '@/lib/db/schema';
+import { sql } from 'drizzle-orm';
 
-// GET /api/items - List items with their images
+// GET /api/items - List items with aggregated stock from all locations
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -19,16 +20,14 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
 
-    // Build the query with updated schema
-    let query = db
+    // First, get all items with basic info
+    let itemsQuery = db
       .select({
-        id: items.id,
         productCode: items.productCode,
         description: items.description,
         brandCode: items.brandCode,
         productDivision: items.productDivision,
         productCategory: items.productCategory,
-        totalStock: items.totalStock,
         period: items.period,
         season: items.season,
         unitOfMeasure: items.unitOfMeasure,
@@ -42,53 +41,25 @@ export async function GET(request: NextRequest) {
           id: users.id,
           name: users.name,
         },
-        stock: {
-          id: itemStock.id,
-          itemId: itemStock.itemId,
-          pending: itemStock.pending,
-          inStorage: itemStock.inStorage,
-          onBorrow: itemStock.onBorrow,
-          inClearance: itemStock.inClearance,
-          seeded: itemStock.seeded,
-          location: itemStock.location,
-          condition: itemStock.condition,
-          conditionNotes: itemStock.conditionNotes,
-          createdAt: itemStock.createdAt,
-          updatedAt: itemStock.updatedAt,
-        },
       })
       .from(items)
       .leftJoin(users, eq(items.createdBy, users.id))
-      .leftJoin(itemStock, eq(items.id, itemStock.itemId))
       .orderBy(desc(items.updatedAt));
 
     // Apply status filter if specified
     let itemsData;
     if (status) {
-      itemsData = await query.where(eq(items.status, status as any));
+      itemsData = await itemsQuery.where(eq(items.status, status as any));
     } else {
-      itemsData = await query;
+      itemsData = await itemsQuery;
     }
-
-    // Filter items that have stock in pending, inStorage, or onBorrow
-    // Exclude items that ONLY have stock in clearance or seeded
-    const filteredItems = itemsData.filter(item => {
-      if (!item.stock) return false;
-      
-      const { pending, inStorage, onBorrow, inClearance, seeded } = item.stock;
-      
-      // Show item if it has any stock in pending, inStorage, or onBorrow
-      const hasVisibleStock = pending > 0 || inStorage > 0 || onBorrow > 0;
-      
-      return hasVisibleStock;
-    });
 
     // Fetch all images
     const allImages = await db
       .select()
       .from(itemImages);
 
-    // Group images by itemId
+    // Group images by itemId (productCode)
     const imagesByItemId: Record<string, any[]> = {};
     for (const image of allImages) {
       if (!imagesByItemId[image.itemId]) {
@@ -97,30 +68,69 @@ export async function GET(request: NextRequest) {
       imagesByItemId[image.itemId].push(image);
     }
 
-    // Combine items with their images
-    const itemsWithImages = filteredItems.map(item => ({
-      id: item.id,
-      productCode: item.productCode,
-      description: item.description,
-      brandCode: item.brandCode,
-      productDivision: item.productDivision,
-      productCategory: item.productCategory,
-      totalStock: item.totalStock,
-      period: item.period,
-      season: item.season,
-      unitOfMeasure: item.unitOfMeasure,
-      status: item.status,
-      createdBy: item.createdBy,
-      createdAt: item.createdAt,
-      updatedAt: item.updatedAt,
-      approvedBy: item.approvedBy,
-      approvedAt: item.approvedAt,
-      createdByUser: item.createdByUser,
-      images: imagesByItemId[item.id] || [],
-      stock: item.stock,
-    }));
+    // For each item, aggregate stock from all locations
+    const itemsWithAggregatedStock = await Promise.all(
+      itemsData.map(async (item) => {
+        // Get all stock records for this item
+        const stockRecords = await db
+          .select({
+            stock: itemStock,
+            box: boxes,
+            location: locations,
+          })
+          .from(itemStock)
+          .leftJoin(boxes, eq(itemStock.boxId, boxes.id))
+          .leftJoin(locations, eq(boxes.locationId, locations.id))
+          .where(eq(itemStock.itemId, item.productCode));
 
-    return NextResponse.json(itemsWithImages);
+        // Aggregate quantities across all locations
+        const aggregatedStock = stockRecords.reduce(
+          (totals, record) => ({
+            pending: totals.pending + record.stock.pending,
+            inStorage: totals.inStorage + record.stock.inStorage,
+            onBorrow: totals.onBorrow + record.stock.onBorrow,
+            inClearance: totals.inClearance + record.stock.inClearance,
+            seeded: totals.seeded + record.stock.seeded,
+          }),
+          { pending: 0, inStorage: 0, onBorrow: 0, inClearance: 0, seeded: 0 }
+        );
+
+        // Calculate total stock
+        const totalStock = 
+          aggregatedStock.pending + 
+          aggregatedStock.inStorage + 
+          aggregatedStock.onBorrow + 
+          aggregatedStock.inClearance + 
+          aggregatedStock.seeded;
+
+        // Check if item should be visible (has stock in pending, inStorage, or onBorrow)
+        const hasVisibleStock = 
+          aggregatedStock.pending > 0 || 
+          aggregatedStock.inStorage > 0 || 
+          aggregatedStock.onBorrow > 0;
+
+        return {
+          ...item,
+          stock: aggregatedStock, // Aggregated stock quantities
+          stockRecords: stockRecords.map(r => ({
+            ...r.stock,
+            box: r.box,
+            location: r.location,
+          })), // Individual stock records with location details
+          totalStock,
+          hasVisibleStock,
+          images: imagesByItemId[item.productCode] || [],
+        };
+      })
+    );
+
+    // Filter items that have visible stock
+    const filteredItems = itemsWithAggregatedStock.filter(item => item.hasVisibleStock);
+
+    // Remove hasVisibleStock flag before sending response
+    const responseItems = filteredItems.map(({ hasVisibleStock, ...item }) => item);
+
+    return NextResponse.json(responseItems);
   } catch (error) {
     console.error('Failed to fetch items:', error);
     return NextResponse.json(
@@ -139,6 +149,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // ADDED: Check if email exists
+    if (!session.user.email) {
+      return NextResponse.json({ error: 'User email not found in session' }, { status: 401 });
+    }
+
     // Only superadmin and item-master can add items
     if (session.user.role !== 'superadmin' && session.user.role !== 'item-master') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -149,13 +164,13 @@ export async function POST(request: NextRequest) {
     const { 
       productCode, 
       description, 
-      totalStock, 
+      initialStock,
       period, 
       season, 
       unitOfMeasure,
       condition,
       conditionNotes,
-      location,
+      boxId,
       images: imageData 
     } = body;
 
@@ -192,61 +207,80 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // FIXED: Get the actual user ID from the database to ensure it exists
+    const userEmail = session.user.email; // Store in variable after null check
+    const [currentUser] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, userEmail)) // Now TypeScript knows it's not null/undefined
+      .limit(1);
+
+    if (!currentUser) {
+      return NextResponse.json(
+        { error: 'User not found in database' },
+        { status: 404 }
+      );
+    }
+
     // Create the item with pending_approval status
     const [newItem] = await db
-    .insert(items)
-    .values({
-      productCode,
-      description,
-      brandCode: parsed.brandCode,
-      productDivision: parsed.productDivision,
-      productCategory: parsed.productCategory,
-      totalStock: totalStock || 0,
-      period,
-      season,
-      unitOfMeasure,
-      status: 'pending_approval',
-      createdBy: session.user.id,
-    })
-    .returning();
-    
-  // Create initial stock record
-  const [newStock] = await db
-    .insert(itemStock)
-    .values({
-      itemId: newItem.id,
-      pending: totalStock || 0,
-      onBorrow: 0,
-      inClearance: 0,
-      seeded: 0,
-      location: location || null,
-      condition: condition || 'good',
-      conditionNotes: conditionNotes || null,
-    })
-    .returning();
-
-  // Record initial stock movement
-  if (totalStock && totalStock > 0) {
-    await db
-      .insert(stockMovements)
+      .insert(items)
       .values({
-        itemId: newItem.id,
-        stockId: newStock.id,
-        movementType: 'initial_stock',
-        quantity: totalStock,
-        fromState: 'none',
-        toState: 'pending',
-        performedBy: session.user.id,
-        notes: 'Initial stock creation - pending approval',
-      });
-  }
+        productCode,
+        description,
+        brandCode: parsed.brandCode,
+        productDivision: parsed.productDivision,
+        productCategory: parsed.productCategory,
+        period,
+        season,
+        unitOfMeasure,
+        status: 'pending_approval',
+        createdBy: currentUser.id,
+      })
+      .returning();
+    
+    // Handle boxId - convert 'none' to null
+    const actualBoxId = boxId === 'none' || !boxId ? null : boxId;
+    
+    // Create initial stock record
+    const [newStock] = await db
+      .insert(itemStock)
+      .values({
+        itemId: newItem.productCode,
+        pending: initialStock || 0,
+        inStorage: 0,
+        onBorrow: 0,
+        inClearance: 0,
+        seeded: 0,
+        boxId: actualBoxId,
+        condition: condition || 'good',
+        conditionNotes: conditionNotes || null,
+      })
+      .returning();
+
+    // Record initial stock movement
+    if (initialStock && initialStock > 0) {
+      await db
+        .insert(stockMovements)
+        .values({
+          itemId: newItem.productCode,
+          stockId: newStock.id,
+          movementType: 'initial_stock',
+          quantity: initialStock,
+          fromState: 'none',
+          toState: 'pending',
+          boxId: actualBoxId,
+          performedBy: currentUser.id,
+          notes: 'Initial stock creation - pending approval',
+        });
+    }
 
     // Create item request for approval workflow
     await db
       .insert(itemRequests)
       .values({
-        itemId: newItem.id,
-        requestedBy: session.user.id,
+        itemId: newItem.productCode,
+        requestedBy: currentUser.id,
         status: 'pending',
         notes: 'New item added, awaiting approval from Storage Master',
       });
@@ -255,7 +289,7 @@ export async function POST(request: NextRequest) {
     let newImages: any[] = [];
     if (imageData && Array.isArray(imageData) && imageData.length > 0) {
       const imagesToInsert = imageData.map((image: any, index: number) => ({
-        itemId: newItem.id,
+        itemId: newItem.productCode,
         fileName: image.fileName,
         originalName: image.originalName,
         mimeType: image.mimeType,
@@ -270,11 +304,35 @@ export async function POST(request: NextRequest) {
         .returning();
     }
 
+    // Fetch box and location data if box is assigned
+    let boxData = null;
+    let locationData = null;
+    
+    if (actualBoxId) {
+      const [boxWithLocation] = await db
+        .select({
+          box: boxes,
+          location: locations,
+        })
+        .from(boxes)
+        .leftJoin(locations, eq(boxes.locationId, locations.id))
+        .where(eq(boxes.id, actualBoxId))
+        .limit(1);
+      
+      if (boxWithLocation) {
+        boxData = boxWithLocation.box;
+        locationData = boxWithLocation.location;
+      }
+    }
+
     return NextResponse.json(
       { 
         ...newItem, 
         images: newImages,
         stock: newStock,
+        box: boxData,
+        location: locationData,
+        totalStock: initialStock || 0
       },
       { status: 201 }
     );
@@ -285,8 +343,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-function orderBy(arg0: any) {
-  throw new Error('Function not implemented.');
 }
