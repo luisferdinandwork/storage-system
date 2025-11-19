@@ -6,18 +6,11 @@ import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { MessageContainer } from '@/components/ui/message';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useMessages } from '@/hooks/use-messages';
 import { FormDetail } from '@/components/clearance/FormDetail';
+import { ScannedFormUploadModal } from '@/components/clearance/ScannedFormUploadModal';
 import { 
   FileText, 
   Eye, 
@@ -26,14 +19,12 @@ import {
   Send,
   Clock,
   AlertCircle,
-  MoreHorizontal,
   Package,
-  MapPin,
-  Calendar,
-  User
+  Download,
+  Upload
 } from 'lucide-react';
 
-// Interfaces remain the same as in the original page
+// Interfaces remain the same
 interface ClearanceForm {
   id: string;
   formNumber: string;
@@ -60,6 +51,9 @@ interface ClearanceForm {
   } | null;
   itemCount: number;
   totalQuantity: number;
+  pdfPath: string | null;
+  scannedFormPath: string | null;
+  physicalCheckCompleted: boolean;
 }
 
 interface ClearanceFormItem {
@@ -107,6 +101,8 @@ export default function ClearanceFormsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [currentFormForUpload, setCurrentFormForUpload] = useState<ClearanceForm | null>(null);
 
   useEffect(() => {
     fetchClearanceForms();
@@ -131,7 +127,6 @@ export default function ClearanceFormsPage() {
     }
   };
 
-  // app/dashboard/clearance/page.tsx
   const fetchFormDetails = async (formId: string) => {
     try {
       const response = await fetch(`/api/clearance-forms/${formId}`);
@@ -233,9 +228,53 @@ export default function ClearanceFormsPage() {
     }
   };
 
+  const handleGeneratePDF = async (formId: string) => {
+    setIsProcessing(true);
+    try {
+      // Open the PDF generation route in a new tab
+      window.open(`/api/clearance-forms/${formId}/generate-pdf`, '_blank');
+      
+      // Update the form to mark PDF as generated
+      const response = await fetch(`/api/clearance-forms/${formId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: 'mark_pdf_generated' }),
+      });
+
+      if (response.ok) {
+        fetchClearanceForms();
+        addMessage('success', 'PDF generated successfully', 'Success');
+      } else {
+        const errorData = await response.json();
+        addMessage('error', errorData.error || 'Failed to mark PDF as generated', 'Error');
+      }
+    } catch (error) {
+      console.error('Failed to generate PDF:', error);
+      addMessage('error', 'Failed to generate PDF', 'Error');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleProcessForm = async (formId: string) => {
     setIsProcessing(true);
     try {
+      // First, fetch the latest form data to check if scanned form is uploaded
+      const formResponse = await fetch(`/api/clearance-forms/${formId}`);
+      if (!formResponse.ok) {
+        addMessage('error', 'Failed to fetch form details', 'Error');
+        return;
+      }
+      
+      const formData = await formResponse.json();
+      
+      if (!formData.scannedFormPath) {
+        addMessage('error', 'Please upload the scanned form before processing', 'Error');
+        return;
+      }
+
       const response = await fetch(`/api/clearance-forms/${formId}`, {
         method: 'PUT',
         headers: {
@@ -264,6 +303,53 @@ export default function ClearanceFormsPage() {
     await fetchFormDetails(form.id);
   };
 
+  const handleOpenUploadModal = (form: ClearanceForm) => {
+    console.log('Opening upload modal for form:', form.id);
+    setCurrentFormForUpload(form);
+    setUploadModalOpen(true);
+  };
+
+  const handleUploadSuccess = async () => {
+    console.log('Upload successful, refreshing data');
+    
+    // Refresh the forms list first
+    await fetchClearanceForms();
+    
+    // If there's a form currently being viewed, refresh its details
+    if (selectedForm) {
+      console.log('Refreshing form details for:', selectedForm.id);
+      await fetchFormDetails(selectedForm.id);
+    }
+    
+    // Update the current form for upload with the latest data
+    if (currentFormForUpload) {
+      console.log('Refreshing current form for upload:', currentFormForUpload.id);
+      
+      try {
+        const response = await fetch(`/api/clearance-forms/${currentFormForUpload.id}`);
+        if (response.ok) {
+          const formData = await response.json();
+          if (formData && formData.id) {
+            // Update the currentFormForUpload state with fresh data
+            setCurrentFormForUpload(formData);
+            
+            // Also update the form in the clearanceForms array
+            setClearanceForms(prevForms => 
+              prevForms.map(form => 
+                form.id === formData.id ? formData : form
+              )
+            );
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch form details:', error);
+      }
+    }
+    
+    // Add a success message
+    addMessage('success', 'Scanned form uploaded successfully. You can now process the form.', 'Success');
+  };
+  
   const filteredForms = clearanceForms.filter(form => {
     const matchesStatus = statusFilter === 'all' || form.status === statusFilter;
     return matchesStatus;
@@ -386,59 +472,107 @@ export default function ClearanceFormsPage() {
                   </div>
                 </div>
                 
-                <div className="flex justify-between items-center pt-2">
-                  <div className="text-xs text-gray-500">
-                    Created by {form.createdBy.name}
+                {/* Show PDF and Scanned Form status for approved forms */}
+                {form.status === 'approved' && (
+                  <div className="text-xs space-y-1">
+                    <div className="flex items-center">
+                      <FileText className="h-3 w-3 mr-1" />
+                      <span className={form.pdfPath ? 'text-green-600' : 'text-gray-500'}>
+                        PDF: {form.pdfPath ? 'Generated' : 'Not Generated'}
+                      </span>
+                    </div>
+                    <div className="flex items-center">
+                      <Upload className="h-3 w-3 mr-1" />
+                      <span className={form.scannedFormPath ? 'text-green-600' : 'text-gray-500'}>
+                        Scanned Form: {form.scannedFormPath ? 'Uploaded' : 'Not Uploaded'}
+                      </span>
+                    </div>
                   </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="h-8 w-8 p-0">
-                        <span className="sr-only">Open menu</span>
-                        <MoreHorizontal className="h-4 w-4" />
+                )}
+                
+                <div className="text-xs text-gray-500">
+                  Created by {form.createdBy.name}
+                </div>
+                
+                {/* Action buttons based on status */}
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => handleViewFormDetails(form)}
+                    className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                  >
+                    <Eye className="mr-1 h-4 w-4" />
+                    View
+                  </Button>
+                  
+                  {form.status === 'draft' && canManageClearance && (
+                    <Button 
+                      variant="default" 
+                      size="sm" 
+                      onClick={() => handleSubmitForm(form.id)}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      <Send className="mr-1 h-4 w-4" />
+                      Submit
+                    </Button>
+                  )}
+                  
+                  {form.status === 'pending_approval' && canApproveClearance && (
+                    <>
+                      <Button 
+                        variant="default" 
+                        size="sm" 
+                        onClick={() => handleApproveForm(form.id)}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        <CheckCircle className="mr-1 h-4 w-4" />
+                        Approve
                       </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                      <DropdownMenuItem onClick={() => handleViewFormDetails(form)}>
-                        <Eye className="mr-2 h-4 w-4" />
-                        View Details
-                      </DropdownMenuItem>
-                      
-                      {form.status === 'draft' && canManageClearance && (
-                        <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleSubmitForm(form.id)}>
-                            <Send className="mr-2 h-4 w-4" />
-                            Submit for Approval
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                      
-                      {form.status === 'pending_approval' && canApproveClearance && (
-                        <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleApproveForm(form.id)} className="text-green-600">
-                            <CheckCircle className="mr-2 h-4 w-4" />
-                            Approve
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleRejectForm(form.id, '')} className="text-red-600">
-                            <XCircle className="mr-2 h-4 w-4" />
-                            Reject
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                      
-                      {form.status === 'approved' && canManageClearance && (
-                        <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleProcessForm(form.id)} className="text-blue-600">
-                            <Clock className="mr-2 h-4 w-4" />
-                            Process Form
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                      <Button 
+                        variant="destructive" 
+                        size="sm" 
+                        onClick={() => handleRejectForm(form.id, '')}
+                        className="bg-red-600 hover:bg-red-700"
+                      >
+                        <XCircle className="mr-1 h-4 w-4" />
+                        Reject
+                      </Button>
+                    </>
+                  )}
+                  
+                  {form.status === 'approved' && canManageClearance && (
+                    <>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handleGeneratePDF(form.id)}
+                        className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                      >
+                        <Download className="mr-1 h-4 w-4" />
+                        PDF
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handleOpenUploadModal(form)}
+                        className="text-purple-600 border-purple-300 hover:bg-purple-50"
+                      >
+                        <Upload className="mr-1 h-4 w-4" />
+                        Upload
+                      </Button>
+                      <Button 
+                        variant="default" 
+                        size="sm" 
+                        onClick={() => handleProcessForm(form.id)}
+                        disabled={!form.scannedFormPath}
+                        className={`${form.scannedFormPath ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-400 cursor-not-allowed'}`}
+                      >
+                        <Clock className="mr-1 h-4 w-4" />
+                        Process
+                      </Button>
+                    </>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -468,8 +602,21 @@ export default function ClearanceFormsPage() {
           onApprove={handleApproveForm}
           onReject={handleRejectForm}
           onProcess={handleProcessForm}
+          onGeneratePDF={handleGeneratePDF}
+          onUploadScannedForm={() => handleOpenUploadModal(selectedForm)}
           canApprove={canApproveClearance}
           canManage={canManageClearance}
+        />
+      )}
+
+      {/* Scanned Form Upload Modal */}
+      {currentFormForUpload && (
+        <ScannedFormUploadModal
+          isOpen={uploadModalOpen}
+          onClose={() => setUploadModalOpen(false)}
+          formId={currentFormForUpload.id}
+          formNumber={currentFormForUpload.formNumber}
+          onUploadSuccess={handleUploadSuccess}
         />
       )}
     </div>

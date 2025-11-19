@@ -29,7 +29,7 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
+    <div className="flex max-h-screen bg-gray-50 overflow-hidden">
       <SidebarWrapper userRole={user[0].role} />
       <main className="flex-1 overflow-auto">
         <div className="mx-auto p-4 sm:p-6 lg:p-8">

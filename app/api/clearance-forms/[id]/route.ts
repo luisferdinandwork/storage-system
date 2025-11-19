@@ -19,6 +19,9 @@ import {
   itemRequests
 } from '@/lib/db/schema';
 import { eq, sql } from 'drizzle-orm';
+import { writeFile, mkdir } from 'fs/promises';
+import { join } from 'path';
+import { randomUUID } from 'crypto';
 
 // GET /api/clearance-forms/[id] - Get clearance form details
 export async function GET(
@@ -32,11 +35,10 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Await params before accessing id
     const { id } = await params;
     const formId = id;
 
-    // Get the clearance form using query API
+    // Get the clearance form
     const form = await db.query.clearanceForms.findFirst({
       where: eq(clearanceForms.id, formId),
       with: {
@@ -72,7 +74,6 @@ export async function GET(
             }
           }
         },
-        // Add cleared items to the query
         clearedItems: {
           columns: {
             id: true,
@@ -126,15 +127,15 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Await params before accessing id
     const { id } = await params;
     const formId = id;
     const body = await request.json();
     const { action, rejectionReason } = body;
 
-    if (!action || !['approve', 'reject', 'process'].includes(action)) {
+    // Update the list of valid actions
+    if (!action || !['approve', 'reject', 'process', 'mark_pdf_generated'].includes(action)) {
       return NextResponse.json(
-        { error: 'Invalid action. Must be approve, reject, or process' },
+        { error: 'Invalid action. Must be approve, reject, process, or mark_pdf_generated' },
         { status: 400 }
       );
     }
@@ -159,6 +160,34 @@ export async function PUT(
 
     if (!form) {
       return NextResponse.json({ error: 'Form not found' }, { status: 404 });
+    }
+
+    // MARK PDF GENERATED ACTION
+    if (action === 'mark_pdf_generated') {
+      if (!['storage-master', 'storage-master-manager', 'superadmin'].includes(currentUser.role)) {
+        return NextResponse.json({ error: 'Only storage masters can mark PDF as generated' }, { status: 403 });
+      }
+
+      if (form.status !== 'approved') {
+        return NextResponse.json({ error: 'Form must be approved to mark PDF as generated' }, { status: 400 });
+      }
+
+      // Generate a PDF path (even though we're not actually storing it)
+      const pdfPath = `/clearance-forms/generated-${form.formNumber}-${Date.now()}.pdf`;
+      
+      // Update form with PDF path
+      await db
+        .update(clearanceForms)
+        .set({
+          pdfPath,
+          updatedAt: new Date(),
+        })
+        .where(eq(clearanceForms.id, formId));
+
+      return NextResponse.json({ 
+        message: 'PDF marked as generated successfully',
+        pdfPath
+      });
     }
 
     // APPROVE ACTION
@@ -203,7 +232,7 @@ export async function PUT(
         where: eq(clearanceFormItems.formId, formId),
       });
 
-      // Revert stock quantities using SQL
+      // Revert stock quantities
       for (const item of formItems) {
         await db
           .update(itemStock)
@@ -214,7 +243,7 @@ export async function PUT(
           })
           .where(eq(itemStock.id, item.stockId));
 
-        // Record movement - use formNumber instead of formId
+        // Record movement
         await db.insert(stockMovements).values({
           itemId: item.itemId,
           stockId: item.stockId,
@@ -222,7 +251,7 @@ export async function PUT(
           quantity: item.quantity,
           fromState: 'clearance',
           toState: 'storage',
-          referenceId: form.formNumber, // Use formNumber instead of formId
+          referenceId: form.formNumber,
           referenceType: 'manual',
           performedBy: currentUser.id,
           notes: `Form ${form.formNumber} rejected: ${rejectionReason}`,
@@ -243,14 +272,24 @@ export async function PUT(
 
     // PROCESS ACTION
     if (action === 'process') {
-      if (!['storage-master', 'storage-master-manager', 'superadmin'].includes(currentUser.role)) {
-        return NextResponse.json({ error: 'Only storage masters can process' }, { status: 403 });
-      }
+      console.log('Processing form:', formId);
+      console.log('Form status:', form.status);
+      console.log('Scanned form path:', form.scannedFormPath);
+    
+    if (!['storage-master', 'storage-master-manager', 'superadmin'].includes(currentUser.role)) {
+      console.log('User not authorized to process form');
+      return NextResponse.json({ error: 'Only storage masters can process' }, { status: 403 });
+    }
 
-      if (form.status !== 'approved') {
-        return NextResponse.json({ error: 'Form must be approved' }, { status: 400 });
-      }
+    if (form.status !== 'approved') {
+      console.log('Form not in approved status');
+      return NextResponse.json({ error: 'Form must be approved' }, { status: 400 });
+    }
 
+    if (!form.scannedFormPath) {
+      console.log('No scanned form path found');
+      return NextResponse.json({ error: 'Scanned form must be uploaded before processing' }, { status: 400 });
+    }
       // Get form items with all details
       const formItems = await db.query.clearanceFormItems.findMany({
         where: eq(clearanceFormItems.formId, formId),
@@ -270,7 +309,7 @@ export async function PUT(
 
       // Collect all item IDs to check if they can be deleted
       const itemIdsToDelete = new Set<string>();
-      const deletedItems: string[] = []; // Track which items were actually deleted
+      const deletedItems: string[] = [];
       
       // Process each item
       for (const formItem of formItems) {
@@ -283,7 +322,7 @@ export async function PUT(
           })
           .where(eq(itemStock.id, formItem.stockId));
 
-        // Record movement - use formNumber instead of formId
+        // Record movement
         await db.insert(stockMovements).values({
           itemId: formItem.itemId,
           stockId: formItem.stockId,
@@ -291,7 +330,7 @@ export async function PUT(
           quantity: formItem.quantity,
           fromState: 'clearance',
           toState: 'none',
-          referenceId: form.formNumber, // Use formNumber instead of formId
+          referenceId: form.formNumber,
           referenceType: 'manual',
           boxId: formItem.stock.boxId,
           performedBy: currentUser.id,
@@ -333,6 +372,7 @@ export async function PUT(
           status: 'processed',
           processedBy: currentUser.id,
           processedAt: new Date(),
+          physicalCheckCompleted: true,
           updatedAt: new Date(),
         })
         .where(eq(clearanceForms.id, formId));
@@ -400,7 +440,6 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Await params before accessing id
     const { id } = await params;
     const formId = id;
 

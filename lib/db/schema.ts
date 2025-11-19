@@ -252,6 +252,10 @@ export const clearanceForms = pgTable('clearance_forms', {
   // Processing fields
   processedAt: timestamp('processed_at'),
   processedBy: uuid('processed_by').references(() => users.id),
+  
+  pdfPath: text('pdf_path'), // Path to the generated PDF
+  scannedFormPath: text('scanned_form_path'), // Path to the uploaded scanned form
+  physicalCheckCompleted: boolean('physical_check_completed').default(false).notNull(),
 });
 
 // Clearance Form Items table (junction table)
