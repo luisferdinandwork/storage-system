@@ -12,14 +12,18 @@ import {
   stockMovements,
   boxes,
   locations,
-  users
+  users,
+  borrowRequestItems,
+  itemClearances,
+  itemImages,
+  itemRequests
 } from '@/lib/db/schema';
 import { eq, sql } from 'drizzle-orm';
 
 // GET /api/clearance-forms/[id] - Get clearance form details
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -28,7 +32,9 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const formId = params.id;
+    // Await params before accessing id
+    const { id } = await params;
+    const formId = id;
 
     // Get the clearance form using query API
     const form = await db.query.clearanceForms.findFirst({
@@ -65,6 +71,31 @@ export async function GET(
               }
             }
           }
+        },
+        // Add cleared items to the query
+        clearedItems: {
+          columns: {
+            id: true,
+            formId: true,
+            formNumber: true,
+            productCode: true,
+            description: true,
+            brandCode: true,
+            productDivision: true,
+            productCategory: true,
+            period: true,
+            season: true,
+            unitOfMeasure: true,
+            quantity: true,
+            condition: true,
+            conditionNotes: true,
+            boxId: true,
+            boxNumber: true,
+            locationId: true,
+            locationName: true,
+            clearedAt: true,
+            clearedBy: true,
+          }
         }
       }
     });
@@ -86,7 +117,7 @@ export async function GET(
 // PUT /api/clearance-forms/[id] - Update clearance form
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -95,7 +126,9 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const formId = params.id;
+    // Await params before accessing id
+    const { id } = await params;
+    const formId = id;
     const body = await request.json();
     const { action, rejectionReason } = body;
 
@@ -181,7 +214,7 @@ export async function PUT(
           })
           .where(eq(itemStock.id, item.stockId));
 
-        // Record movement
+        // Record movement - use formNumber instead of formId
         await db.insert(stockMovements).values({
           itemId: item.itemId,
           stockId: item.stockId,
@@ -189,7 +222,7 @@ export async function PUT(
           quantity: item.quantity,
           fromState: 'clearance',
           toState: 'storage',
-          referenceId: formId,
+          referenceId: form.formNumber, // Use formNumber instead of formId
           referenceType: 'manual',
           performedBy: currentUser.id,
           notes: `Form ${form.formNumber} rejected: ${rejectionReason}`,
@@ -235,6 +268,10 @@ export async function PUT(
         }
       });
 
+      // Collect all item IDs to check if they can be deleted
+      const itemIdsToDelete = new Set<string>();
+      const deletedItems: string[] = []; // Track which items were actually deleted
+      
       // Process each item
       for (const formItem of formItems) {
         // Reduce inClearance quantity
@@ -246,7 +283,7 @@ export async function PUT(
           })
           .where(eq(itemStock.id, formItem.stockId));
 
-        // Record movement
+        // Record movement - use formNumber instead of formId
         await db.insert(stockMovements).values({
           itemId: formItem.itemId,
           stockId: formItem.stockId,
@@ -254,7 +291,7 @@ export async function PUT(
           quantity: formItem.quantity,
           fromState: 'clearance',
           toState: 'none',
-          referenceId: formId,
+          referenceId: form.formNumber, // Use formNumber instead of formId
           referenceType: 'manual',
           boxId: formItem.stock.boxId,
           performedBy: currentUser.id,
@@ -284,6 +321,9 @@ export async function PUT(
             clearedBy: currentUser.id,
           });
         }
+
+        // Add item ID to potential deletion list
+        itemIdsToDelete.add(formItem.itemId);
       }
 
       // Update form status
@@ -297,7 +337,45 @@ export async function PUT(
         })
         .where(eq(clearanceForms.id, formId));
 
-      return NextResponse.json({ message: 'Form processed successfully' });
+      // Delete items that have no remaining stock
+      for (const itemId of itemIdsToDelete) {
+        // Check if there's any remaining stock for this item
+        const remainingStock = await db.query.itemStock.findFirst({
+          where: eq(itemStock.itemId, itemId),
+        });
+
+        // If no remaining stock, delete the item and all its related records
+        if (!remainingStock) {
+          // Delete item images
+          await db.delete(itemImages).where(eq(itemImages.itemId, itemId));
+          
+          // Delete item requests
+          await db.delete(itemRequests).where(eq(itemRequests.itemId, itemId));
+          
+          // Delete borrow request items
+          await db.delete(borrowRequestItems).where(eq(borrowRequestItems.itemId, itemId));
+          
+          // Delete item clearances
+          await db.delete(itemClearances).where(eq(itemClearances.itemId, itemId));
+          
+          // Delete stock movements
+          await db.delete(stockMovements).where(eq(stockMovements.itemId, itemId));
+          
+          // Delete item stock records
+          await db.delete(itemStock).where(eq(itemStock.itemId, itemId));
+          
+          // Finally, delete the item itself
+          await db.delete(items).where(eq(items.productCode, itemId));
+          
+          // Track that this item was deleted
+          deletedItems.push(itemId);
+        }
+      }
+
+      return NextResponse.json({ 
+        message: 'Form processed successfully',
+        deletedItems: deletedItems 
+      });
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
@@ -313,7 +391,7 @@ export async function PUT(
 // DELETE /api/clearance-forms/[id] - Delete draft form
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -322,7 +400,9 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const formId = params.id;
+    // Await params before accessing id
+    const { id } = await params;
+    const formId = id;
 
     // Get current user
     if (!session.user.email) {

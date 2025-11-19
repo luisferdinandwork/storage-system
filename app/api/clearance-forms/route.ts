@@ -7,7 +7,7 @@ import {
   clearanceForms, 
   clearanceFormItems, 
   itemStock, 
-  users
+  users,
 } from '@/lib/db/schema';
 import { eq, and, desc, sql, gt } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
@@ -16,6 +16,26 @@ import { alias } from 'drizzle-orm/pg-core';
 const creatorUser = alias(users, 'creator_user');
 const approverUser = alias(users, 'approver_user');
 const processorUser = alias(users, 'processor_user');
+
+// Define a type for the form items
+type FormItem = {
+  itemId: string;
+  stockId: string;
+  quantity: number;
+  condition?: 'excellent' | 'good' | 'fair' | 'poor';
+  conditionNotes?: string | null;
+};
+
+// Define a type for the request body
+type CreateFormBody = {
+  title: string;
+  description?: string;
+  period: string;
+  items: FormItem[];
+};
+
+// Define a type for the clearance form status
+type ClearanceFormStatus = 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'processed';
 
 // GET /api/clearance-forms - List all clearance forms
 export async function GET(request: NextRequest) {
@@ -27,7 +47,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status');
+    const status = searchParams.get('status') as ClearanceFormStatus | null;
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
     const offset = (page - 1) * limit;
@@ -35,7 +55,7 @@ export async function GET(request: NextRequest) {
     // Build query conditions
     let whereCondition = sql`1=1`;
     if (status) {
-      whereCondition = eq(clearanceForms.status, status as any);
+      whereCondition = eq(clearanceForms.status, status);
     }
 
     // Get clearance forms with creator info
@@ -119,11 +139,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Only storage masters can create clearance forms
-    if (session.user.role !== 'storage-master' && session.user.role !== 'superadmin') {
+    if (session.user.role !== 'storage-master' && 
+        session.user.role !== 'storage-master-manager' && 
+        session.user.role !== 'superadmin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const body = await request.json();
+    const body = await request.json() as CreateFormBody;
     const { title, description, period, items: formItems } = body;
 
     if (!title || !period || !formItems || !Array.isArray(formItems) || formItems.length === 0) {
@@ -160,14 +182,14 @@ export async function POST(request: NextRequest) {
         title,
         description,
         period,
-        status: 'draft',
+        status: 'draft' as ClearanceFormStatus,
         createdBy: currentUser.id,
       })
       .returning();
 
     // Add items to the form
     const formItemsToInsert = await Promise.all(
-      formItems.map(async (item: any) => {
+      formItems.map(async (item: FormItem) => {
         // Get the stock record for this item
         const [stockRecord] = await db
           .select()
@@ -199,8 +221,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(newForm, { status: 201 });
   } catch (error) {
     console.error('Failed to create clearance form:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
-      { error: 'Failed to create clearance form', details: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Failed to create clearance form', details: errorMessage },
       { status: 500 }
     );
   }
