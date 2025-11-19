@@ -41,6 +41,7 @@ export default function ItemDetailsPage() {
   const [showValidation, setShowValidation] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const toastIdRef = useRef(0);
 
   // Toast management
@@ -49,11 +50,11 @@ export default function ItemDetailsPage() {
     toastIdRef.current += 1;
     setToasts(prev => [...prev, { id, type, message, details }]);
   
-  // Auto-dismiss after 5 seconds
-  setTimeout(() => {
-    removeToast(id);
-  }, 5000);
-};
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+      removeToast(id);
+    }, 5000);
+  };
 
   const removeToast = (id: number) => {
     setToasts(prev => prev.filter(toast => toast.id !== id));
@@ -195,15 +196,18 @@ export default function ItemDetailsPage() {
       }
       
       if (result.success) {
+        // Clear all data after successful save
+        setValidItems([]);
+        setInvalidSKUs([]);
+        setStockInputs({});
+        setShowValidation(false);
+        localStorage.removeItem('b2bSelectedSKUs');
+        setSaveSuccess(true);
+        
         addToast('success', 'Stock data saved successfully', [
           `${getTotalItems()} items updated`,
           `Total stock: ${getTotalStock()} units`
         ]);
-        
-        // Redirect back to item input page after a short delay
-        setTimeout(() => {
-          router.push('/b2b-dashboard/item-input');
-        }, 1500);
       } else {
         throw new Error(result.message || 'Failed to save stock data');
       }
@@ -221,6 +225,11 @@ export default function ItemDetailsPage() {
 
   const handleRetry = () => {
     fetchItemDetails(selectedSKUs);
+  };
+
+  const handleAddMoreItems = () => {
+    setSaveSuccess(false);
+    router.push('/b2b-dashboard/item-input');
   };
 
   const getTotalItems = () => {
@@ -316,8 +325,29 @@ export default function ItemDetailsPage() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-32">
+        {/* Success Message */}
+        {saveSuccess && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mb-6">
+            <div className="text-center">
+              <div className="bg-green-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <FaCheckCircle className="text-green-600 text-2xl" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Stock Data Saved Successfully!</h3>
+              <p className="text-gray-600 mb-4">
+                Your stock data has been updated in the system.
+              </p>
+              <button
+                onClick={handleAddMoreItems}
+                className="px-6 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
+              >
+                Add More Items
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Loading State */}
-        {isLoading && (
+        {isLoading && !saveSuccess && (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mb-6">
             <div className="flex flex-col items-center justify-center">
               <div className="w-16 h-16 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mb-4" />
@@ -328,7 +358,7 @@ export default function ItemDetailsPage() {
         )}
 
         {/* Stats Cards */}
-        {validItems.length > 0 && !isLoading && (
+        {validItems.length > 0 && !isLoading && !saveSuccess && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div className="bg-white rounded-lg shadow-sm p-4 border border-gray-200">
               <div className="flex items-center justify-between">
@@ -369,7 +399,7 @@ export default function ItemDetailsPage() {
         )}
 
         {/* Validation Results */}
-        {showValidation && !isLoading && (invalidSKUs.length > 0 || validItems.length > 0) && (
+        {showValidation && !isLoading && !saveSuccess && (invalidSKUs.length > 0 || validItems.length > 0) && (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
             <div className="border-b border-gray-200 px-5 py-4 flex justify-between items-center">
               <div>
@@ -452,94 +482,96 @@ export default function ItemDetailsPage() {
         )}
 
         {/* Stock Details Table */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="border-b border-gray-200 px-5 py-4">
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center">
-              <div className="bg-primary-100 p-2 rounded-lg mr-3">
-                <FaBoxOpen className="text-primary-600" />
-              </div>
-              Stock Details
-            </h2>
-            <p className="text-sm text-gray-600 mt-1">Review and update stock quantities for each variant</p>
-          </div>
-          
-          <div className="p-5">
-            {validItems.length === 0 && !isLoading ? (
-              <div className="text-center py-12">
-                <div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <FaBoxOpen className="text-gray-400 text-3xl" />
+        {!saveSuccess && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+            <div className="border-b border-gray-200 px-5 py-4">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center">
+                <div className="bg-primary-100 p-2 rounded-lg mr-3">
+                  <FaBoxOpen className="text-primary-600" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">No valid items found</h3>
-                <p className="text-sm text-gray-500 mb-4">Go back to add valid SKUs to continue</p>
-                <button
-                  onClick={handleBack}
-                  className="px-6 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
-                >
-                  Go to Item Input
-                </button>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">SKU</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Item ID</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Variant</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Current Stock</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Stock to Send</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {validItems.map((item) => (
-                      item.variants.map((variant, vIdx) => {
-                        const key = `${item.sku}-${variant.variantCode}`;
-                        
-                        return (
-                          <tr key={key} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm">
-                              <span className="font-mono font-semibold text-gray-900">
-                                {item.sku}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              <span className="bg-primary-100 text-primary-700 px-2 py-1 rounded text-xs font-medium">
-                                {variant.jubelioItemId}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs font-medium">
-                                {variant.variantCode}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              <span className="text-gray-900 font-medium">
-                                {variant.stock} units
-                              </span>
-                            </td>
-                            <td className="px-4 py-3">
-                              <input
-                                type="number"
-                                min="0"
-                                value={stockInputs[key] ?? variant.stock}
-                                onChange={(e) => handleStockChange(item.sku, variant.variantCode, e.target.value)}
-                                className="w-28 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all text-sm"
-                              />
-                            </td>
-                          </tr>
-                        );
-                      })
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                Stock Details
+              </h2>
+              <p className="text-sm text-gray-600 mt-1">Review and update stock quantities for each variant</p>
+            </div>
+            
+            <div className="p-5">
+              {validItems.length === 0 && !isLoading ? (
+                <div className="text-center py-12">
+                  <div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <FaBoxOpen className="text-gray-400 text-3xl" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No valid items found</h3>
+                  <p className="text-sm text-gray-500 mb-4">Go back to add valid SKUs to continue</p>
+                  <button
+                    onClick={handleBack}
+                    className="px-6 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
+                  >
+                    Go to Item Input
+                  </button>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">SKU</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Item ID</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Variant</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Current Stock</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Stock to Send</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {validItems.map((item) => (
+                        item.variants.map((variant, vIdx) => {
+                          const key = `${item.sku}-${variant.variantCode}`;
+                          
+                          return (
+                            <tr key={key} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 text-sm">
+                                <span className="font-mono font-semibold text-gray-900">
+                                  {item.sku}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-sm">
+                                <span className="bg-primary-100 text-primary-700 px-2 py-1 rounded text-xs font-medium">
+                                  {variant.jubelioItemId}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-sm">
+                                <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs font-medium">
+                                  {variant.variantCode}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-sm">
+                                <span className="text-gray-900 font-medium">
+                                  {variant.stock} units
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={stockInputs[key] ?? variant.stock}
+                                  onChange={(e) => handleStockChange(item.sku, variant.variantCode, e.target.value)}
+                                  className="w-28 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all text-sm"
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Sticky Save Button */}
-      {validItems.length > 0 && (
+      {validItems.length > 0 && !saveSuccess && (
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex items-center justify-between">
