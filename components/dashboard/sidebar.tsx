@@ -83,6 +83,18 @@ const navigation: NavigationItem[] = [
     icon: MapPin, 
     roles: ['superadmin', 'storage-master', 'storage-manager'] 
   },
+  { 
+    name: 'Perpindahan Barang',
+    href: '/dashboard/item-movements', 
+    icon: RefreshCw, 
+    roles: ['superadmin', 'storage-master', 'storage-manager']
+  },
+  { 
+    name: 'Barang Seeding', 
+    href: '/dashboard/seeded-items', 
+    icon: Package, 
+    roles: ['superadmin', 'storage-master', 'storage-manager'] 
+  },
   
   // Clearance Management - Storage Master and Storage Manager specific
   { 
@@ -171,7 +183,7 @@ export function Sidebar({ userRole }: SidebarProps) {
     {
       title: 'Manajemen Inventori',
       items: filteredNavigation.filter(item => 
-        ['Warehousing', 'Lokasi Inventori'].includes(item.name)
+        ['Warehousing', 'Lokasi Inventori', 'Perpindahan Barang', 'Barang Seeding'].includes(item.name)
       ),
       show: userRole === 'storage-master' || userRole === 'storage-manager' || userRole === 'superadmin'
     },
