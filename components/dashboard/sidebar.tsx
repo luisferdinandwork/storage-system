@@ -124,14 +124,6 @@ const navigation: NavigationItem[] = [
     roles: ['superadmin', 'storage-master', 'storage-manager'] 
   },
   
-  // Reports
-  { 
-    name: 'Laporan', 
-    href: '/dashboard/reports', 
-    icon: BarChart3, 
-    roles: ['superadmin', 'storage-manager'] 
-  },
-  
   // User Management - Superadmin only
   { 
     name: 'Departemen', 
@@ -200,7 +192,7 @@ export function Sidebar({ userRole }: SidebarProps) {
     {
       title: 'Administrasi',
       items: filteredNavigation.filter(item => 
-        ['Laporan', 'Departemen', 'Pengguna', 'Pengaturan'].includes(item.name)
+        ['Departemen', 'Pengguna', 'Pengaturan'].includes(item.name)
       ),
       show: userRole === 'superadmin' || userRole === 'storage-manager'
     }

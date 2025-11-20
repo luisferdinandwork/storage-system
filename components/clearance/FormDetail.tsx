@@ -468,54 +468,22 @@ export function FormDetail({
           </Card>
 
           {/* Action Buttons */}
-          {form.status !== 'processed' && (
-            <div className="flex flex-wrap gap-2 justify-end pt-2">
-              {form.status === 'draft' && canManage && (
-                <Button onClick={() => onSubmit && onSubmit(form.id)} className="bg-green-600 hover:bg-green-700">
-                  Submit for Approval
-                </Button>
-              )}
-              {form.status === 'pending_approval' && canApprove && (
-                <>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setShowRejectModal(true)}
-                    className="text-red-600 border-red-600 hover:bg-red-50"
-                  >
-                    Reject
-                  </Button>
-                  <Button onClick={() => onApprove && onApprove(form.id)} className="bg-green-600 hover:bg-green-700">
-                    Approve
-                  </Button>
-                </>
-              )}
-              {form.status === 'approved' && canManage && (
-                <>
-                  <Button 
-                    variant="outline"
-                    onClick={() => onGeneratePDF && onGeneratePDF(form.id)}
-                    className="text-blue-600 border-blue-300"
-                  >
-                    <Download className="mr-1 h-4 w-4" />
-                    PDF
-                  </Button>
-                  <Button 
-                    variant="outline"
-                    onClick={onUploadScannedForm}
-                    className="text-purple-600 border-purple-300"
-                  >
-                    <Upload className="mr-1 h-4 w-4" />
-                    Upload
-                  </Button>
-                  <Button 
-                    onClick={() => onProcess && onProcess(form.id)}
-                    disabled={!form.scannedFormPath}
-                    className={`${form.scannedFormPath ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-400 cursor-not-allowed'}`}
-                  >
-                    Process
-                  </Button>
-                </>
-              )}
+          {form.status === 'processed' && (
+            <div className="p-4 bg-green-50 rounded-md border border-green-200">
+              <div className="flex items-start">
+                <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 mr-2" />
+                <div>
+                  <h3 className="font-medium text-green-800">Form processed successfully</h3>
+                  <p className="text-sm text-green-700 mt-1">
+                    All items have been cleared from inventory and permanently removed from the system.
+                  </p>
+                  {form.clearedItems && form.clearedItems.length > 0 && (
+                    <p className="text-sm text-green-700 mt-1">
+                      {form.clearedItems.length} item(s) with a total quantity of {form.clearedItems.reduce((sum, item) => sum + item.quantity, 0)} have been processed.
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           )}
           
@@ -524,14 +492,6 @@ export function FormDetail({
             <div className="flex items-center p-2 bg-yellow-50 rounded-md text-yellow-700 text-sm">
               <AlertCircle className="h-4 w-4 mr-2" />
               Upload scanned form before processing
-            </div>
-          )}
-
-          {/* Success indicator for processed forms */}
-          {form.status === 'processed' && (
-            <div className="flex items-center p-2 bg-green-50 rounded-md text-green-700 text-sm">
-              <CheckCircle className="h-4 w-4 mr-2" />
-              Form processed successfully
             </div>
           )}
         </div>
