@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { authOptions } from '@/lib/auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { db } from '@/lib/db';
-import { items, users, borrowRequests, departments, itemStock, locations, boxes, itemRequests, itemClearances, clearanceForms, stockMovements } from '@/lib/db/schema';
+import { items, users, borrowRequests, departments, itemStock, locations, boxes } from '@/lib/db/schema';
 import { eq, count, isNull, or, and, gte, lte, desc } from 'drizzle-orm';
 import { Package, FileText, Users, TrendingUp, Building, MapPin, BoxIcon, AlertTriangle, CheckCircle, XCircle, Clock, BarChart3, Settings, Database, Archive } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -47,41 +47,6 @@ export default async function SuperAdminDashboard() {
     .select({ count: count() })
     .from(items)
     .where(eq(items.status, 'pending_approval'));
-    
-  const approvedItems = await db
-    .select({ count: count() })
-    .from(items)
-    .where(eq(items.status, 'approved'));
-    
-  const rejectedItems = await db
-    .select({ count: count() })
-    .from(items)
-    .where(eq(items.status, 'rejected'));
-    
-  const lowStockItems = await db
-    .select({ count: count() })
-    .from(itemStock)
-    .where(lte(itemStock.inStorage, 5));
-    
-  const seededItems = await db
-    .select({ count: count() })
-    .from(itemStock)
-    .where(gte(itemStock.seeded, 1));
-    
-  const clearanceItems = await db
-    .select({ count: count() })
-    .from(itemStock)
-    .where(gte(itemStock.inClearance, 1));
-    
-  const pendingClearanceForms = await db
-    .select({ count: count() })
-    .from(clearanceForms)
-    .where(eq(clearanceForms.status, 'pending_approval'));
-    
-  const recentMovements = await db
-    .select({ count: count() })
-    .from(stockMovements)
-    .where(gte(stockMovements.createdAt, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))); // Last 7 days
 
   const stats = [
     {
@@ -137,23 +102,6 @@ export default async function SuperAdminDashboard() {
   return (
     <div>
       <h1 className="text-3xl font-bold text-gray-900 mb-6">Super Admin Dashboard</h1>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {stats.map((stat) => (
-          <Card key={stat.name}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">
-                {stat.name}
-              </CardTitle>
-              <stat.icon className={`h-4 w-4 ${stat.color}`} />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
       <Accordion type="multiple" defaultValue={['system-overview']} className="w-full">
         {/* System Overview Section */}
         <AccordionItem value="system-overview">
@@ -164,15 +112,8 @@ export default async function SuperAdminDashboard() {
             </div>
           </AccordionTrigger>
           <AccordionContent>
-            <SystemOverview 
-              approvedItems={approvedItems[0].count}
-              rejectedItems={rejectedItems[0].count}
-              lowStockItems={lowStockItems[0].count}
-              seededItems={seededItems[0].count}
-              clearanceItems={clearanceItems[0].count}
-              pendingClearanceForms={pendingClearanceForms[0].count}
-              recentMovements={recentMovements[0].count}
-            />
+            {/* Remove all props - SystemOverview will fetch its own data */}
+            <SystemOverview />
           </AccordionContent>
         </AccordionItem>
 

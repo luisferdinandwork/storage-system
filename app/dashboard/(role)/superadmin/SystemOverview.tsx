@@ -4,11 +4,11 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { CheckCircle, XCircle, AlertTriangle, Package, Archive, FileText, TrendingUp, Clock, Database } from 'lucide-react';
-import Link from 'next/link';
+import { CheckCircle, XCircle, AlertTriangle, Package, Archive, FileText, TrendingUp, Clock, Boxes, Users, Building, MapPin, Loader2, Activity } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 
-interface SystemOverviewProps {
+interface SystemOverviewData {
   approvedItems: number;
   rejectedItems: number;
   lowStockItems: number;
@@ -16,140 +16,270 @@ interface SystemOverviewProps {
   clearanceItems: number;
   pendingClearanceForms: number;
   recentMovements: number;
+  stockDistribution: {
+    pending: number;
+    inStorage: number;
+    onBorrow: number;
+    inClearance: number;
+    seeded: number;
+  };
+  recentActivities: Array<{
+    id: string;
+    type: string;
+    description: string;
+    createdAt: string;
+    performedBy: string;
+  }>;
+  userStats: Array<{
+    role: string;
+    count: number;
+  }>;
+  departmentStats: Array<{
+    name: string;
+    count: number;
+  }>;
+  locationStats: Array<{
+    name: string;
+    boxCount: number;
+    itemCount: number;
+  }>;
 }
 
-export default function SystemOverview({
-  approvedItems,
-  rejectedItems,
-  lowStockItems,
-  seededItems,
-  clearanceItems,
-  pendingClearanceForms,
-  recentMovements
-}: SystemOverviewProps) {
-  const itemStats = [
-    { name: 'Approved Items', value: approvedItems, icon: CheckCircle, color: 'text-green-500' },
-    { name: 'Rejected Items', value: rejectedItems, icon: XCircle, color: 'text-red-500' },
-    { name: 'Low Stock Items', value: lowStockItems, icon: AlertTriangle, color: 'text-amber-500' },
-  ];
+const COLORS = ['#3b82f6', '#f59e0b', '#8b5cf6', '#10b981', '#6b7280'];
 
-  const specialStats = [
-    { name: 'Seeded Items', value: seededItems, icon: Package, color: 'text-purple-500' },
-    { name: 'Clearance Items', value: clearanceItems, icon: Archive, color: 'text-orange-500' },
-    { name: 'Pending Clearance Forms', value: pendingClearanceForms, icon: FileText, color: 'text-blue-500' },
-    { name: 'Recent Movements (7d)', value: recentMovements, icon: TrendingUp, color: 'text-indigo-500' },
-  ];
+export default function SystemOverview() {
+  const [data, setData] = useState<SystemOverviewData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/dashboard/system-overview');
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch system overview data');
+        }
+        
+        const overviewData: SystemOverviewData = await response.json();
+        setData(overviewData);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An unknown error occurred');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
+    
+    if (diffInHours < 1) return 'Just now';
+    if (diffInHours < 24) return `${diffInHours}h ago`;
+    
+    const diffInDays = Math.floor(diffInHours / 24);
+    return `${diffInDays}d ago`;
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col justify-center items-center h-96 space-y-4">
+        <Loader2 className="h-12 w-12 animate-spin text-blue-500" />
+        <p className="text-gray-500 font-medium">Loading system overview...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className="border-red-200 bg-red-50">
+        <CardContent className="pt-6">
+          <div className="flex items-start space-x-3">
+            <XCircle className="h-6 w-6 text-red-500 mt-0.5" />
+            <div>
+              <h3 className="text-lg font-semibold text-red-800">Error loading data</h3>
+              <p className="mt-1 text-sm text-red-700">{error}</p>
+              <Button 
+                variant="outline" 
+                className="mt-4 border-red-300 text-red-700 hover:bg-red-100"
+                onClick={() => window.location.reload()}
+              >
+                Retry
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Prepare data for charts
+  const stockDistributionData = [
+    { name: 'In Storage', value: data?.stockDistribution?.inStorage || 0, color: COLORS[0] },
+    { name: 'On Borrow', value: data?.stockDistribution?.onBorrow || 0, color: COLORS[1] },
+    { name: 'In Clearance', value: data?.stockDistribution?.inClearance || 0, color: COLORS[2] },
+    { name: 'Seeded', value: data?.stockDistribution?.seeded || 0, color: COLORS[3] },
+    { name: 'Pending', value: data?.stockDistribution?.pending || 0, color: COLORS[4] },
+  ].filter(item => item.value > 0);
+
+  const totalStock = stockDistributionData.reduce((sum, item) => sum + item.value, 0);
+
+  const CustomTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      const percentage = totalStock > 0 ? Math.round((data.value / totalStock) * 100) : 0;
+      return (
+        <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
+          <p className="font-semibold text-gray-800">{data.name}</p>
+          <p className="text-sm text-gray-600">Quantity: <span className="font-medium">{data.value}</span></p>
+          <p className="text-sm text-gray-600">Percentage: <span className="font-medium">{percentage}%</span></p>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
+    if (percent < 0.05) return null; // Don't show labels for very small slices
+    
+    const RADIAN = Math.PI / 180;
+    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+    return (
+      <text 
+        x={x} 
+        y={y} 
+        fill="white" 
+        textAnchor={x > cx ? 'start' : 'end'} 
+        dominantBaseline="central"
+        fontSize={14}
+        fontWeight="600"
+      >
+        {`${(percent * 100).toFixed(0)}%`}
+      </text>
+    );
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {itemStats.map((stat) => (
-          <Card key={stat.name}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">
-                {stat.name}
-              </CardTitle>
-              <stat.icon className={`h-4 w-4 ${stat.color}`} />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
-            </CardContent>
-          </Card>
-        ))}
+    <div className="space-y-6 p-6 bg-gray-5">
+      {/* Header */}
+      <div className="flex items-center justify-end">
+        <Button variant="outline" className="gap-2">
+          <Activity className="h-4 w-4" />
+          Refresh Data
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {specialStats.map((stat) => (
-          <Card key={stat.name}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">
-                {stat.name}
-              </CardTitle>
-              <stat.icon className={`h-4 w-4 ${stat.color}`} />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
+      {/* Main Content */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Stock Distribution Pie Chart */}
+        <Card className="shadow-md h-full">
+          <CardHeader className="border-b bg-gradient-to-r from-blue-50 to-indigo-50">
             <CardTitle className="flex items-center gap-2">
-              <Database className="h-5 w-5 text-blue-500" />
-              System Health
+              <Boxes className="h-5 w-5 text-blue-600" />
+              Stock Distribution
             </CardTitle>
             <CardDescription>
-              Overview of system health and performance
+              Current distribution of items across different states
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span>Database Status</span>
-                <Badge variant="outline" className="bg-green-100 text-green-800">Healthy</Badge>
+          <CardContent className="pt-6">
+            {totalStock > 0 ? (
+              <div className="flex flex-col h-full justify-between">
+                <div className="h-96">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={stockDistributionData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={renderCustomizedLabel}
+                        outerRadius={90}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {stockDistributionData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="mt-auto pt-4 border-t bg-gray-50 rounded-lg p-4">
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold text-gray-700">Total Items</span>
+                    <Badge variant="default" className="text-lg px-4 py-1">{totalStock.toLocaleString()}</Badge>
+                  </div>
+                </div>
               </div>
-              <div className="flex justify-between items-center">
-                <span>API Response Time</span>
-                <Badge variant="outline" className="bg-green-100 text-green-800">&lt; 200ms</Badge>
+            ) : (
+              <div className="text-center py-12 text-gray-400">
+                <Boxes className="h-16 w-16 mx-auto text-gray-300 mb-3" />
+                <p className="text-lg font-medium">No stock data available</p>
               </div>
-              <div className="flex justify-between items-center">
-                <span>Storage Utilization</span>
-                <Badge variant="outline" className="bg-green-100 text-green-800">Normal</Badge>
-              </div>
-              <div className="flex justify-between items-center">
-                <span>System Uptime</span>
-                <Badge variant="outline" className="bg-green-100 text-green-800">99.9%</Badge>
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
         
-        <Card>
-          <CardHeader>
+        {/* Recent Activity */}
+        <Card className="shadow-md h-full col-span-2">
+          <CardHeader className="border-b bg-gradient-to-r from-green-50 to-teal-50">
             <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-indigo-500" />
+              <Clock className="h-5 w-5 text-green-600" />
               Recent Activity
             </CardTitle>
             <CardDescription>
               Latest system-wide activities
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="w-2 h-2 rounded-full bg-green-500 mr-2"></div>
-                  <span>System backup completed</span>
+          <CardContent className="pt-6">
+            <div className="space-y-4 h-full flex flex-col">
+              {data?.recentActivities?.length ? (
+                <>
+                  <div className="flex-grow overflow-y-auto max-h-96">
+                    {data.recentActivities.map((activity, index) => (
+                      <div 
+                        key={activity.id} 
+                        className="flex items-start justify-between p-4 rounded-lg hover:bg-gray-50 transition-colors border border-gray-100 mb-2"
+                      >
+                        <div className="flex items-start gap-3 flex-1">
+                          <div className={`w-2 h-2 rounded-full mt-2 ${
+                            index === 0 ? 'bg-green-500' : 
+                            index === 1 ? 'bg-blue-500' : 
+                            'bg-gray-400'
+                          }`}></div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="text-xs">{activity.type}</Badge>
+                              <span className="text-xs text-gray-500">{formatDate(activity.createdAt)}</span>
+                            </div>
+                            <p className="text-sm text-gray-900 mt-1 font-medium">{activity.description}</p>
+                            <p className="text-xs text-gray-500 mt-1">by {activity.performedBy || 'System'}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-auto pt-4">
+                    <Button variant="outline" className="w-full">View All Activity</Button>
+                  </div>
+                </>
+              ) : (
+                <div className="flex-grow flex flex-col items-center justify-center text-gray-400">
+                  <Clock className="h-16 w-16 mx-auto text-gray-300 mb-3" />
+                  <p className="text-lg font-medium">No recent activities</p>
                 </div>
-                <span className="text-sm text-gray-500">2 hours ago</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="w-2 h-2 rounded-full bg-blue-500 mr-2"></div>
-                  <span>New user registration</span>
-                </div>
-                <span className="text-sm text-gray-500">5 hours ago</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="w-2 h-2 rounded-full bg-amber-500 mr-2"></div>
-                  <span>Low stock alert triggered</span>
-                </div>
-                <span className="text-sm text-gray-500">1 day ago</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="w-2 h-2 rounded-full bg-purple-500 mr-2"></div>
-                  <span>Clearance form approved</span>
-                </div>
-                <span className="text-sm text-gray-500">2 days ago</span>
-              </div>
-            </div>
-            <div className="mt-4">
-              <Button variant="outline" className="w-full">View All Activity</Button>
+              )}
             </div>
           </CardContent>
         </Card>
