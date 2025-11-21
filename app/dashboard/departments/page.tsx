@@ -7,8 +7,16 @@ import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Building, Plus, Search, Edit, Trash2, Users } from 'lucide-react';
+import { Building, Plus, Search, Edit, Trash2, Users, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface Department {
   id: string;
@@ -29,12 +37,14 @@ export default function DepartmentsPage() {
     name: '', 
     description: ''
   });
-  const [editingDeptId, setEditingDeptId] = useState<string | null>(null);
-  const [editDepartment, setEditDepartment] = useState({ 
+  const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
+  const [editForm, setEditForm] = useState({ 
     name: '', 
     description: ''
   });
-  const [deletingDeptId, setDeletingDeptId] = useState<string | null>(null);
+  const [deletingDepartment, setDeletingDepartment] = useState<Department | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   useEffect(() => {
     fetchDepartments();
@@ -83,20 +93,22 @@ export default function DepartmentsPage() {
     }
   };
 
-  const handleUpdateDepartment = async (deptId: string) => {
+  const handleUpdateDepartment = async () => {
+    if (!editingDepartment) return;
+    
     setIsSubmitting(true);
     
     try {
-      const response = await fetch(`/api/departments/${deptId}`, {
+      const response = await fetch(`/api/departments/${editingDepartment.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(editDepartment),
+        body: JSON.stringify(editForm),
       });
 
       if (response.ok) {
-        setEditingDeptId(null);
+        setIsEditDialogOpen(false);
         fetchDepartments();
       } else {
         const error = await response.json();
@@ -110,18 +122,16 @@ export default function DepartmentsPage() {
     }
   };
 
-  const handleDeleteDepartment = async (deptId: string) => {
-    if (!confirm('Are you sure you want to delete this department? Users in this department will need to be reassigned.')) {
-      return;
-    }
+  const handleDeleteDepartment = async () => {
+    if (!deletingDepartment) return;
     
     try {
-      const response = await fetch(`/api/departments/${deptId}`, {
+      const response = await fetch(`/api/departments/${deletingDepartment.id}`, {
         method: 'DELETE',
       });
 
       if (response.ok) {
-        setDeletingDeptId(null);
+        setIsDeleteDialogOpen(false);
         fetchDepartments();
       } else {
         const error = await response.json();
@@ -133,12 +143,18 @@ export default function DepartmentsPage() {
     }
   };
 
-  const startEditDepartment = (dept: Department) => {
-    setEditingDeptId(dept.id);
-    setEditDepartment({ 
+  const openEditDialog = (dept: Department) => {
+    setEditingDepartment(dept);
+    setEditForm({ 
       name: dept.name, 
       description: dept.description || ''
     });
+    setIsEditDialogOpen(true);
+  };
+
+  const openDeleteDialog = (dept: Department) => {
+    setDeletingDepartment(dept);
+    setIsDeleteDialogOpen(true);
   };
 
   const filteredDepartments = departments.filter(dept =>
@@ -159,36 +175,44 @@ export default function DepartmentsPage() {
   }
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-3xl font-bold text-gray-900">Departments</h1>
         <Button 
           onClick={() => setShowAddForm(true)} 
-          className="bg-primary-500 hover:bg-primary-600"
+          className="bg-primary-500 hover:bg-primary-600 w-full sm:w-auto"
         >
           <Plus className="mr-2 h-4 w-4" />
           Add Department
         </Button>
       </div>
 
-      <div className="mb-6">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-          <Input
-            placeholder="Search departments..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+        <Input
+          placeholder="Search departments..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="pl-10"
+        />
       </div>
 
       {showAddForm && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Add New Department</CardTitle>
+        <Card className="mb-6 border-primary-200 shadow-md">
+          <CardHeader className="bg-primary-50 rounded-t-lg">
+            <div className="flex justify-between items-center">
+              <CardTitle className="text-primary-800">Add New Department</CardTitle>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setShowAddForm(false)}
+                className="h-8 w-8 p-0 text-primary-600 hover:text-primary-800 hover:bg-primary-100"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-6">
             <form onSubmit={handleAddDepartment} className="space-y-4">
               <div>
                 <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
@@ -200,6 +224,7 @@ export default function DepartmentsPage() {
                   onChange={(e) => setNewDepartment({ ...newDepartment, name: e.target.value })}
                   required
                   disabled={isSubmitting}
+                  className="focus:ring-primary-500 focus:border-primary-500"
                 />
               </div>
               <div>
@@ -211,11 +236,11 @@ export default function DepartmentsPage() {
                   rows={3}
                   value={newDepartment.description}
                   onChange={(e) => setNewDepartment({ ...newDepartment, description: e.target.value })}
-                  className="w-full p-2 border border-gray-300 rounded-md"
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
                   disabled={isSubmitting}
                 />
               </div>
-              <div className="flex space-x-2">
+              <div className="flex space-x-2 pt-2">
                 <Button 
                   type="submit" 
                   className="bg-primary-500 hover:bg-primary-600"
@@ -244,7 +269,7 @@ export default function DepartmentsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredDepartments.map((dept) => (
-            <Card key={dept.id} className="relative">
+            <Card key={dept.id} className="transition-all duration-200 hover:shadow-md">
               <CardHeader className="pb-3">
                 <div className="flex justify-between items-start">
                   <div className="flex items-center">
@@ -255,22 +280,23 @@ export default function DepartmentsPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => startEditDepartment(dept)}
+                      onClick={() => openEditDialog(dept)}
+                      className="h-8 w-8 p-0 text-gray-500 hover:text-primary-600 hover:bg-primary-50"
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => setDeletingDeptId(dept.id)}
-                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                      onClick={() => openDeleteDialog(dept)}
+                      className="h-8 w-8 p-0 text-gray-500 hover:text-red-600 hover:bg-red-50"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
                 {dept.description && (
-                  <CardDescription>{dept.description}</CardDescription>
+                  <CardDescription className="mt-1">{dept.description}</CardDescription>
                 )}
               </CardHeader>
               <CardContent>
@@ -281,79 +307,6 @@ export default function DepartmentsPage() {
                   </p>
                 </div>
               </CardContent>
-              
-              {editingDeptId === dept.id && (
-                <div className="absolute inset-0 bg-white bg-opacity-95 p-4 rounded-lg flex flex-col justify-center">
-                  <h3 className="font-medium mb-2">Edit Department</h3>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Department Name
-                      </label>
-                      <Input
-                        value={editDepartment.name}
-                        onChange={(e) => setEditDepartment({ ...editDepartment, name: e.target.value })}
-                        disabled={isSubmitting}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Description
-                      </label>
-                      <textarea
-                        rows={2}
-                        value={editDepartment.description}
-                        onChange={(e) => setEditDepartment({ ...editDepartment, description: e.target.value })}
-                        className="w-full p-2 border border-gray-300 rounded-md"
-                        disabled={isSubmitting}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex space-x-2 mt-3">
-                    <Button
-                      size="sm"
-                      onClick={() => handleUpdateDepartment(dept.id)}
-                      className="bg-primary-500 hover:bg-primary-600"
-                      disabled={isSubmitting}
-                    >
-                      {isSubmitting ? 'Updating...' : 'Update'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setEditingDeptId(null)}
-                      disabled={isSubmitting}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {deletingDeptId === dept.id && (
-                <div className="absolute inset-0 bg-white bg-opacity-95 p-4 rounded-lg flex flex-col justify-center">
-                  <h3 className="font-medium mb-2">Delete Department</h3>
-                  <p className="text-sm text-gray-600 mb-3">
-                    Are you sure you want to delete {dept.name}? Users in this department will need to be reassigned.
-                  </p>
-                  <div className="flex space-x-2">
-                    <Button
-                      size="sm"
-                      onClick={() => handleDeleteDepartment(dept.id)}
-                      className="bg-red-500 hover:bg-red-600"
-                    >
-                      Delete
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setDeletingDeptId(null)}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              )}
             </Card>
           ))}
         </div>
@@ -368,6 +321,101 @@ export default function DepartmentsPage() {
           </p>
         </div>
       )}
+
+      {/* Edit Department Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="text-primary-800">Edit Department</DialogTitle>
+            <DialogDescription>
+              Make changes to the department information below.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <label htmlFor="edit-name" className="text-right text-sm font-medium">
+                Name
+              </label>
+              <Input
+                id="edit-name"
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                className="col-span-3 focus:ring-primary-500 focus:border-primary-500"
+                disabled={isSubmitting}
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <label htmlFor="edit-description" className="text-right text-sm font-medium">
+                Description
+              </label>
+              <textarea
+                id="edit-description"
+                rows={3}
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                className="col-span-3 p-2 border border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+                disabled={isSubmitting}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setIsEditDialogOpen(false)}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleUpdateDepartment}
+              className="bg-primary-500 hover:bg-primary-600"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Updating...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Department Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="text-red-800">Delete Department</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this department? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="flex items-center space-x-3 p-3 bg-red-50 rounded-lg">
+              <Building className="h-6 w-6 text-red-500" />
+              <div>
+                <p className="font-medium">{deletingDepartment?.name}</p>
+                {deletingDepartment?.description && (
+                  <p className="text-sm text-gray-600">{deletingDepartment.description}</p>
+                )}
+              </div>
+            </div>
+            <p className="mt-4 text-sm text-gray-600">
+              Users in this department will need to be reassigned.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setIsDeleteDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleDeleteDepartment}
+              className="bg-red-500 hover:bg-red-600"
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

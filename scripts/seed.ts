@@ -1,55 +1,17 @@
 import 'dotenv/config';
 import { db } from '../lib/db';
 import { 
-  users, items, departments, itemImages, itemRequests, 
-  itemStock, borrowRequests, borrowRequestItems, itemClearances, stockMovements,
-  locations, boxes
+  users, items, departments, itemImages, 
+  itemStock, locations, boxes
 } from '../lib/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { parseProductCode } from '../lib/db/schema';
-
-// Helper function to generate the next borrow request ID
-async function generateBorrowRequestId(): Promise<string> {
-  const prefix = 'BRW-';
-  const padding = 5;
-
-  // Find the most recent request to get the last ID
-  const lastRequest = await db.query.borrowRequests.findFirst({
-    orderBy: [desc(borrowRequests.requestedAt)],
-    columns: {
-      id: true,
-    },
-  });
-
-  let nextNumber = 1; // Default to 1 if no requests exist
-
-  if (lastRequest && lastRequest.id) {
-    // Extract the numeric part, e.g., "BRW-00010" -> "00010"
-    const lastNumberStr = lastRequest.id.split('-')[1];
-    if (lastNumberStr) {
-      // Convert to number and increment
-      const lastNumber = parseInt(lastNumberStr, 10);
-      if (!isNaN(lastNumber)) {
-        nextNumber = lastNumber + 1;
-      }
-    }
-  }
-
-  // Pad the number with leading zeros and prepend the prefix
-  const nextNumberStr = String(nextNumber).padStart(padding, '0');
-  return `${prefix}${nextNumberStr}`;
-}
 
 async function seed() {
   try {
     // Delete all existing data first (in correct order to respect foreign key constraints)
     console.log('Removing all existing data...');
-    await db.delete(stockMovements);
-    await db.delete(borrowRequestItems);
-    await db.delete(borrowRequests);
-    await db.delete(itemClearances);
-    await db.delete(itemRequests);
     await db.delete(itemImages);
     await db.delete(itemStock);
     await db.delete(items);
@@ -242,7 +204,7 @@ async function seed() {
           onBorrow: 0,
           inClearance: 0,
           seeded: 0,
-          boxId: box1B.id, // Using box reference instead of location enum
+          boxId: box1B.id,
           condition: 'good' as const,
           conditionNotes: 'Minor scuff marks on sole',
         }
@@ -263,7 +225,7 @@ async function seed() {
           onBorrow: 0,
           inClearance: 0,
           seeded: 0,
-          boxId: box1A.id, // Using box reference instead of location enum
+          boxId: box1A.id,
           condition: 'good' as const,
           conditionNotes: 'Display model, slight wear',
         }
@@ -284,7 +246,7 @@ async function seed() {
           onBorrow: 0,
           inClearance: 0,
           seeded: 0,
-          boxId: box2A.id, // Using box reference instead of location enum
+          boxId: box2A.id,
           condition: 'fair' as const,
           conditionNotes: 'Heel wear, needs replacement soon',
         }
@@ -305,7 +267,7 @@ async function seed() {
           onBorrow: 0,
           inClearance: 0,
           seeded: 0,
-          boxId: box2B.id, // Using box reference instead of location enum
+          boxId: box2B.id,
           condition: 'excellent' as const,
           conditionNotes: 'With original packaging',
         }
@@ -370,227 +332,8 @@ async function seed() {
         altText: `${item.description} - Image 1`,
         isPrimary: true,
       });
-      
-      // Add a second image for some items
-      if (Math.random() > 0.5) {
-        await db.insert(itemImages).values({
-          itemId: item.productCode, // Using productCode as reference
-          fileName: `${item.productCode}-2.jpg`,
-          originalName: `${item.description} - Image 2.jpg`,
-          mimeType: 'image/jpeg',
-          size: 1024000, // 1MB placeholder
-          altText: `${item.description} - Image 2`,
-          isPrimary: false,
-        });
-      }
     }
     console.log('Item images created successfully');
-
-    // Create item requests for pending items
-    console.log('Creating item requests...');
-    for (const item of createdItems) {
-      if (item.status === 'pending_approval') {
-        await db.insert(itemRequests).values({
-          itemId: item.productCode, // Using productCode as reference
-          requestedBy: item.createdBy,
-          status: 'pending',
-          notes: 'Please review and approve this item for storage location assignment',
-        });
-      }
-    }
-    console.log('Item requests created successfully');
-
-    // Create some sample borrow requests with multiple items
-    console.log('Creating borrow requests...');
-    const approvedItems = createdItems.filter(item => item.status === 'approved');
-    
-    // Create a borrow request with multiple items
-    if (approvedItems.length >= 2) {
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - 5); // Started 5 days ago
-      
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + 5); // Ends in 5 days
-      
-      // Generate custom ID for the borrow request
-      const borrowRequestId = await generateBorrowRequestId();
-      
-      // Create borrow request
-      const [borrowRequest] = await db.insert(borrowRequests).values({
-        id: borrowRequestId, // Use the generated custom ID
-        userId: sportsUser1.id,
-        startDate,
-        endDate,
-        reason: 'For sports event demonstration',
-        status: 'approved',
-        managerApprovedBy: sportsManager.id,
-        managerApprovedAt: new Date(startDate.getTime() + 86400000), // Next day
-        storageApprovedBy: storageMaster1.id,
-        storageApprovedAt: new Date(startDate.getTime() + 172800000), // 2 days later
-      }).returning();
-      
-      // Add items to the borrow request
-      for (let i = 0; i < Math.min(2, approvedItems.length); i++) {
-        const item = approvedItems[i];
-        
-        // Create borrow request item
-        await db.insert(borrowRequestItems).values({
-          borrowRequestId: borrowRequest.id, // Use the custom ID
-          itemId: item.productCode, // Using productCode as reference
-          quantity: 1,
-          status: 'active',
-        });
-        
-        // Update stock to reflect borrowed item
-        const [stock] = await db.select().from(itemStock).where(eq(itemStock.itemId, item.productCode));
-        await db.update(itemStock)
-          .set({
-            inStorage: stock.inStorage - 1,
-            onBorrow: stock.onBorrow + 1
-          })
-          .where(eq(itemStock.itemId, item.productCode));
-        
-        // Create stock movement record
-        await db.insert(stockMovements).values({
-          itemId: item.productCode, // Using productCode as reference
-          stockId: stock.id,
-          movementType: 'borrow',
-          quantity: 1,
-          fromState: 'storage',
-          toState: 'borrowed',
-          referenceId: borrowRequest.id, // Use the custom ID
-          referenceType: 'borrow_request',
-          boxId: stock.boxId, // Track which box the item came from
-          performedBy: storageMaster1.id,
-          notes: 'Item borrowed for sports event',
-        });
-      }
-    }
-    
-    // Create a pending borrow request with multiple items
-    if (approvedItems.length > 2) {
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() + 2); // Starts in 2 days
-      
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + 7); // Ends in 7 days
-      
-      // Generate custom ID for the borrow request
-      const pendingBorrowRequestId = await generateBorrowRequestId();
-      
-      // Create borrow request
-      const [pendingBorrowRequest] = await db.insert(borrowRequests).values({
-        id: pendingBorrowRequestId, // Use the generated custom ID
-        userId: sportsUser2.id,
-        startDate,
-        endDate,
-        reason: 'For training session',
-        status: 'pending_manager',
-      }).returning();
-      
-      // Add items to the pending borrow request
-      for (let i = 2; i < Math.min(4, approvedItems.length); i++) {
-        const item = approvedItems[i];
-        
-        // Create borrow request item
-        await db.insert(borrowRequestItems).values({
-          borrowRequestId: pendingBorrowRequest.id, // Use the custom ID
-          itemId: item.productCode, // Using productCode as reference
-          quantity: 1,
-          status: 'pending_manager',
-        });
-      }
-    }
-    
-    // Create a borrow request with a completed item
-    if (approvedItems.length > 3) {
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - 10); // Started 10 days ago
-      
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() - 2); // Ended 2 days ago
-      
-      // Generate custom ID for the borrow request
-      const completedBorrowRequestId = await generateBorrowRequestId();
-      
-      // Create borrow request
-      const [completedBorrowRequest] = await db.insert(borrowRequests).values({
-        id: completedBorrowRequestId, // Use the generated custom ID
-        userId: sportsUser1.id,
-        startDate,
-        endDate,
-        reason: 'For sports competition',
-        status: 'complete',
-        managerApprovedBy: sportsManager.id,
-        managerApprovedAt: new Date(startDate.getTime() + 86400000), // Next day
-        storageApprovedBy: storageMaster1.id,
-        storageApprovedAt: new Date(startDate.getTime() + 172800000), // 2 days later
-        completedAt: new Date(),
-        completedBy: storageMaster1.id,
-      }).returning();
-      
-      // Add item to the completed borrow request
-      const item = approvedItems[3];
-      
-      // Create borrow request item
-      await db.insert(borrowRequestItems).values({
-        borrowRequestId: completedBorrowRequest.id, // Use the custom ID
-        itemId: item.productCode, // Using productCode as reference
-        quantity: 1,
-        status: 'complete',
-        returnCondition: 'good',
-        returnNotes: 'Item used for 8 days, in good condition',
-        completedAt: new Date(),
-        completedBy: storageMaster1.id,
-      });
-      
-      // Update stock to reflect returned item
-      const [stock] = await db.select().from(itemStock).where(eq(itemStock.itemId, item.productCode));
-      await db.update(itemStock)
-        .set({
-          inStorage: stock.inStorage + 1,
-          onBorrow: stock.onBorrow - 1
-        })
-        .where(eq(itemStock.itemId, item.productCode));
-      
-      // Create stock movement record for completion
-      await db.insert(stockMovements).values({
-        itemId: item.productCode, // Using productCode as reference
-        stockId: stock.id,
-        movementType: 'complete',
-        quantity: 1,
-        fromState: 'borrowed',
-        toState: 'storage',
-        referenceId: completedBorrowRequest.id, // Use the custom ID
-        referenceType: 'borrow_request',
-        boxId: stock.boxId, // Track which box the item was returned to
-        performedBy: storageMaster1.id,
-        notes: 'Item returned after competition',
-      });
-    }
-    
-    console.log('Borrow requests created successfully');
-
-    // Create an item clearance
-    console.log('Creating item clearances...');
-    if (approvedItems.length > 0) {
-      const item = approvedItems[0];
-      
-      // Get the stock record
-      const [stock] = await db.select().from(itemStock).where(eq(itemStock.itemId, item.productCode));
-      
-      // Create clearance request
-      const [clearanceRequest] = await db.insert(itemClearances).values({
-        itemId: item.productCode, // Using productCode as reference
-        quantity: 1,
-        requestedBy: storageMaster1.id,
-        reason: 'Item damaged beyond repair',
-        status: 'pending',
-        metadata: { damageType: 'sole separation', repairCost: 0 },
-      }).returning();
-      
-      console.log('Item clearance created successfully');
-    }
 
     console.log('Seed data created successfully');
     console.log('\nLogin credentials:');

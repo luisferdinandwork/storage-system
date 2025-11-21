@@ -53,6 +53,9 @@ import {
   FileText,
   Plus,
   RotateCcw,
+  Download,
+  Upload,
+  FileDown,
 } from 'lucide-react';
 
 interface Box {
@@ -134,6 +137,7 @@ interface Item {
     boxNumber: string;
   } | null;
 }
+
 export default function ClearanceItemsPage() {
   const { data: session } = useSession();
   const { messages, addMessage, dismissMessage } = useMessages();
@@ -150,6 +154,7 @@ export default function ClearanceItemsPage() {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showCreateFormModal, setShowCreateFormModal] = useState(false);
   const [showRevertModal, setShowRevertModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [selectedItems, setSelectedItems] = useState<{itemId: string, stockId: string, quantity: number}[]>([]);
   const [selectAll, setSelectAll] = useState(false);
   const [formTitle, setFormTitle] = useState('');
@@ -158,6 +163,9 @@ export default function ClearanceItemsPage() {
   const [revertReason, setRevertReason] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isReverting, setIsReverting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importResults, setImportResults] = useState<any>(null);
 
   useEffect(() => {
     fetchClearanceItems();
@@ -198,6 +206,88 @@ export default function ClearanceItemsPage() {
       console.error('Failed to fetch boxes:', error);
       addMessage('error', 'Failed to fetch boxes', 'Error');
       setBoxes([]);
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      // Apply current filters to the export
+      const params = new URLSearchParams();
+      if (searchTerm) params.append('search', searchTerm);
+      if (seasonFilter !== 'all') params.append('season', seasonFilter);
+      if (brandFilter !== 'all') params.append('brand', brandFilter);
+      if (divisionFilter !== 'all') params.append('division', divisionFilter);
+      if (categoryFilter !== 'all') params.append('category', categoryFilter);
+      if (periodFilter !== 'all') params.append('period', periodFilter);
+
+      // Create the URL with query parameters
+      const url = `/api/clearance-items/export?${params.toString()}`;
+      
+      // Create a temporary link to download the file
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'clearance-items.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      
+      addMessage('success', 'Clearance items exported successfully', 'Success');
+    } catch (error) {
+      console.error('Failed to export clearance items:', error);
+      addMessage('error', 'Failed to export clearance items', 'Error');
+    }
+  };
+
+  const handleDownloadTemplate = async () => {
+    try {
+      // Create the URL for the template
+      const url = '/api/clearance-items/import/template?format=excel';
+      
+      // Create a temporary link to download the file
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'clearance-items-import-template.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      
+      addMessage('success', 'Template downloaded successfully', 'Success');
+    } catch (error) {
+      console.error('Failed to download template:', error);
+      addMessage('error', 'Failed to download template', 'Error');
+    }
+  };
+
+  const handleImport = async () => {
+    if (!importFile) {
+      addMessage('warning', 'Please select a file to import', 'Missing File');
+      return;
+    }
+
+    setIsImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', importFile);
+
+      const response = await fetch('/api/clearance-items/import', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setImportResults(data);
+        addMessage('success', `Import completed: ${data.successCount} items updated, ${data.errorCount} errors`, 'Import Results');
+        fetchClearanceItems(); // Refresh the list
+      } else {
+        const errorData = await response.json();
+        addMessage('error', errorData.error || 'Failed to import clearance items', 'Error');
+      }
+    } catch (error) {
+      console.error('Failed to import clearance items:', error);
+      addMessage('error', 'Failed to import clearance items', 'Error');
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -361,6 +451,20 @@ export default function ClearanceItemsPage() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Items in Clearance</h1>
           <p className="text-gray-600 mt-1">Manage items available for clearance</p>
+        </div>
+        <div className="flex space-x-2">
+          <Button onClick={handleExport} variant="outline" className="flex items-center space-x-2">
+            <Download className="h-4 w-4" />
+            <span>Export</span>
+          </Button>
+          <Button onClick={handleDownloadTemplate} variant="outline" className="flex items-center space-x-2">
+            <FileDown className="h-4 w-4" />
+            <span>Template</span>
+          </Button>
+          <Button onClick={() => setShowImportModal(true)} variant="outline" className="flex items-center space-x-2">
+            <Upload className="h-4 w-4" />
+            <span>Import</span>
+          </Button>
         </div>
       </div>
 
@@ -661,11 +765,6 @@ export default function ClearanceItemsPage() {
       )}
 
       {/* Modals */}
-      {/* <ItemDetailsModal 
-        open={showDetailsModal} 
-        onOpenChange={setShowDetailsModal} 
-        item={selectedItem} 
-      /> */}
 
       {/* Create Form Modal */}
       <Dialog open={showCreateFormModal} onOpenChange={setShowCreateFormModal}>
@@ -796,6 +895,92 @@ export default function ClearanceItemsPage() {
             >
               {isReverting ? 'Reverting...' : 'Revert Items'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import Modal */}
+      <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Import Clearance Items</DialogTitle>
+            <DialogDescription>
+              Upload an Excel file to update clearance quantities for items
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+           <div>
+            <Label htmlFor="import-file">Excel File *</Label>
+            <Input
+              id="import-file"
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+              className="mt-1"
+            />
+            <p className="text-sm text-gray-500 mt-1">
+              The file should contain columns: Product Code, In Clearance
+            </p>
+            <div className="mt-2 p-2 bg-blue-50 rounded-md">
+              <p className="text-xs text-blue-700 font-medium">Required Fields:</p>
+              <ul className="text-xs text-blue-700 list-disc pl-5 mt-1">
+                <li>Product Code - The product code of the item</li>
+                <li>In Clearance - The quantity to set for clearance (number)</li>
+              </ul>
+            </div>
+            <div className="mt-3">
+              <Button 
+                onClick={handleDownloadTemplate}
+                variant="outline"
+                size="sm"
+                className="flex items-center space-x-1"
+              >
+                <FileDown className="h-4 w-4" />
+                <span>Download Template</span>
+              </Button>
+            </div>
+          </div>
+            
+            {importResults && (
+              <div className="border rounded-md p-4">
+                <h3 className="font-medium mb-2">Import Results</h3>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>Total Rows: {importResults.totalRows}</div>
+                  <div>Success: {importResults.successCount}</div>
+                  <div>Errors: {importResults.errorCount}</div>
+                </div>
+                
+                {importResults.errors.length > 0 && (
+                  <div className="mt-3">
+                    <h4 className="font-medium text-red-600">Errors</h4>
+                    <div className="max-h-40 overflow-y-auto mt-1">
+                      {importResults.errors.map((error: any, index: number) => (
+                        <div key={index} className="text-sm text-red-600">
+                          Row {error.row}: {error.error}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowImportModal(false);
+              setImportFile(null);
+              setImportResults(null);
+            }}>
+              {importResults ? 'Close' : 'Cancel'}
+            </Button>
+            {!importResults && (
+              <Button 
+                onClick={handleImport}
+                disabled={isImporting || !importFile}
+              >
+                {isImporting ? 'Importing...' : 'Import'}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

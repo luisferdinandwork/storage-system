@@ -54,6 +54,9 @@ interface ClearanceForm {
   pdfPath: string | null;
   scannedFormPath: string | null;
   physicalCheckCompleted: boolean;
+  // Add these optional fields for detailed data
+  items?: ClearanceFormItem[];
+  clearedItems?: ClearedItem[];
 }
 
 interface ClearanceFormItem {
@@ -92,6 +95,52 @@ interface ClearanceFormItem {
   };
 }
 
+interface ClearedItem {
+  id: string;
+  formId: string;
+  formNumber: string;
+  productCode: string;
+  description: string;
+  brandCode: string;
+  productDivision: string;
+  productCategory: string;
+  period: string;
+  season: string;
+  unitOfMeasure: string;
+  quantity: number;
+  condition: 'excellent' | 'good' | 'fair' | 'poor';
+  conditionNotes: string | null;
+  boxId: string | null;
+  boxNumber: string | null;
+  locationId: string | null;
+  locationName: string | null;
+  clearedAt: string;
+  clearedBy: string;
+}
+
+// Helper function to get accurate item count and quantity
+function getFormStats(form: ClearanceForm) {
+  const isProcessed = form.status === 'processed';
+  
+  if (isProcessed && form.clearedItems && form.clearedItems.length > 0) {
+    return {
+      itemCount: form.clearedItems.length,
+      totalQuantity: form.clearedItems.reduce((sum, item) => sum + item.quantity, 0)
+    };
+  } else if (form.items && form.items.length > 0) {
+    return {
+      itemCount: form.items.length,
+      totalQuantity: form.items.reduce((sum, item) => sum + item.quantity, 0)
+    };
+  }
+  
+  // Fallback to the values from the API
+  return {
+    itemCount: form.itemCount || 0,
+    totalQuantity: form.totalQuantity || 0
+  };
+}
+
 export default function ClearanceFormsPage() {
   const { data: session } = useSession();
   const { messages, addMessage, dismissMessage } = useMessages();
@@ -113,7 +162,29 @@ export default function ClearanceFormsPage() {
       const response = await fetch('/api/clearance-forms');
       if (response.ok) {
         const data = await response.json();
-        setClearanceForms(data.forms || []);
+        let forms = data.forms || [];
+        
+        // For processed forms, fetch detailed data to get clearedItems
+        const processedForms = forms.filter((form: { status: string; }) => form.status === 'processed');
+        if (processedForms.length > 0) {
+          const detailedProcessedForms = await Promise.all(
+            processedForms.map(async (form: { id: any; }) => {
+              const detailResponse = await fetch(`/api/clearance-forms/${form.id}`);
+              if (detailResponse.ok) {
+                return await detailResponse.json();
+              }
+              return form;
+            })
+          );
+          
+          // Replace the processed forms in the forms array with detailed data
+          forms = forms.map((form: { id: any; }) => {
+            const detailedForm = detailedProcessedForms.find(df => df.id === form.id);
+            return detailedForm || form;
+          });
+        }
+        
+        setClearanceForms(forms);
       } else {
         addMessage('error', 'Failed to fetch clearance forms', 'Error');
         setClearanceForms([]);
@@ -284,9 +355,23 @@ export default function ClearanceFormsPage() {
       });
 
       if (response.ok) {
-        setSelectedForm(null);
-        fetchClearanceForms();
-        addMessage('success', 'Form processed successfully', 'Success');
+        const result = await response.json();
+        
+        // Refresh the forms list
+        await fetchClearanceForms();
+        
+        // If this form is currently being viewed, refresh its details
+        if (selectedForm && selectedForm.id === formId) {
+          await fetchFormDetails(formId);
+        }
+        
+        // Show success message with information about deleted items
+        let message = 'Form processed successfully';
+        if (result.deletedItems && result.deletedItems.length > 0) {
+          message += `. ${result.deletedItems.length} item(s) were permanently removed from inventory.`;
+        }
+        
+        addMessage('success', message, 'Success');
       } else {
         const errorData = await response.json();
         addMessage('error', errorData.error || 'Failed to process form', 'Error');
@@ -425,158 +510,163 @@ export default function ClearanceFormsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredForms.map((form) => (
-            <Card key={form.id} className="overflow-hidden border-l-4" style={{
-              borderLeftColor: 
-                form.status === 'draft' ? '#9CA3AF' :
-                form.status === 'pending_approval' ? '#FBBF24' :
-                form.status === 'approved' ? '#10B981' :
-                form.status === 'rejected' ? '#EF4444' :
-                '#3B82F6'
-            }}>
-              <CardHeader className="pb-3">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <CardTitle className="text-lg">{form.title}</CardTitle>
-                    <CardDescription className="text-sm">Form #{form.formNumber}</CardDescription>
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    {getStatusIcon(form.status)}
-                    <Badge className={getStatusColor(form.status)} variant="outline">
-                      {form.status.replace('_', ' ')}
-                    </Badge>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <p className="text-sm text-gray-600">{form.description}</p>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <p className="text-gray-500">Period</p>
-                    <p className="font-medium">{form.period}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Items</p>
-                    <p className="font-medium">{form.itemCount}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Quantity</p>
-                    <p className="font-medium">{form.totalQuantity}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Created</p>
-                    <p className="font-medium">{new Date(form.createdAt).toLocaleDateString()}</p>
-                  </div>
-                </div>
-                
-                {/* Show PDF and Scanned Form status for approved forms */}
-                {form.status === 'approved' && (
-                  <div className="text-xs space-y-1">
-                    <div className="flex items-center">
-                      <FileText className="h-3 w-3 mr-1" />
-                      <span className={form.pdfPath ? 'text-green-600' : 'text-gray-500'}>
-                        PDF: {form.pdfPath ? 'Generated' : 'Not Generated'}
-                      </span>
+          {filteredForms.map((form) => {
+            // Calculate accurate stats for each form
+            const stats = getFormStats(form);
+            
+            return (
+              <Card key={form.id} className="overflow-hidden border-l-4" style={{
+                borderLeftColor: 
+                  form.status === 'draft' ? '#9CA3AF' :
+                  form.status === 'pending_approval' ? '#FBBF24' :
+                  form.status === 'approved' ? '#10B981' :
+                  form.status === 'rejected' ? '#EF4444' :
+                  '#3B82F6'
+              }}>
+                <CardHeader className="pb-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle className="text-lg">{form.title}</CardTitle>
+                      <CardDescription className="text-sm">Form #{form.formNumber}</CardDescription>
                     </div>
-                    <div className="flex items-center">
-                      <Upload className="h-3 w-3 mr-1" />
-                      <span className={form.scannedFormPath ? 'text-green-600' : 'text-gray-500'}>
-                        Scanned Form: {form.scannedFormPath ? 'Uploaded' : 'Not Uploaded'}
-                      </span>
+                    <div className="flex items-center space-x-1">
+                      {getStatusIcon(form.status)}
+                      <Badge className={getStatusColor(form.status)} variant="outline">
+                        {form.status.replace('_', ' ')}
+                      </Badge>
                     </div>
                   </div>
-                )}
-                
-                <div className="text-xs text-gray-500">
-                  Created by {form.createdBy.name}
-                </div>
-                
-                {/* Action buttons based on status */}
-                <div className="flex flex-wrap gap-2 pt-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => handleViewFormDetails(form)}
-                    className="text-blue-600 border-blue-300 hover:bg-blue-50"
-                  >
-                    <Eye className="mr-1 h-4 w-4" />
-                    View
-                  </Button>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <p className="text-sm text-gray-600">{form.description}</p>
+                  </div>
                   
-                  {form.status === 'draft' && canManageClearance && (
-                    <Button 
-                      variant="default" 
-                      size="sm" 
-                      onClick={() => handleSubmitForm(form.id)}
-                      className="bg-green-600 hover:bg-green-700"
-                    >
-                      <Send className="mr-1 h-4 w-4" />
-                      Submit
-                    </Button>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <p className="text-gray-500">Period</p>
+                      <p className="font-medium">{form.period}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Items</p>
+                      <p className="font-medium">{stats.itemCount}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Quantity</p>
+                      <p className="font-medium">{stats.totalQuantity}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Created</p>
+                      <p className="font-medium">{new Date(form.createdAt).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                  
+                  {/* Show PDF and Scanned Form status for approved forms */}
+                  {form.status === 'approved' && (
+                    <div className="text-xs space-y-1">
+                      <div className="flex items-center">
+                        <FileText className="h-3 w-3 mr-1" />
+                        <span className={form.pdfPath ? 'text-green-600' : 'text-gray-500'}>
+                          PDF: {form.pdfPath ? 'Generated' : 'Not Generated'}
+                        </span>
+                      </div>
+                      <div className="flex items-center">
+                        <Upload className="h-3 w-3 mr-1" />
+                        <span className={form.scannedFormPath ? 'text-green-600' : 'text-gray-500'}>
+                          Scanned Form: {form.scannedFormPath ? 'Uploaded' : 'Not Uploaded'}
+                        </span>
+                      </div>
+                    </div>
                   )}
                   
-                  {form.status === 'pending_approval' && canApproveClearance && (
-                    <>
+                  <div className="text-xs text-gray-500">
+                    Created by {form.createdBy.name}
+                  </div>
+                  
+                  {/* Action buttons based on status */}
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => handleViewFormDetails(form)}
+                      className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                    >
+                      <Eye className="mr-1 h-4 w-4" />
+                      View
+                    </Button>
+                    
+                    {form.status === 'draft' && canManageClearance && (
                       <Button 
                         variant="default" 
                         size="sm" 
-                        onClick={() => handleApproveForm(form.id)}
+                        onClick={() => handleSubmitForm(form.id)}
                         className="bg-green-600 hover:bg-green-700"
                       >
-                        <CheckCircle className="mr-1 h-4 w-4" />
-                        Approve
+                        <Send className="mr-1 h-4 w-4" />
+                        Submit
                       </Button>
-                      <Button 
-                        variant="destructive" 
-                        size="sm" 
-                        onClick={() => handleRejectForm(form.id, '')}
-                        className="bg-red-600 hover:bg-red-700"
-                      >
-                        <XCircle className="mr-1 h-4 w-4" />
-                        Reject
-                      </Button>
-                    </>
-                  )}
-                  
-                  {form.status === 'approved' && canManageClearance && (
-                    <>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => handleGeneratePDF(form.id)}
-                        className="text-blue-600 border-blue-300 hover:bg-blue-50"
-                      >
-                        <Download className="mr-1 h-4 w-4" />
-                        PDF
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => handleOpenUploadModal(form)}
-                        className="text-purple-600 border-purple-300 hover:bg-purple-50"
-                      >
-                        <Upload className="mr-1 h-4 w-4" />
-                        Upload
-                      </Button>
-                      <Button 
-                        variant="default" 
-                        size="sm" 
-                        onClick={() => handleProcessForm(form.id)}
-                        disabled={!form.scannedFormPath}
-                        className={`${form.scannedFormPath ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-400 cursor-not-allowed'}`}
-                      >
-                        <Clock className="mr-1 h-4 w-4" />
-                        Process
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                    )}
+                    
+                    {form.status === 'pending_approval' && canApproveClearance && (
+                      <>
+                        <Button 
+                          variant="default" 
+                          size="sm" 
+                          onClick={() => handleApproveForm(form.id)}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          <CheckCircle className="mr-1 h-4 w-4" />
+                          Approve
+                        </Button>
+                        <Button 
+                          variant="destructive" 
+                          size="sm" 
+                          onClick={() => handleRejectForm(form.id, '')}
+                          className="bg-red-600 hover:bg-red-700"
+                        >
+                          <XCircle className="mr-1 h-4 w-4" />
+                          Reject
+                        </Button>
+                      </>
+                    )}
+                    
+                    {form.status === 'approved' && canManageClearance && (
+                      <>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => handleGeneratePDF(form.id)}
+                          className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                        >
+                          <Download className="mr-1 h-4 w-4" />
+                          PDF
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => handleOpenUploadModal(form)}
+                          className="text-purple-600 border-purple-300 hover:bg-purple-50"
+                        >
+                          <Upload className="mr-1 h-4 w-4" />
+                          Upload
+                        </Button>
+                        <Button 
+                          variant="default" 
+                          size="sm" 
+                          onClick={() => handleProcessForm(form.id)}
+                          disabled={!form.scannedFormPath}
+                          className={`${form.scannedFormPath ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-400 cursor-not-allowed'}`}
+                        >
+                          <Clock className="mr-1 h-4 w-4" />
+                          Process
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 

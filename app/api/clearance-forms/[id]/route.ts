@@ -18,7 +18,7 @@ import {
   itemImages,
   itemRequests
 } from '@/lib/db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, ne, sql } from 'drizzle-orm';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
@@ -272,24 +272,14 @@ export async function PUT(
 
     // PROCESS ACTION
     if (action === 'process') {
-      console.log('Processing form:', formId);
-      console.log('Form status:', form.status);
-      console.log('Scanned form path:', form.scannedFormPath);
-    
-    if (!['storage-master', 'storage-master-manager', 'superadmin'].includes(currentUser.role)) {
-      console.log('User not authorized to process form');
-      return NextResponse.json({ error: 'Only storage masters can process' }, { status: 403 });
-    }
+      if (!['storage-master', 'storage-master-manager', 'superadmin'].includes(currentUser.role)) {
+        return NextResponse.json({ error: 'Only storage masters can process forms' }, { status: 403 });
+      }
 
-    if (form.status !== 'approved') {
-      console.log('Form not in approved status');
-      return NextResponse.json({ error: 'Form must be approved' }, { status: 400 });
-    }
+      if (form.status !== 'approved') {
+        return NextResponse.json({ error: 'Form must be approved to process' }, { status: 400 });
+      }
 
-    if (!form.scannedFormPath) {
-      console.log('No scanned form path found');
-      return NextResponse.json({ error: 'Scanned form must be uploaded before processing' }, { status: 400 });
-    }
       // Get form items with all details
       const formItems = await db.query.clearanceFormItems.findMany({
         where: eq(clearanceFormItems.formId, formId),
@@ -332,7 +322,7 @@ export async function PUT(
           toState: 'none',
           referenceId: form.formNumber,
           referenceType: 'manual',
-          boxId: formItem.stock.boxId,
+          boxId: formItem.stock.box?.id,
           performedBy: currentUser.id,
           notes: `Processed form ${form.formNumber}`,
         });
@@ -365,27 +355,54 @@ export async function PUT(
         itemIdsToDelete.add(formItem.itemId);
       }
 
-      // Update form status
-      await db
-        .update(clearanceForms)
-        .set({
-          status: 'processed',
-          processedBy: currentUser.id,
-          processedAt: new Date(),
-          physicalCheckCompleted: true,
-          updatedAt: new Date(),
-        })
-        .where(eq(clearanceForms.id, formId));
-
-      // Delete items that have no remaining stock
+      // Delete items that have no remaining stock and are not referenced elsewhere
       for (const itemId of itemIdsToDelete) {
         // Check if there's any remaining stock for this item
         const remainingStock = await db.query.itemStock.findFirst({
           where: eq(itemStock.itemId, itemId),
         });
 
-        // If no remaining stock, delete the item and all its related records
-        if (!remainingStock) {
+        // FIXED: Check if any stock quantity is greater than 0
+        if (remainingStock && (
+          remainingStock.pending > 0 || 
+          remainingStock.inStorage > 0 || 
+          remainingStock.onBorrow > 0 || 
+          remainingStock.inClearance > 0 || 
+          remainingStock.seeded > 0
+        )) {
+          continue;
+        }
+
+        // Check if this item is referenced in any other clearance form
+        const otherFormReference = await db.query.clearanceFormItems.findFirst({
+          where: and(
+            eq(clearanceFormItems.itemId, itemId),
+            ne(clearanceFormItems.formId, formId)
+          ),
+        });
+
+        // If referenced in another form, skip deletion
+        if (otherFormReference) {
+          continue;
+        }
+
+        // Check if item is referenced in active borrow requests
+        const activeBorrowReference = await db.query.borrowRequestItems.findFirst({
+          where: and(
+            eq(borrowRequestItems.itemId, itemId),
+            ne(borrowRequestItems.status, 'complete'),
+            ne(borrowRequestItems.status, 'seeded'),
+            ne(borrowRequestItems.status, 'reverted')
+          ),
+        });
+
+        // If referenced in active borrow request, skip deletion
+        if (activeBorrowReference) {
+          continue;
+        }
+
+        // If we get here, it's safe to delete the item and all its related records
+        try {
           // Delete item images
           await db.delete(itemImages).where(eq(itemImages.itemId, itemId));
           
@@ -409,8 +426,25 @@ export async function PUT(
           
           // Track that this item was deleted
           deletedItems.push(itemId);
+        } catch (error) {
+          console.error(`Failed to delete item ${itemId}:`, error);
         }
       }
+
+      // MOVED: Delete clearance form items AFTER processing deletions
+      await db.delete(clearanceFormItems).where(eq(clearanceFormItems.formId, formId));
+
+      // Update form status
+      await db
+        .update(clearanceForms)
+        .set({
+          status: 'processed',
+          processedBy: currentUser.id,
+          processedAt: new Date(),
+          physicalCheckCompleted: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(clearanceForms.id, formId));
 
       return NextResponse.json({ 
         message: 'Form processed successfully',

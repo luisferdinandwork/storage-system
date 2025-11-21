@@ -588,24 +588,6 @@ export function ItemsTable({
                     </DropdownMenuItem>
                   </>
                 )}
-                
-                {canClearanceItems && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => {
-                        if (onClearanceItems) {
-                          onClearanceItems([item.productCode]);
-                        }
-                      }}
-                      className="cursor-pointer text-orange-600"
-                    >
-                      <Archive className="mr-2 h-4 w-4" />
-                      Move to Clearance
-                    </DropdownMenuItem>
-                  </>
-                )}
-                
                 {customActions && customActions(item)}
                 
                 {canDeleteItem && (
