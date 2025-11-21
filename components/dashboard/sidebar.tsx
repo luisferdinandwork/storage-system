@@ -47,6 +47,8 @@ interface NavigationItem {
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   roles: string[];
+  isDashboard?: boolean;
+  exactMatch?: boolean;
 }
 
 interface SidebarProps {
@@ -59,7 +61,8 @@ const navigation: NavigationItem[] = [
     name: 'Dashboard', 
     href: '/dashboard', 
     icon: Home, 
-    roles: ['superadmin', 'item-master', 'storage-master', 'storage-manager', 'manager', 'user'] 
+    roles: ['superadmin', 'item-master', 'storage-master', 'storage-manager', 'manager', 'user'],
+    isDashboard: true
   },
   
   // Items Management - different access levels for different roles
@@ -75,7 +78,8 @@ const navigation: NavigationItem[] = [
     name: 'Warehousing', 
     href: '/dashboard/storage', 
     icon: Warehouse, 
-    roles: ['superadmin', 'storage-master', 'storage-manager']
+    roles: ['superadmin', 'storage-master', 'storage-manager'],
+    exactMatch: true // Add exact match flag
   },
   { 
     name: 'Lokasi Inventori', 
@@ -206,9 +210,26 @@ export function Sidebar({ userRole }: SidebarProps) {
       items: filteredNavigation.filter(item => 
         ['Departemen', 'Pengguna', 'Pengaturan'].includes(item.name)
       ),
-      show: userRole === 'superadmin' || userRole === 'storage-manager'
+      show: userRole === 'superadmin' || userRole === 'storage-master'
     }
   ];
+
+  // Check if a navigation item is active
+  const isItemActive = (item: NavigationItem) => {
+    if (item.isDashboard) {
+      // For dashboard, check if current path is the role-specific dashboard
+      return pathname === `/dashboard/${userRole}` || pathname === '/dashboard';
+    }
+    
+    // For exact match items, check if the pathname exactly matches the href
+    if (item.exactMatch) {
+      return pathname === item.href;
+    }
+    
+    // For other items, check if the pathname starts with the href and the next character is a slash or end of string
+    // This prevents partial matches (e.g., /dashboard/storage matching /dashboard/storage-master)
+    return pathname === item.href || pathname.startsWith(`${item.href}/`);
+  };
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -276,8 +297,7 @@ export function Sidebar({ userRole }: SidebarProps) {
                     )}
                     <div className={cn('mt-2', isCollapsed && 'space-y-1')}>
                       {group.items.map((item) => {
-                        const isActive = pathname === item.href || 
-                                       (item.href !== '/dashboard' && pathname.startsWith(item.href));
+                        const isActive = isItemActive(item);
                         
                         // Show pending count badges for Warehousing and Daftar Tertunda
                         const warehouseCount = item.name === 'Warehousing' ? pendingItemRequestsCount : 0;
@@ -308,7 +328,7 @@ export function Sidebar({ userRole }: SidebarProps) {
                                 <TooltipTrigger asChild>
                                   <div className="relative">
                                     <Link
-                                      href={item.href}
+                                      href={item.isDashboard ? `/dashboard/${userRole}` : item.href}
                                       onClick={() => setIsMobileOpen(false)}
                                       className={cn(
                                         'flex items-center justify-center px-3 py-2 text-sm font-medium rounded-md mb-1 transition-colors w-full',
@@ -332,7 +352,7 @@ export function Sidebar({ userRole }: SidebarProps) {
                               </Tooltip>
                             ) : (
                               <Link
-                                href={item.href}
+                                href={item.isDashboard ? `/dashboard/${userRole}` : item.href}
                                 onClick={() => setIsMobileOpen(false)}
                                 className={cn(
                                   'flex items-center px-3 py-2 text-sm font-medium rounded-md mb-1 transition-colors justify-between relative',
