@@ -186,11 +186,11 @@ export default function StockLocationsPage() {
         const data = await response.json();
         setItems(data);
       } else {
-        addMessage('error', 'Failed to fetch stock items', 'Error');
+        addMessage('error', 'Gagal mengambil data stok item', 'Error');
       }
     } catch (error) {
       console.error('Failed to fetch stock items:', error);
-      addMessage('error', 'Failed to fetch stock items', 'Error');
+      addMessage('error', 'Gagal mengambil data stok item', 'Error');
     } finally {
       setIsLoading(false);
     }
@@ -211,11 +211,11 @@ export default function StockLocationsPage() {
         
         setLocations(uniqueLocations);
       } else {
-        addMessage('error', 'Failed to fetch boxes', 'Error');
+        addMessage('error', 'Gagal mengambil data kotak', 'Error');
       }
     } catch (error) {
       console.error('Failed to fetch boxes:', error);
-      addMessage('error', 'Failed to fetch boxes', 'Error');
+      addMessage('error', 'Gagal mengambil data kotak', 'Error');
     } finally {
       setIsBoxLoading(false);
     }
@@ -223,7 +223,7 @@ export default function StockLocationsPage() {
 
   const handleAddBox = async () => {
     if (!newBox.boxNumber.trim() || !newBox.locationId) {
-      addMessage('warning', 'Box number and location are required', 'Missing Information');
+      addMessage('warning', 'Nomor kotak dan lokasi diperlukan', 'Informasi Tidak Lengkap');
       return;
     }
 
@@ -245,14 +245,14 @@ export default function StockLocationsPage() {
           locationId: ''
         });
         fetchBoxes();
-        addMessage('success', 'Box added successfully', 'Success');
+        addMessage('success', 'Kotak berhasil ditambahkan', 'Sukses');
       } else {
         const errorData = await response.json();
-        addMessage('error', errorData.error || 'Failed to add box', 'Error');
+        addMessage('error', errorData.error || 'Gagal menambah kotak', 'Error');
       }
     } catch (error) {
       console.error('Failed to add box:', error);
-      addMessage('error', 'Failed to add box', 'Error');
+      addMessage('error', 'Gagal menambah kotak', 'Error');
     } finally {
       setIsAddingBox(false);
     }
@@ -324,13 +324,13 @@ export default function StockLocationsPage() {
       
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Inventory Locations</h1>
-          <p className="text-gray-600 mt-1">View and manage item stock across all locations</p>
+          <h1 className="text-3xl font-bold text-gray-900">Lokasi Inventaris</h1>
+          <p className="text-gray-600 mt-1">Lihat dan kelola stok item di semua lokasi</p>
         </div>
         {canManageBoxes && (
           <Button onClick={() => setShowAddBoxModal(true)} className="flex items-center space-x-2">
             <Plus className="h-4 w-4" />
-            <span>Add Box</span>
+            <span>Tambah Kotak</span>
           </Button>
         )}
       </div>
@@ -346,7 +346,7 @@ export default function StockLocationsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-yellow-600">{totalPending}</div>
-            <p className="text-xs text-muted-foreground">Items pending approval</p>
+            <p className="text-xs text-muted-foreground">Item menunggu persetujuan</p>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-blue-500">
@@ -358,7 +358,7 @@ export default function StockLocationsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">{totalInStorage}</div>
-            <p className="text-xs text-muted-foreground">Items currently in storage</p>
+            <p className="text-xs text-muted-foreground">Item saat ini dalam penyimpanan</p>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-green-500">
@@ -370,7 +370,7 @@ export default function StockLocationsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">{totalOnBorrow}</div>
-            <p className="text-xs text-muted-foreground">Items currently borrowed</p>
+            <p className="text-xs text-muted-foreground">Item saat ini dipinjam</p>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-orange-500">
@@ -382,7 +382,7 @@ export default function StockLocationsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-orange-600">{totalInClearance}</div>
-            <p className="text-xs text-muted-foreground">Items in clearance process</p>
+            <p className="text-xs text-muted-foreground">Item dalam proses pembersihan</p>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-purple-500">
@@ -394,7 +394,7 @@ export default function StockLocationsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-purple-600">{totalSeeded}</div>
-            <p className="text-xs text-muted-foreground">Items seeded for display</p>
+            <p className="text-xs text-muted-foreground">Item disemai untuk display</p>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-gray-500">
@@ -406,7 +406,7 @@ export default function StockLocationsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-gray-600">{grandTotal}</div>
-            <p className="text-xs text-muted-foreground">Total items in inventory</p>
+            <p className="text-xs text-muted-foreground">Total item dalam inventaris</p>
           </CardContent>
         </Card>
       </div>
@@ -416,7 +416,7 @@ export default function StockLocationsPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
           <Input
-            placeholder="Search items..."
+            placeholder="Cari item..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
@@ -425,11 +425,11 @@ export default function StockLocationsPage() {
         <div className="flex gap-2">
           <Select value={boxFilter} onValueChange={setBoxFilter}>
             <SelectTrigger className="w-48">
-              <SelectValue placeholder="All Boxes" />
+              <SelectValue placeholder="Semua Kotak" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Boxes</SelectItem>
-              <SelectItem value="unassigned">Not Assigned</SelectItem>
+              <SelectItem value="all">Semua Kotak</SelectItem>
+              <SelectItem value="unassigned">Tidak Ditugaskan</SelectItem>
               {boxes.map(box => (
                 <SelectItem key={box.id} value={box.id}>
                   {box.boxNumber} - {box.location.name}
@@ -440,10 +440,10 @@ export default function StockLocationsPage() {
           
           <Select value={locationFilter} onValueChange={setLocationFilter}>
             <SelectTrigger className="w-48">
-              <SelectValue placeholder="All Locations" />
+              <SelectValue placeholder="Semua Lokasi" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Locations</SelectItem>
+              <SelectItem value="all">Semua Lokasi</SelectItem>
               {locations.map(location => (
                 <SelectItem key={location.id} value={location.id}>
                   {location.name}
@@ -546,21 +546,21 @@ export default function StockLocationsPage() {
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" className="h-8 w-8 p-0">
-                            <span className="sr-only">Open menu</span>
+                            <span className="sr-only">Buka menu</span>
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                          <DropdownMenuLabel>Aksi</DropdownMenuLabel>
                           <DropdownMenuItem onClick={() => handleViewDetails(item)}>
                             <Eye className="mr-2 h-4 w-4" />
-                            View Details
+                            Lihat Detail
                           </DropdownMenuItem>
                           
                           {item.images && item.images.length > 0 && (
                             <DropdownMenuItem onClick={() => handleViewImages(item)}>
                               <Image className="mr-2 h-4 w-4" />
-                              View Images
+                              Lihat Gambar
                             </DropdownMenuItem>
                           )}
                         </DropdownMenuContent>
@@ -577,11 +577,11 @@ export default function StockLocationsPage() {
       {!isLoading && items.length === 0 && (
         <div className="text-center py-12">
           <Warehouse className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No items found</h3>
+          <h3 className="mt-2 text-sm font-medium text-gray-900">Tidak ada item yang ditemukan</h3>
           <p className="mt-1 text-sm text-gray-500">
             {searchTerm || boxFilter !== 'all' || locationFilter !== 'all' 
-              ? 'Try adjusting your search or filters' 
-              : 'No items to display'}
+              ? 'Coba sesuaikan pencarian atau filter Anda' 
+              : 'Tidak ada item untuk ditampilkan'}
           </p>
         </div>
       )}
@@ -597,9 +597,9 @@ export default function StockLocationsPage() {
       <Dialog open={showImagesModal} onOpenChange={setShowImagesModal}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Item Images</DialogTitle>
+            <DialogTitle>Gambar Item</DialogTitle>
             <DialogDescription>
-              Images for {selectedItem?.description}
+              Gambar untuk {selectedItem?.description}
             </DialogDescription>
           </DialogHeader>
           {selectedItem && selectedItem.images && selectedItem.images.length > 0 && (
@@ -641,24 +641,24 @@ export default function StockLocationsPage() {
               {/* Image Details */}
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <div className="font-medium text-gray-500">File Name</div>
+                  <div className="font-medium text-gray-500">Nama File</div>
                   <div>{selectedItem.images[selectedImageIndex].fileName}</div>
                 </div>
                 <div>
-                  <div className="font-medium text-gray-500">Original Name</div>
+                  <div className="font-medium text-gray-500">Nama Asli</div>
                   <div>{selectedItem.images[selectedImageIndex].originalName}</div>
                 </div>
                 <div>
-                  <div className="font-medium text-gray-500">File Size</div>
+                  <div className="font-medium text-gray-500">Ukuran File</div>
                   <div>{(selectedItem.images[selectedImageIndex].size / 1024 / 1024).toFixed(2)} MB</div>
                 </div>
                 <div>
-                  <div className="font-medium text-gray-500">MIME Type</div>
+                  <div className="font-medium text-gray-500">Tipe MIME</div>
                   <div>{selectedItem.images[selectedImageIndex].mimeType}</div>
                 </div>
                 {selectedItem.images[selectedImageIndex].altText && (
                   <div className="col-span-2">
-                    <div className="font-medium text-gray-500">Alt Text</div>
+                    <div className="font-medium text-gray-500">Teks Alt</div>
                     <div>{selectedItem.images[selectedImageIndex].altText}</div>
                   </div>
                 )}
@@ -672,36 +672,36 @@ export default function StockLocationsPage() {
       <Dialog open={showAddBoxModal} onOpenChange={setShowAddBoxModal}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add New Box</DialogTitle>
+            <DialogTitle>Tambah Kotak Baru</DialogTitle>
             <DialogDescription>
-              Create a new storage box in a specific location
+              Buat kotak penyimpanan baru di lokasi tertentu
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="boxNumber">Box Number</Label>
+              <Label htmlFor="boxNumber">Nomor Kotak</Label>
               <Input
                 id="boxNumber"
                 value={newBox.boxNumber}
                 onChange={(e) => setNewBox({...newBox, boxNumber: e.target.value})}
-                placeholder="Enter box number"
+                placeholder="Masukkan nomor kotak"
               />
             </div>
             <div>
-              <Label htmlFor="description">Description (Optional)</Label>
+              <Label htmlFor="description">Deskripsi (Opsional)</Label>
               <Textarea
                 id="description"
                 value={newBox.description}
                 onChange={(e) => setNewBox({...newBox, description: e.target.value})}
-                placeholder="Enter box description"
+                placeholder="Masukkan deskripsi kotak"
                 rows={2}
               />
             </div>
             <div>
-              <Label htmlFor="location">Location</Label>
+              <Label htmlFor="location">Lokasi</Label>
               <Select value={newBox.locationId} onValueChange={(value) => setNewBox({...newBox, locationId: value})}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select location" />
+                  <SelectValue placeholder="Pilih lokasi" />
                 </SelectTrigger>
                 <SelectContent>
                   {locations.map(location => (
@@ -715,13 +715,13 @@ export default function StockLocationsPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAddBoxModal(false)}>
-              Cancel
+              Batal
             </Button>
             <Button 
               onClick={handleAddBox}
               disabled={isAddingBox || !newBox.boxNumber.trim() || !newBox.locationId}
             >
-              {isAddingBox ? 'Adding...' : 'Add Box'}
+              {isAddingBox ? 'Menambahkan...' : 'Tambah Kotak'}
             </Button>
           </DialogFooter>
         </DialogContent>

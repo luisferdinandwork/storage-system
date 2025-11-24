@@ -39,16 +39,16 @@ import {
 // Define all possible columns
 const ALL_COLUMNS = [
   { id: 'item', label: 'Item', defaultVisible: true },
-  { id: 'brandCode', label: 'Brand', defaultVisible: true },
-  { id: 'productDivision', label: 'Division', defaultVisible: true },
-  { id: 'category', label: 'Category', defaultVisible: true },
-  { id: 'season', label: 'Season', defaultVisible: true },
-  { id: 'period', label: 'Period', defaultVisible: true },
-  { id: 'unit', label: 'Unit', defaultVisible: true },
-  { id: 'createdBy', label: 'Created By', defaultVisible: true },
-  { id: 'stock', label: 'Stock', defaultVisible: true },
+  { id: 'brandCode', label: 'Merek', defaultVisible: true },
+  { id: 'productDivision', label: 'Divisi', defaultVisible: true },
+  { id: 'category', label: 'Kategori', defaultVisible: true },
+  { id: 'season', label: 'Musim', defaultVisible: true },
+  { id: 'period', label: 'Periode', defaultVisible: true },
+  { id: 'unit', label: 'Satuan', defaultVisible: true },
+  { id: 'createdBy', label: 'Dibuat Oleh', defaultVisible: true },
+  { id: 'stock', label: 'Stok', defaultVisible: true },
   { id: 'status', label: 'Status', defaultVisible: true },
-  { id: 'actions', label: 'Actions', defaultVisible: true },
+  { id: 'actions', label: 'Aksi', defaultVisible: true },
 ];
 
 export default function ItemsPage() {
@@ -100,11 +100,11 @@ export default function ItemsPage() {
         setItems(data);
         setCurrentPage(1);
       } else {
-        addMessage('error', 'Failed to fetch items', 'Error');
+        addMessage('error', 'Gagal mengambil data item', 'Error');
       }
     } catch (error) {
       console.error('Failed to fetch items:', error);
-      addMessage('error', 'Failed to fetch items', 'Error');
+      addMessage('error', 'Gagal mengambil data item', 'Error');
     } finally {
       setIsLoading(false);
     }
@@ -146,7 +146,7 @@ export default function ItemsPage() {
   const handleAddItemSuccess = () => {
     setShowAddModal(false);
     fetchItems();
-    addMessage('success', 'Item added successfully', 'Success');
+    addMessage('success', 'Item berhasil ditambahkan', 'Sukses');
   };
 
   const handleRemoveItem = async (productCode: string) => {
@@ -157,14 +157,14 @@ export default function ItemsPage() {
 
       if (response.ok) {
         fetchItems();
-        addMessage('success', 'Item deleted successfully', 'Success');
+        addMessage('success', 'Item berhasil dihapus', 'Sukses');
       } else {
         const error = await response.json();
-        addMessage('error', error.error || 'Failed to remove item', 'Error');
+        addMessage('error', error.error || 'Gagal menghapus item', 'Error');
       }
     } catch (error) {
       console.error('Failed to remove item:', error);
-      addMessage('error', 'Failed to remove item', 'Error');
+      addMessage('error', 'Gagal menghapus item', 'Error');
     }
   };
 
@@ -186,14 +186,14 @@ export default function ItemsPage() {
         fetchItems();
         setSelectedItems([]);
         setShowBulkDeleteDialog(false);
-        addMessage('success', `${result.deletedCount} items deleted successfully`, 'Success');
+        addMessage('success', `${result.deletedCount} item berhasil dihapus`, 'Sukses');
       } else {
         const error = await response.json();
-        addMessage('error', error.error || 'Failed to delete items', 'Error');
+        addMessage('error', error.error || 'Gagal menghapus item', 'Error');
       }
     } catch (error) {
       console.error('Failed to bulk delete items:', error);
-      addMessage('error', 'Failed to delete items', 'Error');
+      addMessage('error', 'Gagal menghapus item', 'Error');
     } finally {
       setIsBulkDeleting(false);
     }
@@ -218,20 +218,20 @@ export default function ItemsPage() {
         fetchItems();
         setSelectedItems([]);
         setShowBulkClearanceDialog(false);
-        addMessage('success', `${result.results.length} items moved to clearance successfully`, 'Success');
+        addMessage('success', `${result.results.length} item berhasil dipindahkan ke pembersihan`, 'Sukses');
         
         if (result.errors && result.errors.length > 0) {
           result.errors.forEach((error: any) => {
-            addMessage('error', `Error with item: ${error.error}`, 'Error');
+            addMessage('error', `Error pada item: ${error.error}`, 'Error');
           });
         }
       } else {
         const error = await response.json();
-        addMessage('error', error.error || 'Failed to move items to clearance', 'Error');
+        addMessage('error', error.error || 'Gagal memindahkan item ke pembersihan', 'Error');
       }
     } catch (error) {
       console.error('Failed to move items to clearance:', error);
-      addMessage('error', 'Failed to move items to clearance', 'Error');
+      addMessage('error', 'Gagal memindahkan item ke pembersihan', 'Error');
     } finally {
       setIsBulkClearing(false);
     }
@@ -273,7 +273,7 @@ export default function ItemsPage() {
 
   const handleEditItem = () => {
     fetchItems();
-    addMessage('success', 'Item updated successfully', 'Success');
+    addMessage('success', 'Item berhasil diperbarui', 'Sukses');
   };
 
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -298,18 +298,18 @@ export default function ItemsPage() {
         fetchItems();
         
         if (result.results.success > 0) {
-          addMessage('success', `${result.results.success} items imported successfully`, 'Success');
+          addMessage('success', `${result.results.success} item berhasil diimpor`, 'Sukses');
         }
         
         if (result.results.failed > 0) {
-          addMessage('error', `${result.results.failed} items failed to import`, 'Error');
+          addMessage('error', `${result.results.failed} item gagal diimpor`, 'Error');
         }
       } else {
         const error = await response.json();
-        addMessage('error', error.error || 'Failed to import items', 'Error');
+        addMessage('error', error.error || 'Gagal mengimpor item', 'Error');
       }
     } catch (error) {
-      addMessage('error', 'Failed to import items', 'Error');
+      addMessage('error', 'Gagal mengimpor item', 'Error');
     } finally {
       setIsImporting(false);
       if (fileInputRef.current) {
@@ -362,8 +362,8 @@ export default function ItemsPage() {
       
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Items</h1>
-          <p className="text-gray-500 mt-1">Manage your inventory items</p>
+          <h1 className="text-3xl font-bold text-gray-900">Item</h1>
+          <p className="text-gray-500 mt-1">Kelola item inventaris Anda</p>
         </div>
         
         <div className="flex flex-wrap gap-2">
@@ -372,24 +372,24 @@ export default function ItemsPage() {
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="gap-2">
                 <MoreHorizontal className="h-4 w-4" />
-                Actions
+                Aksi
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Item Actions</DropdownMenuLabel>
+              <DropdownMenuLabel>Aksi Item</DropdownMenuLabel>
               
               {/* Export All Submenu */}
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
                   <Download className="mr-2 h-4 w-4" />
-                  Export All
+                  Ekspor Semua
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
                   <DropdownMenuItem onClick={() => handleExportAll('csv')} disabled={isExporting}>
-                    Export All as CSV
+                    Ekspor Semua sebagai CSV
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handleExportAll('excel')} disabled={isExporting}>
-                    Export All as Excel
+                    Ekspor Semua sebagai Excel
                   </DropdownMenuItem>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
@@ -400,7 +400,7 @@ export default function ItemsPage() {
                   selectedItems.length === 0 || isExporting ? "opacity-50 cursor-not-allowed" : ""
                 )}>
                   <Download className="mr-2 h-4 w-4" />
-                  Export Selected ({selectedItems.length})
+                  Ekspor yang Dipilih ({selectedItems.length})
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
                   <DropdownMenuItem 
@@ -413,7 +413,7 @@ export default function ItemsPage() {
                       selectedItems.length === 0 || isExporting ? "opacity-50 cursor-not-allowed" : ""
                     )}
                   >
-                    Export Selected as CSV
+                    Ekspor yang Dipilih sebagai CSV
                   </DropdownMenuItem>
                   <DropdownMenuItem 
                     onClick={() => {
@@ -425,7 +425,7 @@ export default function ItemsPage() {
                       selectedItems.length === 0 || isExporting ? "opacity-50 cursor-not-allowed" : ""
                     )}
                   >
-                    Export Selected as Excel
+                    Ekspor yang Dipilih sebagai Excel
                   </DropdownMenuItem>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
@@ -437,9 +437,10 @@ export default function ItemsPage() {
                   <DropdownMenuItem 
                     disabled={selectedItems.length === 0 || isBulkClearing}
                     onClick={() => setShowBulkClearanceDialog(true)}
+                    className="bg-orange-100 text-orange-500"
                   >
                     <Archive className="mr-2 h-4 w-4" />
-                    Move to Clearance ({selectedItems.length})
+                    Pindah ke Clearance ({selectedItems.length})
                   </DropdownMenuItem>
                 </>
               )}
@@ -449,18 +450,18 @@ export default function ItemsPage() {
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
                   <Upload className="mr-2 h-4 w-4" />
-                  Import
+                  Impor
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
                   <DropdownMenuItem onClick={() => handleDownloadTemplate('csv')}>
-                    Download CSV Template
+                    Unduh Template CSV
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handleDownloadTemplate('excel')}>
-                    Download Excel Template
+                    Unduh Template Excel
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => fileInputRef.current?.click()} className="bg-primary-100 text-primary-500 hover:bg-primary-200">
-                    Import from File
+                    Impor dari File
                   </DropdownMenuItem>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
@@ -470,7 +471,7 @@ export default function ItemsPage() {
           {/* Columns Button */}
           <Button onClick={() => setShowColumnSelector(true)} variant="outline" className="gap-2">
             <Columns className="h-4 w-4" />
-            Columns
+            Kolom
           </Button>
           
           {/* Delete Button - Only visible for SuperAdmin */}
@@ -482,7 +483,7 @@ export default function ItemsPage() {
               onClick={() => setShowBulkDeleteDialog(true)}
             >
               <Trash2 className="h-4 w-4" />
-              Delete Selected ({selectedItems.length})
+              Hapus yang Dipilih ({selectedItems.length})
             </Button>
           )}
           
@@ -493,7 +494,7 @@ export default function ItemsPage() {
               className="bg-primary-600 hover:bg-primary-700 gap-2"
             >
               <Plus className="h-4 w-4" />
-              Add Item
+              Tambah Item
             </Button>
           )}
         </div>
@@ -513,7 +514,7 @@ export default function ItemsPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
           <Input
-            placeholder="Search items by name or code..."
+            placeholder="Cari item berdasarkan nama atau kode..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
@@ -525,7 +526,7 @@ export default function ItemsPage() {
           className={showFilterPanel ? "bg-gray-100" : ""}
         >
           <Filter className="mr-2 h-4 w-4" />
-          Filters
+          Filter
         </Button>
       </div>
 
@@ -534,7 +535,7 @@ export default function ItemsPage() {
         <div className="bg-gray-50 p-4 rounded-md space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Kategori</label>
               <Select
                 value={categoryFilter}
                 onValueChange={(value) => {
@@ -543,10 +544,10 @@ export default function ItemsPage() {
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="All Categories" />
+                  <SelectValue placeholder="Semua Kategori" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
+                  <SelectItem value="all">Semua Kategori</SelectItem>
                   <SelectItem value="00">Lifestyle</SelectItem>
                   <SelectItem value="01">Football</SelectItem>
                   <SelectItem value="02">Futsal</SelectItem>
@@ -565,7 +566,7 @@ export default function ItemsPage() {
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Division</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Divisi</label>
               <Select
                 value={divisionFilter}
                 onValueChange={(value) => {
@@ -574,10 +575,10 @@ export default function ItemsPage() {
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="All Divisions" />
+                  <SelectValue placeholder="Semua Divisi" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Divisions</SelectItem>
+                  <SelectItem value="all">Semua Divisi</SelectItem>
                   {uniqueDivisions.map(division => (
                     <SelectItem key={division} value={division}>
                       {division}
@@ -588,7 +589,7 @@ export default function ItemsPage() {
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Brand</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Merek</label>
               <Select
                 value={brandFilter}
                 onValueChange={(value) => {
@@ -597,10 +598,10 @@ export default function ItemsPage() {
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="All Brands" />
+                  <SelectValue placeholder="Semua Merek" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Brands</SelectItem>
+                  <SelectItem value="all">Semua Merek</SelectItem>
                   {uniqueBrands.map(brand => (
                     <SelectItem key={brand} value={brand}>
                       {brand}
@@ -611,7 +612,7 @@ export default function ItemsPage() {
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Season</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Musim</label>
               <Select
                 value={seasonFilter}
                 onValueChange={(value) => {
@@ -620,10 +621,10 @@ export default function ItemsPage() {
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="All Seasons" />
+                  <SelectValue placeholder="Semua Musim" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Seasons</SelectItem>
+                  <SelectItem value="all">Semua Musim</SelectItem>
                   {uniqueSeasons.map(season => (
                     <SelectItem key={season} value={season}>
                       {season}
@@ -634,7 +635,7 @@ export default function ItemsPage() {
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Period</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Periode</label>
               <Select
                 value={periodFilter}
                 onValueChange={(value) => {
@@ -643,10 +644,10 @@ export default function ItemsPage() {
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="All Periods" />
+                  <SelectValue placeholder="Semua Periode" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Periods</SelectItem>
+                  <SelectItem value="all">Semua Periode</SelectItem>
                   {uniquePeriods.map(period => (
                     <SelectItem key={period} value={period}>
                       {period}
@@ -657,7 +658,7 @@ export default function ItemsPage() {
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Satuan</label>
               <Select
                 value={unitFilter}
                 onValueChange={(value) => {
@@ -666,10 +667,10 @@ export default function ItemsPage() {
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="All Units" />
+                  <SelectValue placeholder="Semua Satuan" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Units</SelectItem>
+                  <SelectItem value="all">Semua Satuan</SelectItem>
                   <SelectItem value="PCS">Pieces (PCS)</SelectItem>
                   <SelectItem value="PRS">Pairs (PRS)</SelectItem>
                 </SelectContent>
@@ -686,16 +687,16 @@ export default function ItemsPage() {
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="All Status" />
+                  <SelectValue placeholder="Semua Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="pending_approval">Pending Approval</SelectItem>
-                  <SelectItem value="approved">Approved</SelectItem>
-                  <SelectItem value="available">Available</SelectItem>
-                  <SelectItem value="borrowed">Borrowed</SelectItem>
-                  <SelectItem value="in_clearance">In Clearance</SelectItem>
-                  <SelectItem value="rejected">Rejected</SelectItem>
+                  <SelectItem value="all">Semua Status</SelectItem>
+                  <SelectItem value="pending_approval">Menunggu Persetujuan</SelectItem>
+                  <SelectItem value="approved">Disetujui</SelectItem>
+                  <SelectItem value="available">Tersedia</SelectItem>
+                  <SelectItem value="borrowed">Dipinjam</SelectItem>
+                  <SelectItem value="in_clearance">Dalam Pembersihan</SelectItem>
+                  <SelectItem value="rejected">Ditolak</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -710,8 +711,8 @@ export default function ItemsPage() {
         visibleColumns={visibleColumns}
         isLoading={isLoading}
         onEditItem={handleEditItem}
-        emptyMessage="No items found"
-        emptyDescription="Try adjusting your search or filters"
+        emptyMessage="Tidak ada item yang ditemukan"
+        emptyDescription="Coba sesuaikan pencarian atau filter Anda"
         onDeleteItem={canDeleteItem ? handleRemoveItem : undefined}
         canEditItem={canEditItem}
         canDeleteItem={canDeleteItem}
@@ -752,29 +753,29 @@ export default function ItemsPage() {
       <Dialog open={!!importResults} onOpenChange={() => setImportResults(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Import Results</DialogTitle>
+            <DialogTitle>Hasil Impor</DialogTitle>
             <DialogDescription>
-              Import process completed
+              Proses impor selesai
             </DialogDescription>
           </DialogHeader>
           {importResults && (
             <div className="space-y-4">
               <div className="flex justify-between">
-                <span>Successful:</span>
+                <span>Berhasil:</span>
                 <span className="font-medium text-green-600">{importResults.results.success}</span>
               </div>
               <div className="flex justify-between">
-                <span>Failed:</span>
+                <span>Gagal:</span>
                 <span className="font-medium text-red-600">{importResults.results.failed}</span>
               </div>
               
               {importResults.results.errors.length > 0 && (
                 <div>
-                  <h4 className="font-medium mb-2">Errors:</h4>
+                  <h4 className="font-medium mb-2">Kesalahan:</h4>
                   <div className="max-h-40 overflow-y-auto bg-gray-50 p-2 rounded text-sm">
                     {importResults.results.errors.map((error: any, index: number) => (
                       <div key={index} className="mb-1">
-                        Row {error.row}: {error.error}
+                        Baris {error.row}: {error.error}
                       </div>
                     ))}
                   </div>
@@ -783,7 +784,7 @@ export default function ItemsPage() {
             </div>
           )}
           <DialogFooter>
-            <Button onClick={() => setImportResults(null)}>Close</Button>
+            <Button onClick={() => setImportResults(null)}>Tutup</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

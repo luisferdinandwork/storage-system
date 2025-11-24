@@ -92,7 +92,7 @@ export default function ClearanceManagement() {
         const response = await fetch('/api/items/clearance');
         
         if (!response.ok) {
-          throw new Error('Failed to fetch clearance data');
+          throw new Error('Gagal memuat data pembersihan');
         }
         
         const data: ApiResponse = await response.json();
@@ -115,7 +115,7 @@ export default function ClearanceManagement() {
           totalQuantity,
         });
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'An unknown error occurred');
+        setError(err instanceof Error ? err.message : 'Terjadi kesalahan yang tidak diketahui');
       } finally {
         setLoading(false);
       }
@@ -150,7 +150,7 @@ export default function ClearanceManagement() {
     return (
       <div className="flex flex-col justify-center items-center h-96 space-y-4">
         <Loader2 className="h-12 w-12 animate-spin text-blue-500" />
-        <p className="text-gray-500 font-medium">Loading clearance management data...</p>
+        <p className="text-gray-500 font-medium">Memuat data manajemen pembersihan...</p>
       </div>
     );
   }
@@ -162,14 +162,14 @@ export default function ClearanceManagement() {
           <div className="flex items-start space-x-3">
             <XCircle className="h-6 w-6 text-red-500 mt-0.5" />
             <div>
-              <h3 className="text-lg font-semibold text-red-800">Error loading data</h3>
+              <h3 className="text-lg font-semibold text-red-800">Kesalahan memuat data</h3>
               <p className="mt-1 text-sm text-red-700">{error}</p>
               <Button 
                 variant="outline" 
                 className="mt-4 border-red-300 text-red-700 hover:bg-red-100"
                 onClick={() => window.location.reload()}
               >
-                Retry
+                Coba Lagi
               </Button>
             </div>
           </div>
@@ -184,7 +184,7 @@ export default function ClearanceManagement() {
       <div className="flex items-center justify-end">
         <Button variant="outline" className="gap-2">
           <RefreshCw className="h-4 w-4" />
-          Refresh Data
+          Segarkan Data
         </Button>
       </div>
 
@@ -193,45 +193,45 @@ export default function ClearanceManagement() {
         <Card className="shadow-md hover:shadow-lg transition-shadow duration-300 border-l-4 border-l-blue-500">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">
-              Total Items
+              Total Item
             </CardTitle>
             <FileText className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{summary.totalItems}</div>
+            <div className="text-2xl font-bold">{summary.totalItems.toLocaleString('id-ID')}</div>
           </CardContent>
         </Card>
         <Card className="shadow-md hover:shadow-lg transition-shadow duration-300 border-l-4 border-l-amber-500">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">
-              Pending Approval
+              Menunggu Persetujuan
             </CardTitle>
             <AlertTriangle className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{summary.pendingApproval}</div>
+            <div className="text-2xl font-bold">{summary.pendingApproval.toLocaleString('id-ID')}</div>
           </CardContent>
         </Card>
         <Card className="shadow-md hover:shadow-lg transition-shadow duration-300 border-l-4 border-l-green-500">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">
-              Approved Items
+              Item Disetujui
             </CardTitle>
             <CheckCircle className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{summary.approvedItems}</div>
+            <div className="text-2xl font-bold">{summary.approvedItems.toLocaleString('id-ID')}</div>
           </CardContent>
         </Card>
         <Card className="shadow-md hover:shadow-lg transition-shadow duration-300 border-l-4 border-l-purple-500">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">
-              Total Quantity
+              Total Kuantitas
             </CardTitle>
             <Archive className="h-4 w-4 text-purple-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{summary.totalQuantity}</div>
+            <div className="text-2xl font-bold">{summary.totalQuantity.toLocaleString('id-ID')}</div>
           </CardContent>
         </Card>
       </div>
@@ -241,10 +241,10 @@ export default function ClearanceManagement() {
         <CardHeader className="border-b bg-gradient-to-r from-green-50 to-teal-50">
           <CardTitle className="flex items-center gap-2">
             <Archive className="h-5 w-5 text-green-600" />
-            Clearance Items
+            Item Pembersihan
           </CardTitle>
           <CardDescription>
-            Items currently in clearance process
+            Item yang sedang dalam proses pembersihan
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-6">
@@ -252,12 +252,11 @@ export default function ClearanceManagement() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Product Code</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Brand</TableHead>
-                  <TableHead>Quantity</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead>Kode Produk</TableHead>
+                  <TableHead>Deskripsi</TableHead>
+                  <TableHead>Merek</TableHead>
+                  <TableHead>Kuantitas</TableHead>
+                  <TableHead>Lokasi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -273,18 +272,11 @@ export default function ClearanceManagement() {
                       {item.location ? (
                         <div className="flex items-center gap-1">
                           <MapPin className="h-4 w-4 text-gray-500" />
-                          <span>{item.location.name} (Box {item.location.boxNumber})</span>
+                          <span>{item.location.name} (Kotak {item.location.boxNumber})</span>
                         </div>
                       ) : (
-                        <span className="text-gray-500">Not assigned</span>
+                        <span className="text-gray-500">Belum ditetapkan</span>
                       )}
-                    </TableCell>
-                    <TableCell>
-                      <Button size="sm" variant="outline" asChild>
-                        <Link href={`/items/${item.productCode}`}>
-                          <Eye className="h-4 w-4" />
-                        </Link>
-                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -293,7 +285,7 @@ export default function ClearanceManagement() {
           </div>
           {clearanceItems.length === 0 && (
             <div className="text-center py-8 text-gray-500">
-              No clearance items found
+              Tidak ada item pembersihan ditemukan
             </div>
           )}
         </CardContent>
@@ -303,7 +295,7 @@ export default function ClearanceManagement() {
         <Button className="w-full md:w-auto bg-gradient-to-r from-green-500 to-teal-600 hover:from-green-600 hover:to-teal-700" asChild>
           <Link href="/dashboard/item-clearance">
             <Plus className="h-4 w-4 mr-2" />
-            Manage All Clearance Items
+            Kelola Semua Item Pembersihan
           </Link>
         </Button>
       </div>

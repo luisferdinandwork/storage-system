@@ -219,7 +219,7 @@ export default function ItemManagement() {
             Recent Items
           </CardTitle>
           <CardDescription>
-            Recently added or modified items
+            Penambahan dan Perubahan data barang terbaru
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-6">
@@ -232,7 +232,6 @@ export default function ItemManagement() {
                   <TableHead>Brand</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Stock</TableHead>
-                  <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -246,20 +245,6 @@ export default function ItemManagement() {
                       <Badge variant={item.totalStock < 10 ? "destructive" : "outline"}>
                         {item.totalStock}
                       </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex space-x-2">
-                        <Button size="sm" variant="outline" asChild>
-                          <Link href={`/items/${item.productCode}`}>
-                            <Eye className="h-4 w-4" />
-                          </Link>
-                        </Button>
-                        <Button size="sm" variant="outline" asChild>
-                          <Link href={`/items/${item.productCode}/edit`}>
-                            <Edit className="h-4 w-4" />
-                          </Link>
-                        </Button>
-                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -284,7 +269,7 @@ export default function ItemManagement() {
               Items by Brand
             </CardTitle>
             <CardDescription>
-              Distribution of items by brand
+              Pembagian Item berdasarkan Brand
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-6">
@@ -323,7 +308,7 @@ export default function ItemManagement() {
               Items by Category
             </CardTitle>
             <CardDescription>
-              Distribution of items by category
+              Pembagian Item berdasarkan Category
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-6">

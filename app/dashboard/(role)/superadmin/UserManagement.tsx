@@ -41,7 +41,7 @@ export default function UserManagement() {
         const response = await fetch('/api/users');
         
         if (!response.ok) {
-          throw new Error('Failed to fetch user data');
+          throw new Error('Gagal memuat data pengguna');
         }
         
         const userData: User[] = await response.json();
@@ -65,7 +65,7 @@ export default function UserManagement() {
         
         setDepartments(Array.from(deptMap.values()));
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'An unknown error occurred');
+        setError(err instanceof Error ? err.message : 'Terjadi kesalahan yang tidak diketahui');
       } finally {
         setLoading(false);
       }
@@ -87,7 +87,7 @@ export default function UserManagement() {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
+    return date.toLocaleDateString('id-ID', { 
       year: 'numeric', 
       month: 'short', 
       day: 'numeric' 
@@ -120,7 +120,7 @@ export default function UserManagement() {
     return (
       <div className="flex flex-col justify-center items-center h-96 space-y-4">
         <Loader2 className="h-12 w-12 animate-spin text-blue-500" />
-        <p className="text-gray-500 font-medium">Loading user management data...</p>
+        <p className="text-gray-500 font-medium">Memuat data pengguna...</p>
       </div>
     );
   }
@@ -132,14 +132,14 @@ export default function UserManagement() {
           <div className="flex items-start space-x-3">
             <Trash2 className="h-6 w-6 text-red-500 mt-0.5" />
             <div>
-              <h3 className="text-lg font-semibold text-red-800">Error loading data</h3>
+              <h3 className="text-lg font-semibold text-red-800">Kesalahan memuat data</h3>
               <p className="mt-1 text-sm text-red-700">{error}</p>
               <Button 
                 variant="outline" 
                 className="mt-4 border-red-300 text-red-700 hover:bg-red-100"
                 onClick={() => window.location.reload()}
               >
-                Retry
+                Coba Lagi
               </Button>
             </div>
           </div>
@@ -154,7 +154,7 @@ export default function UserManagement() {
       <div className="flex items-center justify-end">
         <Button variant="outline" className="gap-2">
           <RefreshCw className="h-4 w-4" />
-          Refresh Data
+          Segarkan Data
         </Button>
       </div>
 
@@ -165,10 +165,10 @@ export default function UserManagement() {
           <CardHeader className="border-b bg-gradient-to-r from-purple-50 to-pink-50">
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5 text-purple-600" />
-              Users by Role
+              Pengguna berdasarkan Peran
             </CardTitle>
             <CardDescription>
-              Distribution of users across different roles
+              Distribusi pengguna berdasarkan peran masing-masing
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-6">
@@ -190,9 +190,9 @@ export default function UserManagement() {
                 ))}
                 <div className="pt-4 border-t bg-gray-50 rounded-lg p-4">
                   <div className="flex justify-between items-center">
-                    <span className="font-semibold text-gray-700">Total Users</span>
+                    <span className="font-semibold text-gray-700">Total Pengguna</span>
                     <Badge variant="default" className="text-lg px-4 py-1">
-                      {userRoleData.reduce((sum, item) => sum + item.count, 0).toLocaleString()}
+                      {userRoleData.reduce((sum, item) => sum + item.count, 0).toLocaleString('id-ID')}
                     </Badge>
                   </div>
                 </div>
@@ -200,7 +200,7 @@ export default function UserManagement() {
             ) : (
               <div className="text-center py-12 text-gray-400">
                 <Users className="h-16 w-16 mx-auto text-gray-300 mb-3" />
-                <p className="text-lg font-medium">No user data available</p>
+                <p className="text-lg font-medium">Tidak ada data pengguna</p>
               </div>
             )}
           </CardContent>
@@ -211,10 +211,10 @@ export default function UserManagement() {
           <CardHeader className="border-b bg-gradient-to-r from-yellow-50 to-orange-50">
             <CardTitle className="flex items-center gap-2">
               <Building className="h-5 w-5 text-orange-600" />
-              Departments Overview
+              Ringkasan Departemen
             </CardTitle>
             <CardDescription>
-              Manage departments and their users
+              Kelola departemen dan penggunanya
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-6">
@@ -229,7 +229,7 @@ export default function UserManagement() {
                     <span className="font-semibold text-gray-900">{dept.name}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-500">Users:</span>
+                    <span className="text-gray-500">Pengguna:</span>
                     <Badge variant="secondary" className="bg-orange-50 text-orange-800 border-orange-200">
                       {dept.userCount}
                     </Badge>
@@ -239,7 +239,7 @@ export default function UserManagement() {
               {departments.length === 0 && (
                 <div className="text-center py-8 text-gray-400">
                   <Building className="h-12 w-12 mx-auto text-gray-300 mb-2" />
-                  <p>No departments found</p>
+                  <p>Tidak ada departemen ditemukan</p>
                 </div>
               )}
             </div>
@@ -247,7 +247,7 @@ export default function UserManagement() {
               <Button className="w-full bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700" asChild>
                 <Link href="/dashboard/departments">
                   <Plus className="h-4 w-4 mr-2" />
-                  Manage Departments
+                  Kelola Departemen
                 </Link>
               </Button>
             </div>
@@ -260,10 +260,10 @@ export default function UserManagement() {
         <CardHeader className="border-b bg-gradient-to-r from-green-50 to-teal-50">
           <CardTitle className="flex items-center gap-2">
             <Users className="h-5 w-5 text-green-600" />
-            Recent Users
+            Pengguna Terbaru
           </CardTitle>
           <CardDescription>
-            Recently added or modified users
+            Pengguna yang baru saja ditambahkan atau diubah
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-6">
@@ -271,10 +271,10 @@ export default function UserManagement() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
+                  <TableHead>Nama</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
-                  <TableHead>Department</TableHead>
+                  <TableHead>Departemen</TableHead>
                   <TableHead>Joined</TableHead>
                 </TableRow>
               </TableHeader>
@@ -297,7 +297,7 @@ export default function UserManagement() {
           </div>
           {users.length === 0 && (
             <div className="text-center py-8 text-gray-500">
-              No users found
+              Tidak ada pengguna ditemukan
             </div>
           )}
         </CardContent>

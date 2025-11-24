@@ -59,13 +59,13 @@ export default function SystemOverview() {
         const response = await fetch('/api/dashboard/system-overview');
         
         if (!response.ok) {
-          throw new Error('Failed to fetch system overview data');
+          throw new Error('Gagal memuat data ringkasan sistem');
         }
         
         const overviewData: SystemOverviewData = await response.json();
         setData(overviewData);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'An unknown error occurred');
+        setError(err instanceof Error ? err.message : 'Terjadi kesalahan yang tidak diketahui');
       } finally {
         setLoading(false);
       }
@@ -79,18 +79,18 @@ export default function SystemOverview() {
     const now = new Date();
     const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
     
-    if (diffInHours < 1) return 'Just now';
-    if (diffInHours < 24) return `${diffInHours}h ago`;
+    if (diffInHours < 1) return 'Baru saja';
+    if (diffInHours < 24) return `${diffInHours}j yang lalu`;
     
     const diffInDays = Math.floor(diffInHours / 24);
-    return `${diffInDays}d ago`;
+    return `${diffInDays}h yang lalu`;
   };
 
   if (loading) {
     return (
       <div className="flex flex-col justify-center items-center h-96 space-y-4">
         <Loader2 className="h-12 w-12 animate-spin text-blue-500" />
-        <p className="text-gray-500 font-medium">Loading system overview...</p>
+        <p className="text-gray-500 font-medium">Memuat ringkasan sistem...</p>
       </div>
     );
   }
@@ -102,14 +102,14 @@ export default function SystemOverview() {
           <div className="flex items-start space-x-3">
             <XCircle className="h-6 w-6 text-red-500 mt-0.5" />
             <div>
-              <h3 className="text-lg font-semibold text-red-800">Error loading data</h3>
+              <h3 className="text-lg font-semibold text-red-800">Kesalahan memuat data</h3>
               <p className="mt-1 text-sm text-red-700">{error}</p>
               <Button 
                 variant="outline" 
                 className="mt-4 border-red-300 text-red-700 hover:bg-red-100"
                 onClick={() => window.location.reload()}
               >
-                Retry
+                Coba Lagi
               </Button>
             </div>
           </div>
@@ -136,8 +136,8 @@ export default function SystemOverview() {
       return (
         <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
           <p className="font-semibold text-gray-800">{data.name}</p>
-          <p className="text-sm text-gray-600">Quantity: <span className="font-medium">{data.value}</span></p>
-          <p className="text-sm text-gray-600">Percentage: <span className="font-medium">{percentage}%</span></p>
+          <p className="text-sm text-gray-600">Kuantitas: <span className="font-medium">{data.value}</span></p>
+          <p className="text-sm text-gray-600">Persentase: <span className="font-medium">{percentage}%</span></p>
         </div>
       );
     }
@@ -173,7 +173,7 @@ export default function SystemOverview() {
       <div className="flex items-center justify-end">
         <Button variant="outline" className="gap-2">
           <Activity className="h-4 w-4" />
-          Refresh Data
+          Segarkan Data
         </Button>
       </div>
 
@@ -184,10 +184,10 @@ export default function SystemOverview() {
           <CardHeader className="border-b bg-gradient-to-r from-blue-50 to-indigo-50">
             <CardTitle className="flex items-center gap-2">
               <Boxes className="h-5 w-5 text-blue-600" />
-              Stock Distribution
+              Distribusi Stok
             </CardTitle>
             <CardDescription>
-              Current distribution of items across different states
+              Distribusi item saat ini dalam berbagai kondisi
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-6">
@@ -217,15 +217,15 @@ export default function SystemOverview() {
                 </div>
                 <div className="mt-auto pt-4 border-t bg-gray-50 rounded-lg p-4">
                   <div className="flex justify-between items-center">
-                    <span className="font-semibold text-gray-700">Total Items</span>
-                    <Badge variant="default" className="text-lg px-4 py-1">{totalStock.toLocaleString()}</Badge>
+                    <span className="font-semibold text-gray-700">Total Item</span>
+                    <Badge variant="default" className="text-lg px-4 py-1">{totalStock.toLocaleString('id-ID')}</Badge>
                   </div>
                 </div>
               </div>
             ) : (
               <div className="text-center py-12 text-gray-400">
                 <Boxes className="h-16 w-16 mx-auto text-gray-300 mb-3" />
-                <p className="text-lg font-medium">No stock data available</p>
+                <p className="text-lg font-medium">Tidak ada data stok tersedia</p>
               </div>
             )}
           </CardContent>
@@ -236,10 +236,10 @@ export default function SystemOverview() {
           <CardHeader className="border-b bg-gradient-to-r from-green-50 to-teal-50">
             <CardTitle className="flex items-center gap-2">
               <Clock className="h-5 w-5 text-green-600" />
-              Recent Activity
+              Aktivitas Terkini
             </CardTitle>
             <CardDescription>
-              Latest system-wide activities
+              Aktivitas terbaru di seluruh sistem
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-6">
@@ -264,20 +264,20 @@ export default function SystemOverview() {
                               <span className="text-xs text-gray-500">{formatDate(activity.createdAt)}</span>
                             </div>
                             <p className="text-sm text-gray-900 mt-1 font-medium">{activity.description}</p>
-                            <p className="text-xs text-gray-500 mt-1">by {activity.performedBy || 'System'}</p>
+                            <p className="text-xs text-gray-500 mt-1">oleh {activity.performedBy || 'Sistem'}</p>
                           </div>
                         </div>
                       </div>
                     ))}
                   </div>
                   <div className="mt-auto pt-4">
-                    <Button variant="outline" className="w-full">View All Activity</Button>
+                    <Button variant="outline" className="w-full">Lihat Semua Aktivitas</Button>
                   </div>
                 </>
               ) : (
                 <div className="flex-grow flex flex-col items-center justify-center text-gray-400">
                   <Clock className="h-16 w-16 mx-auto text-gray-300 mb-3" />
-                  <p className="text-lg font-medium">No recent activities</p>
+                  <p className="text-lg font-medium">Tidak ada aktivitas terkini</p>
                 </div>
               )}
             </div>
