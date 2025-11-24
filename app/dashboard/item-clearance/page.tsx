@@ -57,6 +57,7 @@ import {
   Upload,
   FileDown,
 } from 'lucide-react';
+import { index } from 'drizzle-orm/gel-core';
 
 interface Box {
   id: string;
@@ -610,10 +611,11 @@ export default function ClearanceItemsPage() {
             </TableHeader>
             <TableBody>
               {filteredItems.map((item) => (
-                <TableRow key={item.productCode}>
+                <TableRow key={`${item.productCode}-${item.stock?.id || index}`}>
                   {canManageClearance && (
                     <TableCell>
                       <Checkbox
+                        id={`select-${item.productCode}-${item.stock?.id || index}`}
                         checked={selectedItems.some(si => si.itemId === item.productCode && si.stockId === item.stock?.id)}
                         onCheckedChange={(checked) => {
                           if (item.stock) {
@@ -668,26 +670,20 @@ export default function ClearanceItemsPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    {item.location ? (
-                      <div className="text-sm">
-                        <div>{item.location.boxNumber}</div>
-                        <div className="text-gray-500">{item.location.name}</div>
-                      </div>
-                    ) : item.stock?.boxId ? (
-                      (() => {
-                        const box = getBoxById(item.stock.boxId);
-                        return box ? (
-                          <div className="text-sm">
-                            <div>{box.boxNumber}</div>
-                            <div className="text-gray-500">{box.location.name}</div>
-                          </div>
-                        ) : (
-                          <span className="text-gray-500">Unknown Box</span>
-                        );
-                      })()
-                    ) : (
-                      <span className="text-gray-500">Unassigned</span>
-                    )}
+                    {item.stock?.boxId ? (
+                        (() => {
+                          const box = getBoxById(item.stock.boxId);
+                          return box ? (
+                            <span className="text-sm font-medium">{box.boxNumber}</span>
+                          ) : (
+                            <span className="text-gray-500">Unknown</span>
+                          );
+                        })()
+                      ) : item.location?.boxNumber ? (
+                        <span className="text-sm font-medium">{item.location.boxNumber}</span>
+                      ) : (
+                        <span className="text-gray-500">Unassigned</span>
+                      )}
                   </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
@@ -699,10 +695,6 @@ export default function ClearanceItemsPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem onClick={() => handleViewDetails(item)}>
-                          <Eye className="mr-2 h-4 w-4" />
-                          View Details
-                        </DropdownMenuItem>
                         
                         {item.images && item.images.length > 0 && (
                           <DropdownMenuItem>
