@@ -263,9 +263,9 @@ export default function PendingApprovalsPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending_manager':
-        return <Badge variant="outline" className="bg-yellow-100 text-yellow-800">Pending Manager</Badge>;
+        return <Badge variant="outline" className="bg-yellow-100 text-yellow-800">Approval Manager</Badge>;
       case 'pending_storage':
-        return <Badge variant="outline" className="bg-blue-100 text-blue-800">Pending Storage</Badge>;
+        return <Badge variant="outline" className="bg-blue-100 text-blue-800">Approval Storage Master</Badge>;
       case 'pending_extension':
         return <Badge variant="outline" className="bg-orange-100 text-orange-800">Extension Request</Badge>;
       default:
@@ -314,8 +314,8 @@ export default function PendingApprovalsPage() {
       
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Pending List</h1>
-          <p className="text-gray-600">Review and approve borrow requests</p>
+          <h1 className="text-2xl font-bold text-gray-900">Daftar Tertunda</h1>
+          <p className="text-gray-600">Daftar Peminjaman yang perlu approval</p>
         </div>
       </div>
 
@@ -336,8 +336,8 @@ export default function PendingApprovalsPage() {
           className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
         >
           <option value="all">All Status</option>
-          <option value="pending_manager">Pending Manager</option>
-          <option value="pending_storage">Pending Storage</option>
+          <option value="pending_manager">Approval Manager</option>
+          <option value="pending_storage">Approval Storage Master</option>
           <option value="pending_extension">Extension Request</option>
         </select>
       </div>

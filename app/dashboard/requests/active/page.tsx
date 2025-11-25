@@ -520,8 +520,8 @@ export default function ActiveLoansPage() {
       
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Active Lending</h1>
-          <p className="text-gray-600">View and manage currently borrowed items</p>
+          <h1 className="text-2xl font-bold text-gray-900">Peminjaman Aktif</h1>
+          <p className="text-gray-600">Menyelesaikan peminjaman dan pengaturan item Seeding</p>
         </div>
         <div className="flex items-center space-x-2">
           <Badge variant="outline" className="bg-green-100 text-green-800">
@@ -795,9 +795,7 @@ export default function ActiveLoansPage() {
                     <SelectValue placeholder="Select condition" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="excellent">Excellent</SelectItem>
                     <SelectItem value="good">Good</SelectItem>
-                    <SelectItem value="fair">Fair</SelectItem>
                     <SelectItem value="poor">Poor</SelectItem>
                   </SelectContent>
                 </Select>
@@ -919,9 +917,7 @@ export default function ActiveLoansPage() {
                     <SelectValue placeholder="Select condition" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="excellent">Excellent</SelectItem>
                     <SelectItem value="good">Good</SelectItem>
-                    <SelectItem value="fair">Fair</SelectItem>
                     <SelectItem value="poor">Poor</SelectItem>
                   </SelectContent>
                 </Select>

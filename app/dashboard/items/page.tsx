@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Package, Plus, Search, Filter, Columns, Upload, Download, Trash2, Archive, ChevronRight, MoreHorizontal, Edit, Eye, X } from 'lucide-react';
+import { Package, Plus, Search, Filter, Columns, Upload, Download, Trash2, Archive, ChevronRight, MoreHorizontal, Edit, Eye, X, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AddItemModal } from '@/components/items/add-item-modal';
 import { MessageContainer } from '@/components/ui/message';
@@ -26,29 +26,54 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useExportItems } from '@/hooks/use-export-items';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 // Define all possible columns
 const ALL_COLUMNS = [
   { id: 'item', label: 'Item', defaultVisible: true },
-  { id: 'brandCode', label: 'Brand', defaultVisible: true },
-  { id: 'productDivision', label: 'Division', defaultVisible: true },
-  { id: 'category', label: 'Category', defaultVisible: true },
-  { id: 'season', label: 'Season', defaultVisible: true },
-  { id: 'period', label: 'Period', defaultVisible: true },
-  { id: 'unit', label: 'Unit', defaultVisible: true },
-  { id: 'createdBy', label: 'Created By', defaultVisible: true },
-  { id: 'stock', label: 'Stock', defaultVisible: true },
+  { id: 'brandCode', label: 'Merek', defaultVisible: true },
+  { id: 'productDivision', label: 'Divisi', defaultVisible: true },
+  { id: 'category', label: 'Kategori', defaultVisible: true },
+  { id: 'season', label: 'Musim', defaultVisible: true },
+  { id: 'period', label: 'Periode', defaultVisible: true },
+  { id: 'unit', label: 'Satuan', defaultVisible: true },
+  { id: 'createdBy', label: 'Dibuat Oleh', defaultVisible: true },
+  { id: 'stock', label: 'Stok', defaultVisible: true },
   { id: 'status', label: 'Status', defaultVisible: true },
-  { id: 'actions', label: 'Actions', defaultVisible: true },
+  { id: 'actions', label: 'Aksi', defaultVisible: true },
+];
+
+// Filter options
+const CATEGORY_OPTIONS = [
+  { value: '00', label: 'Lifestyle' },
+  { value: '01', label: 'Football' },
+  { value: '02', label: 'Futsal' },
+  { value: '03', label: 'Street Soccer' },
+  { value: '04', label: 'Running' },
+  { value: '05', label: 'Training' },
+  { value: '06', label: 'Volley' },
+  { value: '08', label: 'Badminton' },
+  { value: '09', label: 'Tennis' },
+  { value: '10', label: 'Basketball' },
+  { value: '12', label: 'Skateboard' },
+  { value: '14', label: 'Swimming' },
+  { value: '17', label: 'Back to school' },
+];
+
+const STATUS_OPTIONS = [
+  { value: 'pending_approval', label: 'Menunggu Persetujuan' },
+  { value: 'approved', label: 'Disetujui' },
+  { value: 'available', label: 'Tersedia' },
+  { value: 'borrowed', label: 'Dipinjam' },
+  { value: 'in_clearance', label: 'Dalam Pembersihan' },
+  { value: 'rejected', label: 'Ditolak' },
+];
+
+const UNIT_OPTIONS = [
+  { value: 'PCS', label: 'Pieces (PCS)' },
+  { value: 'PRS', label: 'Pairs (PRS)' },
 ];
 
 export default function ItemsPage() {
@@ -57,13 +82,13 @@ export default function ItemsPage() {
   const [items, setItems] = useState<any[]>([]);
   const [boxes, setBoxes] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [divisionFilter, setDivisionFilter] = useState<string>('all');
-  const [brandFilter, setBrandFilter] = useState<string>('all');
-  const [seasonFilter, setSeasonFilter] = useState<string>('all');
-  const [periodFilter, setPeriodFilter] = useState<string>('all');
-  const [unitFilter, setUnitFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [categoryFilters, setCategoryFilters] = useState<string[]>([]);
+  const [divisionFilters, setDivisionFilters] = useState<string[]>([]);
+  const [brandFilters, setBrandFilters] = useState<string[]>([]);
+  const [seasonFilters, setSeasonFilters] = useState<string[]>([]);
+  const [periodFilters, setPeriodFilters] = useState<string[]>([]);
+  const [unitFilters, setUnitFilters] = useState<string[]>([]);
+  const [statusFilters, setStatusFilters] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showColumnSelector, setShowColumnSelector] = useState(false);
@@ -100,11 +125,11 @@ export default function ItemsPage() {
         setItems(data);
         setCurrentPage(1);
       } else {
-        addMessage('error', 'Failed to fetch items', 'Error');
+        addMessage('error', 'Gagal mengambil data item', 'Error');
       }
     } catch (error) {
       console.error('Failed to fetch items:', error);
-      addMessage('error', 'Failed to fetch items', 'Error');
+      addMessage('error', 'Gagal mengambil data item', 'Error');
     } finally {
       setIsLoading(false);
     }
@@ -146,7 +171,7 @@ export default function ItemsPage() {
   const handleAddItemSuccess = () => {
     setShowAddModal(false);
     fetchItems();
-    addMessage('success', 'Item added successfully', 'Success');
+    addMessage('success', 'Item berhasil ditambahkan', 'Sukses');
   };
 
   const handleRemoveItem = async (productCode: string) => {
@@ -157,14 +182,14 @@ export default function ItemsPage() {
 
       if (response.ok) {
         fetchItems();
-        addMessage('success', 'Item deleted successfully', 'Success');
+        addMessage('success', 'Item berhasil dihapus', 'Sukses');
       } else {
         const error = await response.json();
-        addMessage('error', error.error || 'Failed to remove item', 'Error');
+        addMessage('error', error.error || 'Gagal menghapus item', 'Error');
       }
     } catch (error) {
       console.error('Failed to remove item:', error);
-      addMessage('error', 'Failed to remove item', 'Error');
+      addMessage('error', 'Gagal menghapus item', 'Error');
     }
   };
 
@@ -186,14 +211,14 @@ export default function ItemsPage() {
         fetchItems();
         setSelectedItems([]);
         setShowBulkDeleteDialog(false);
-        addMessage('success', `${result.deletedCount} items deleted successfully`, 'Success');
+        addMessage('success', `${result.deletedCount} item berhasil dihapus`, 'Sukses');
       } else {
         const error = await response.json();
-        addMessage('error', error.error || 'Failed to delete items', 'Error');
+        addMessage('error', error.error || 'Gagal menghapus item', 'Error');
       }
     } catch (error) {
       console.error('Failed to bulk delete items:', error);
-      addMessage('error', 'Failed to delete items', 'Error');
+      addMessage('error', 'Gagal menghapus item', 'Error');
     } finally {
       setIsBulkDeleting(false);
     }
@@ -218,20 +243,20 @@ export default function ItemsPage() {
         fetchItems();
         setSelectedItems([]);
         setShowBulkClearanceDialog(false);
-        addMessage('success', `${result.results.length} items moved to clearance successfully`, 'Success');
+        addMessage('success', `${result.results.length} item berhasil dipindahkan ke pembersihan`, 'Sukses');
         
         if (result.errors && result.errors.length > 0) {
           result.errors.forEach((error: any) => {
-            addMessage('error', `Error with item: ${error.error}`, 'Error');
+            addMessage('error', `Error pada item: ${error.error}`, 'Error');
           });
         }
       } else {
         const error = await response.json();
-        addMessage('error', error.error || 'Failed to move items to clearance', 'Error');
+        addMessage('error', error.error || 'Gagal memindahkan item ke pembersihan', 'Error');
       }
     } catch (error) {
       console.error('Failed to move items to clearance:', error);
-      addMessage('error', 'Failed to move items to clearance', 'Error');
+      addMessage('error', 'Gagal memindahkan item ke pembersihan', 'Error');
     } finally {
       setIsBulkClearing(false);
     }
@@ -273,7 +298,7 @@ export default function ItemsPage() {
 
   const handleEditItem = () => {
     fetchItems();
-    addMessage('success', 'Item updated successfully', 'Success');
+    addMessage('success', 'Item berhasil diperbarui', 'Sukses');
   };
 
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -298,18 +323,18 @@ export default function ItemsPage() {
         fetchItems();
         
         if (result.results.success > 0) {
-          addMessage('success', `${result.results.success} items imported successfully`, 'Success');
+          addMessage('success', `${result.results.success} item berhasil diimpor`, 'Sukses');
         }
         
         if (result.results.failed > 0) {
-          addMessage('error', `${result.results.failed} items failed to import`, 'Error');
+          addMessage('error', `${result.results.failed} item gagal diimpor`, 'Error');
         }
       } else {
         const error = await response.json();
-        addMessage('error', error.error || 'Failed to import items', 'Error');
+        addMessage('error', error.error || 'Gagal mengimpor item', 'Error');
       }
     } catch (error) {
-      addMessage('error', 'Failed to import items', 'Error');
+      addMessage('error', 'Gagal mengimpor item', 'Error');
     } finally {
       setIsImporting(false);
       if (fileInputRef.current) {
@@ -327,13 +352,13 @@ export default function ItemsPage() {
   const filteredItems = items.filter(item => {
     const matchesSearch = item.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
                        item.productCode.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = categoryFilter === 'all' || item.productCategory === categoryFilter;
-    const matchesDivision = divisionFilter === 'all' || item.productDivision === divisionFilter;
-    const matchesBrand = brandFilter === 'all' || item.brandCode === brandFilter;
-    const matchesSeason = seasonFilter === 'all' || item.season === seasonFilter;
-    const matchesPeriod = periodFilter === 'all' || item.period === periodFilter;
-    const matchesUnit = unitFilter === 'all' || item.unitOfMeasure === unitFilter;
-    const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
+    const matchesCategory = categoryFilters.length === 0 || categoryFilters.includes(item.productCategory);
+    const matchesDivision = divisionFilters.length === 0 || divisionFilters.includes(item.productDivision);
+    const matchesBrand = brandFilters.length === 0 || brandFilters.includes(item.brandCode);
+    const matchesSeason = seasonFilters.length === 0 || seasonFilters.includes(item.season);
+    const matchesPeriod = periodFilters.length === 0 || periodFilters.includes(item.period);
+    const matchesUnit = unitFilters.length === 0 || unitFilters.includes(item.unitOfMeasure);
+    const matchesStatus = statusFilters.length === 0 || statusFilters.includes(item.status);
 
     return matchesSearch && matchesCategory && matchesDivision && matchesBrand && 
            matchesSeason && matchesPeriod && matchesUnit && matchesStatus;
@@ -355,6 +380,107 @@ export default function ItemsPage() {
   const canExportItems = isSuperAdmin || isItemMaster;
   const canClearance = isSuperAdmin || isItemMaster;
 
+  // Handle filter changes
+  const handleCategoryFilterChange = (value: string, checked: boolean) => {
+    if (checked) {
+      setCategoryFilters(prev => [...prev, value]);
+    } else {
+      setCategoryFilters(prev => prev.filter(v => v !== value));
+    }
+    setCurrentPage(1);
+  };
+
+  const handleDivisionFilterChange = (value: string, checked: boolean) => {
+    if (checked) {
+      setDivisionFilters(prev => [...prev, value]);
+    } else {
+      setDivisionFilters(prev => prev.filter(v => v !== value));
+    }
+    setCurrentPage(1);
+  };
+
+  const handleBrandFilterChange = (value: string, checked: boolean) => {
+    if (checked) {
+      setBrandFilters(prev => [...prev, value]);
+    } else {
+      setBrandFilters(prev => prev.filter(v => v !== value));
+    }
+    setCurrentPage(1);
+  };
+
+  const handleSeasonFilterChange = (value: string, checked: boolean) => {
+    if (checked) {
+      setSeasonFilters(prev => [...prev, value]);
+    } else {
+      setSeasonFilters(prev => prev.filter(v => v !== value));
+    }
+    setCurrentPage(1);
+  };
+
+  const handlePeriodFilterChange = (value: string, checked: boolean) => {
+    if (checked) {
+      setPeriodFilters(prev => [...prev, value]);
+    } else {
+      setPeriodFilters(prev => prev.filter(v => v !== value));
+    }
+    setCurrentPage(1);
+  };
+
+  const handleUnitFilterChange = (value: string, checked: boolean) => {
+    if (checked) {
+      setUnitFilters(prev => [...prev, value]);
+    } else {
+      setUnitFilters(prev => prev.filter(v => v !== value));
+    }
+    setCurrentPage(1);
+  };
+
+  const handleStatusFilterChange = (value: string, checked: boolean) => {
+    if (checked) {
+      setStatusFilters(prev => [...prev, value]);
+    } else {
+      setStatusFilters(prev => prev.filter(v => v !== value));
+    }
+    setCurrentPage(1);
+  };
+
+  // Clear all filters
+  const clearAllFilters = () => {
+    setCategoryFilters([]);
+    setDivisionFilters([]);
+    setBrandFilters([]);
+    setSeasonFilters([]);
+    setPeriodFilters([]);
+    setUnitFilters([]);
+    setStatusFilters([]);
+    setCurrentPage(1);
+  };
+
+  // Check if any filter is active
+  const hasActiveFilters = categoryFilters.length > 0 || 
+                          divisionFilters.length > 0 || 
+                          brandFilters.length > 0 || 
+                          seasonFilters.length > 0 || 
+                          periodFilters.length > 0 || 
+                          unitFilters.length > 0 || 
+                          statusFilters.length > 0;
+
+  // Get filter label by value
+  const getCategoryLabel = (value: string) => {
+    const category = CATEGORY_OPTIONS.find(c => c.value === value);
+    return category ? category.label : value;
+  };
+
+  const getStatusLabel = (value: string) => {
+    const status = STATUS_OPTIONS.find(s => s.value === value);
+    return status ? status.label : value;
+  };
+
+  const getUnitLabel = (value: string) => {
+    const unit = UNIT_OPTIONS.find(u => u.value === value);
+    return unit ? unit.label : value;
+  };
+
   return (
     <div className="space-y-6">
       {/* Message Container */}
@@ -362,8 +488,8 @@ export default function ItemsPage() {
       
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Items</h1>
-          <p className="text-gray-500 mt-1">Manage your inventory items</p>
+          <h1 className="text-3xl font-bold text-gray-900">Item</h1>
+          <p className="text-gray-500 mt-1">Kelola item inventaris Anda</p>
         </div>
         
         <div className="flex flex-wrap gap-2">
@@ -372,24 +498,24 @@ export default function ItemsPage() {
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="gap-2">
                 <MoreHorizontal className="h-4 w-4" />
-                Actions
+                Aksi
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Item Actions</DropdownMenuLabel>
+              <DropdownMenuLabel>Aksi Item</DropdownMenuLabel>
               
               {/* Export All Submenu */}
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
                   <Download className="mr-2 h-4 w-4" />
-                  Export All
+                  Ekspor Semua
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
                   <DropdownMenuItem onClick={() => handleExportAll('csv')} disabled={isExporting}>
-                    Export All as CSV
+                    Ekspor Semua sebagai CSV
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handleExportAll('excel')} disabled={isExporting}>
-                    Export All as Excel
+                    Ekspor Semua sebagai Excel
                   </DropdownMenuItem>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
@@ -400,7 +526,7 @@ export default function ItemsPage() {
                   selectedItems.length === 0 || isExporting ? "opacity-50 cursor-not-allowed" : ""
                 )}>
                   <Download className="mr-2 h-4 w-4" />
-                  Export Selected ({selectedItems.length})
+                  Ekspor yang Dipilih ({selectedItems.length})
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
                   <DropdownMenuItem 
@@ -413,7 +539,7 @@ export default function ItemsPage() {
                       selectedItems.length === 0 || isExporting ? "opacity-50 cursor-not-allowed" : ""
                     )}
                   >
-                    Export Selected as CSV
+                    Ekspor yang Dipilih sebagai CSV
                   </DropdownMenuItem>
                   <DropdownMenuItem 
                     onClick={() => {
@@ -425,7 +551,7 @@ export default function ItemsPage() {
                       selectedItems.length === 0 || isExporting ? "opacity-50 cursor-not-allowed" : ""
                     )}
                   >
-                    Export Selected as Excel
+                    Ekspor yang Dipilih sebagai Excel
                   </DropdownMenuItem>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
@@ -437,9 +563,10 @@ export default function ItemsPage() {
                   <DropdownMenuItem 
                     disabled={selectedItems.length === 0 || isBulkClearing}
                     onClick={() => setShowBulkClearanceDialog(true)}
+                    className="bg-orange-100 text-orange-500"
                   >
                     <Archive className="mr-2 h-4 w-4" />
-                    Move to Clearance ({selectedItems.length})
+                    Pindah ke Clearance ({selectedItems.length})
                   </DropdownMenuItem>
                 </>
               )}
@@ -449,18 +576,18 @@ export default function ItemsPage() {
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
                   <Upload className="mr-2 h-4 w-4" />
-                  Import
+                  Impor
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
                   <DropdownMenuItem onClick={() => handleDownloadTemplate('csv')}>
-                    Download CSV Template
+                    Unduh Template CSV
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handleDownloadTemplate('excel')}>
-                    Download Excel Template
+                    Unduh Template Excel
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => fileInputRef.current?.click()} className="bg-primary-100 text-primary-500 hover:bg-primary-200">
-                    Import from File
+                    Impor dari File
                   </DropdownMenuItem>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
@@ -470,7 +597,7 @@ export default function ItemsPage() {
           {/* Columns Button */}
           <Button onClick={() => setShowColumnSelector(true)} variant="outline" className="gap-2">
             <Columns className="h-4 w-4" />
-            Columns
+            Kolom
           </Button>
           
           {/* Delete Button - Only visible for SuperAdmin */}
@@ -482,7 +609,7 @@ export default function ItemsPage() {
               onClick={() => setShowBulkDeleteDialog(true)}
             >
               <Trash2 className="h-4 w-4" />
-              Delete Selected ({selectedItems.length})
+              Hapus yang Dipilih ({selectedItems.length})
             </Button>
           )}
           
@@ -493,7 +620,7 @@ export default function ItemsPage() {
               className="bg-primary-600 hover:bg-primary-700 gap-2"
             >
               <Plus className="h-4 w-4" />
-              Add Item
+              Tambah Item
             </Button>
           )}
         </div>
@@ -513,7 +640,7 @@ export default function ItemsPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
           <Input
-            placeholder="Search items by name or code..."
+            placeholder="Cari item berdasarkan nama atau kode..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
@@ -525,179 +652,305 @@ export default function ItemsPage() {
           className={showFilterPanel ? "bg-gray-100" : ""}
         >
           <Filter className="mr-2 h-4 w-4" />
-          Filters
+          Filter
+          {hasActiveFilters && (
+            <span className="ml-1 bg-primary text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+              {categoryFilters.length + divisionFilters.length + brandFilters.length + 
+               seasonFilters.length + periodFilters.length + unitFilters.length + statusFilters.length}
+            </span>
+          )}
         </Button>
       </div>
 
-      {/* Filter Panel */}
+      {/* Active Filters Display */}
+      {hasActiveFilters && (
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="text-sm text-gray-500">Filter aktif:</span>
+          
+          {categoryFilters.map(value => (
+            <Badge key={`cat-${value}`} variant="secondary" className="flex items-center gap-1">
+              Kategori: {getCategoryLabel(value)}
+              <X 
+                className="h-3 w-3 cursor-pointer" 
+                onClick={() => handleCategoryFilterChange(value, false)}
+              />
+            </Badge>
+          ))}
+          
+          {divisionFilters.map(value => (
+            <Badge key={`div-${value}`} variant="secondary" className="flex items-center gap-1">
+              Divisi: {value}
+              <X 
+                className="h-3 w-3 cursor-pointer" 
+                onClick={() => handleDivisionFilterChange(value, false)}
+              />
+            </Badge>
+          ))}
+          
+          {brandFilters.map(value => (
+            <Badge key={`brand-${value}`} variant="secondary" className="flex items-center gap-1">
+              Merek: {value}
+              <X 
+                className="h-3 w-3 cursor-pointer" 
+                onClick={() => handleBrandFilterChange(value, false)}
+              />
+            </Badge>
+          ))}
+          
+          {seasonFilters.map(value => (
+            <Badge key={`season-${value}`} variant="secondary" className="flex items-center gap-1">
+              Musim: {value}
+              <X 
+                className="h-3 w-3 cursor-pointer" 
+                onClick={() => handleSeasonFilterChange(value, false)}
+              />
+            </Badge>
+          ))}
+          
+          {periodFilters.map(value => (
+            <Badge key={`period-${value}`} variant="secondary" className="flex items-center gap-1">
+              Periode: {value}
+              <X 
+                className="h-3 w-3 cursor-pointer" 
+                onClick={() => handlePeriodFilterChange(value, false)}
+              />
+            </Badge>
+          ))}
+          
+          {unitFilters.map(value => (
+            <Badge key={`unit-${value}`} variant="secondary" className="flex items-center gap-1">
+              Satuan: {getUnitLabel(value)}
+              <X 
+                className="h-3 w-3 cursor-pointer" 
+                onClick={() => handleUnitFilterChange(value, false)}
+              />
+            </Badge>
+          ))}
+          
+          {statusFilters.map(value => (
+            <Badge key={`status-${value}`} variant="secondary" className="flex items-center gap-1">
+              Status: {getStatusLabel(value)}
+              <X 
+                className="h-3 w-3 cursor-pointer" 
+                onClick={() => handleStatusFilterChange(value, false)}
+              />
+            </Badge>
+          ))}
+          
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={clearAllFilters}
+            className="h-6 px-2 text-xs"
+          >
+            Hapus Semua
+          </Button>
+        </div>
+      )}
+
+      {/* Filter Panel Overlay */}
       {showFilterPanel && (
-        <div className="bg-gray-50 p-4 rounded-md space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-              <Select
-                value={categoryFilter}
-                onValueChange={(value) => {
-                  setCategoryFilter(value);
-                  setCurrentPage(1);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All Categories" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  <SelectItem value="00">Lifestyle</SelectItem>
-                  <SelectItem value="01">Football</SelectItem>
-                  <SelectItem value="02">Futsal</SelectItem>
-                  <SelectItem value="03">Street Soccer</SelectItem>
-                  <SelectItem value="04">Running</SelectItem>
-                  <SelectItem value="05">Training</SelectItem>
-                  <SelectItem value="06">Volley</SelectItem>
-                  <SelectItem value="08">Badminton</SelectItem>
-                  <SelectItem value="09">Tennis</SelectItem>
-                  <SelectItem value="10">Basketball</SelectItem>
-                  <SelectItem value="12">Skateboard</SelectItem>
-                  <SelectItem value="14">Swimming</SelectItem>
-                  <SelectItem value="17">Back to school</SelectItem>
-                </SelectContent>
-              </Select>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b">
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-bold">Filter Item</h2>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => setShowFilterPanel(false)}
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+              <p className="text-gray-500 mt-1">Pilih filter untuk menyaring item</p>
             </div>
             
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Division</label>
-              <Select
-                value={divisionFilter}
-                onValueChange={(value) => {
-                  setDivisionFilter(value);
-                  setCurrentPage(1);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All Divisions" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Divisions</SelectItem>
-                  {uniqueDivisions.map(division => (
-                    <SelectItem key={division} value={division}>
-                      {division}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <ScrollArea className="flex-1 p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* Category Filter */}
+                <div>
+                  <h3 className="font-medium mb-3">Kategori</h3>
+                  <div className="space-y-2">
+                    {CATEGORY_OPTIONS.map(option => (
+                      <div key={option.value} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`category-${option.value}`}
+                          checked={categoryFilters.includes(option.value)}
+                          onCheckedChange={(checked) => 
+                            handleCategoryFilterChange(option.value, checked as boolean)
+                          }
+                        />
+                        <label 
+                          htmlFor={`category-${option.value}`}
+                          className="text-sm cursor-pointer"
+                        >
+                          {option.label}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Division Filter */}
+                <div>
+                  <h3 className="font-medium mb-3">Divisi</h3>
+                  <div className="space-y-2">
+                    {uniqueDivisions.map(division => (
+                      <div key={division} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`division-${division}`}
+                          checked={divisionFilters.includes(division)}
+                          onCheckedChange={(checked) => 
+                            handleDivisionFilterChange(division, checked as boolean)
+                          }
+                        />
+                        <label 
+                          htmlFor={`division-${division}`}
+                          className="text-sm cursor-pointer"
+                        >
+                          {division}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Brand Filter */}
+                <div>
+                  <h3 className="font-medium mb-3">Merek</h3>
+                  <div className="space-y-2">
+                    {uniqueBrands.map(brand => (
+                      <div key={brand} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`brand-${brand}`}
+                          checked={brandFilters.includes(brand)}
+                          onCheckedChange={(checked) => 
+                            handleBrandFilterChange(brand, checked as boolean)
+                          }
+                        />
+                        <label 
+                          htmlFor={`brand-${brand}`}
+                          className="text-sm cursor-pointer"
+                        >
+                          {brand}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Season Filter */}
+                <div>
+                  <h3 className="font-medium mb-3">Musim</h3>
+                  <div className="space-y-2">
+                    {uniqueSeasons.map(season => (
+                      <div key={season} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`season-${season}`}
+                          checked={seasonFilters.includes(season)}
+                          onCheckedChange={(checked) => 
+                            handleSeasonFilterChange(season, checked as boolean)
+                          }
+                        />
+                        <label 
+                          htmlFor={`season-${season}`}
+                          className="text-sm cursor-pointer"
+                        >
+                          {season}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Period Filter */}
+                <div>
+                  <h3 className="font-medium mb-3">Periode</h3>
+                  <div className="space-y-2">
+                    {uniquePeriods.map(period => (
+                      <div key={period} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`period-${period}`}
+                          checked={periodFilters.includes(period)}
+                          onCheckedChange={(checked) => 
+                            handlePeriodFilterChange(period, checked as boolean)
+                          }
+                        />
+                        <label 
+                          htmlFor={`period-${period}`}
+                          className="text-sm cursor-pointer"
+                        >
+                          {period}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Unit Filter */}
+                <div>
+                  <h3 className="font-medium mb-3">Satuan</h3>
+                  <div className="space-y-2">
+                    {UNIT_OPTIONS.map(option => (
+                      <div key={option.value} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`unit-${option.value}`}
+                          checked={unitFilters.includes(option.value)}
+                          onCheckedChange={(checked) => 
+                            handleUnitFilterChange(option.value, checked as boolean)
+                          }
+                        />
+                        <label 
+                          htmlFor={`unit-${option.value}`}
+                          className="text-sm cursor-pointer"
+                        >
+                          {option.label}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Status Filter */}
+                <div>
+                  <h3 className="font-medium mb-3">Status</h3>
+                  <div className="space-y-2">
+                    {STATUS_OPTIONS.map(option => (
+                      <div key={option.value} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`status-${option.value}`}
+                          checked={statusFilters.includes(option.value)}
+                          onCheckedChange={(checked) => 
+                            handleStatusFilterChange(option.value, checked as boolean)
+                          }
+                        />
+                        <label 
+                          htmlFor={`status-${option.value}`}
+                          className="text-sm cursor-pointer"
+                        >
+                          {option.label}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </ScrollArea>
             
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Brand</label>
-              <Select
-                value={brandFilter}
-                onValueChange={(value) => {
-                  setBrandFilter(value);
-                  setCurrentPage(1);
-                }}
+            <div className="p-6 border-t flex justify-between">
+              <Button 
+                variant="outline" 
+                onClick={clearAllFilters}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="All Brands" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Brands</SelectItem>
-                  {uniqueBrands.map(brand => (
-                    <SelectItem key={brand} value={brand}>
-                      {brand}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Season</label>
-              <Select
-                value={seasonFilter}
-                onValueChange={(value) => {
-                  setSeasonFilter(value);
-                  setCurrentPage(1);
-                }}
+                Hapus Semua Filter
+              </Button>
+              <Button 
+                onClick={() => setShowFilterPanel(false)}
+                className="bg-primary hover:bg-primary/90"
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="All Seasons" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Seasons</SelectItem>
-                  {uniqueSeasons.map(season => (
-                    <SelectItem key={season} value={season}>
-                      {season}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Period</label>
-              <Select
-                value={periodFilter}
-                onValueChange={(value) => {
-                  setPeriodFilter(value);
-                  setCurrentPage(1);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All Periods" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Periods</SelectItem>
-                  {uniquePeriods.map(period => (
-                    <SelectItem key={period} value={period}>
-                      {period}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
-              <Select
-                value={unitFilter}
-                onValueChange={(value) => {
-                  setUnitFilter(value);
-                  setCurrentPage(1);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All Units" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Units</SelectItem>
-                  <SelectItem value="PCS">Pieces (PCS)</SelectItem>
-                  <SelectItem value="PRS">Pairs (PRS)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-              <Select
-                value={statusFilter}
-                onValueChange={(value) => {
-                  setStatusFilter(value);
-                  setCurrentPage(1);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="pending_approval">Pending Approval</SelectItem>
-                  <SelectItem value="approved">Approved</SelectItem>
-                  <SelectItem value="available">Available</SelectItem>
-                  <SelectItem value="borrowed">Borrowed</SelectItem>
-                  <SelectItem value="in_clearance">In Clearance</SelectItem>
-                  <SelectItem value="rejected">Rejected</SelectItem>
-                </SelectContent>
-              </Select>
+                Terapkan Filter
+              </Button>
             </div>
           </div>
         </div>
@@ -710,8 +963,8 @@ export default function ItemsPage() {
         visibleColumns={visibleColumns}
         isLoading={isLoading}
         onEditItem={handleEditItem}
-        emptyMessage="No items found"
-        emptyDescription="Try adjusting your search or filters"
+        emptyMessage="Tidak ada item yang ditemukan"
+        emptyDescription="Coba sesuaikan pencarian atau filter Anda"
         onDeleteItem={canDeleteItem ? handleRemoveItem : undefined}
         canEditItem={canEditItem}
         canDeleteItem={canDeleteItem}
@@ -752,29 +1005,29 @@ export default function ItemsPage() {
       <Dialog open={!!importResults} onOpenChange={() => setImportResults(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Import Results</DialogTitle>
+            <DialogTitle>Hasil Impor</DialogTitle>
             <DialogDescription>
-              Import process completed
+              Proses impor selesai
             </DialogDescription>
           </DialogHeader>
           {importResults && (
             <div className="space-y-4">
               <div className="flex justify-between">
-                <span>Successful:</span>
+                <span>Berhasil:</span>
                 <span className="font-medium text-green-600">{importResults.results.success}</span>
               </div>
               <div className="flex justify-between">
-                <span>Failed:</span>
+                <span>Gagal:</span>
                 <span className="font-medium text-red-600">{importResults.results.failed}</span>
               </div>
               
               {importResults.results.errors.length > 0 && (
                 <div>
-                  <h4 className="font-medium mb-2">Errors:</h4>
+                  <h4 className="font-medium mb-2">Kesalahan:</h4>
                   <div className="max-h-40 overflow-y-auto bg-gray-50 p-2 rounded text-sm">
                     {importResults.results.errors.map((error: any, index: number) => (
                       <div key={index} className="mb-1">
-                        Row {error.row}: {error.error}
+                        Baris {error.row}: {error.error}
                       </div>
                     ))}
                   </div>
@@ -783,7 +1036,7 @@ export default function ItemsPage() {
             </div>
           )}
           <DialogFooter>
-            <Button onClick={() => setImportResults(null)}>Close</Button>
+            <Button onClick={() => setImportResults(null)}>Tutup</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

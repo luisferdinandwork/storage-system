@@ -160,11 +160,11 @@ export default function StorageManagementPage() {
         const data = await response.json();
         setItems(data);
       } else {
-        addMessage('error', 'Failed to fetch items', 'Error');
+        addMessage('error', 'Gagal mengambil data item', 'Error');
       }
     } catch (error) {
       console.error('Failed to fetch items:', error);
-      addMessage('error', 'Failed to fetch items', 'Error');
+      addMessage('error', 'Gagal mengambil data item', 'Error');
     } finally {
       setIsLoading(false);
     }
@@ -177,7 +177,7 @@ export default function StorageManagementPage() {
         const data = await response.json();
         setItemRequests(data);
       } else {
-        addMessage('error', 'Failed to fetch item requests', 'Error');
+        addMessage('error', 'Gagal mengambil data permintaan item', 'Error');
       }
     } catch (error) {
       console.error('Failed to fetch item requests:', error);
@@ -191,17 +191,17 @@ export default function StorageManagementPage() {
         const data = await response.json();
         setBoxes(data);
       } else {
-        addMessage('error', 'Failed to fetch boxes', 'Error');
+        addMessage('error', 'Gagal mengambil data kotak', 'Error');
       }
     } catch (error) {
       console.error('Failed to fetch boxes:', error);
-      addMessage('error', 'Failed to fetch boxes', 'Error');
+      addMessage('error', 'Gagal mengambil data kotak', 'Error');
     }
   };
 
   const handleReceiveItem = async (requestId: string, boxId: string) => {
     if (!boxId) {
-      addMessage('warning', 'Please select a storage box', 'Missing Information');
+      addMessage('warning', 'Silakan pilih kotak penyimpanan', 'Informasi Tidak Lengkap');
       return;
     }
 
@@ -222,14 +222,14 @@ export default function StorageManagementPage() {
         setSelectedBoxId('');
         fetchItems();
         fetchItemRequests();
-        addMessage('success', 'Item received and stored successfully', 'Success');
+        addMessage('success', 'Item berhasil diterima dan disimpan', 'Sukses');
       } else {
         const errorData = await response.json();
-        addMessage('error', errorData.error || 'Failed to receive item', 'Error');
+        addMessage('error', errorData.error || 'Gagal menerima item', 'Error');
       }
     } catch (error) {
       console.error('Failed to receive item:', error);
-      addMessage('error', 'Failed to receive item', 'Error');
+      addMessage('error', 'Gagal menerima item', 'Error');
     } finally {
       setIsProcessing(false);
     }
@@ -237,7 +237,7 @@ export default function StorageManagementPage() {
 
   const handleRejectItem = async (requestId: string, reason: string) => {
     if (!reason.trim()) {
-      addMessage('warning', 'Please provide a reason for rejection', 'Missing Information');
+      addMessage('warning', 'Silakan berikan alasan penolakan', 'Informasi Tidak Lengkap');
       return;
     }
 
@@ -256,14 +256,14 @@ export default function StorageManagementPage() {
         setRejectionReason('');
         fetchItems();
         fetchItemRequests();
-        addMessage('success', 'Item rejected successfully', 'Success');
+        addMessage('success', 'Item berhasil ditolak', 'Sukses');
       } else {
         const errorData = await response.json();
-        addMessage('error', errorData.error || 'Failed to reject item', 'Error');
+        addMessage('error', errorData.error || 'Gagal menolak item', 'Error');
       }
     } catch (error) {
       console.error('Failed to reject item:', error);
-      addMessage('error', 'Failed to reject item', 'Error');
+      addMessage('error', 'Gagal menolak item', 'Error');
     } finally {
       setIsProcessing(false);
     }
@@ -271,12 +271,12 @@ export default function StorageManagementPage() {
 
   const handleBulkReceive = async (requestIds: string[], boxId: string) => {
     if (requestIds.length === 0) {
-      addMessage('warning', 'Please select at least one item to receive', 'Missing Information');
+      addMessage('warning', 'Silakan pilih minimal satu item untuk diterima', 'Informasi Tidak Lengkap');
       return;
     }
 
     if (!boxId) {
-      addMessage('warning', 'Please select a storage box', 'Missing Information');
+      addMessage('warning', 'Silakan pilih kotak penyimpanan', 'Informasi Tidak Lengkap');
       return;
     }
 
@@ -297,14 +297,14 @@ export default function StorageManagementPage() {
         setSelectedBoxId('');
         fetchItems();
         fetchItemRequests();
-        addMessage('success', `${requestIds.length} items received and stored successfully`, 'Success');
+        addMessage('success', `${requestIds.length} item berhasil diterima dan disimpan`, 'Sukses');
       } else {
         const errorData = await response.json();
-        addMessage('error', errorData.error || 'Failed to receive items', 'Error');
+        addMessage('error', errorData.error || 'Gagal menerima item', 'Error');
       }
     } catch (error) {
       console.error('Failed to receive items:', error);
-      addMessage('error', 'Failed to receive items', 'Error');
+      addMessage('error', 'Gagal menerima item', 'Error');
     } finally {
       setIsProcessing(false);
     }
@@ -312,12 +312,12 @@ export default function StorageManagementPage() {
 
   const handleBulkReject = async (requestIds: string[], reason: string) => {
     if (requestIds.length === 0) {
-      addMessage('warning', 'Please select at least one item to reject', 'Missing Information');
+      addMessage('warning', 'Silakan pilih minimal satu item untuk ditolak', 'Informasi Tidak Lengkap');
       return;
     }
 
     if (!reason.trim()) {
-      addMessage('warning', 'Please provide a reason for rejection', 'Missing Information');
+      addMessage('warning', 'Silakan berikan alasan penolakan', 'Informasi Tidak Lengkap');
       return;
     }
 
@@ -338,14 +338,14 @@ export default function StorageManagementPage() {
         setBulkRejectionReason('');
         fetchItems();
         fetchItemRequests();
-        addMessage('success', `${requestIds.length} items rejected successfully`, 'Success');
+        addMessage('success', `${requestIds.length} item berhasil ditolak`, 'Sukses');
       } else {
         const errorData = await response.json();
-        addMessage('error', errorData.error || 'Failed to reject items', 'Error');
+        addMessage('error', errorData.error || 'Gagal menolak item', 'Error');
       }
     } catch (error) {
       console.error('Failed to reject items:', error);
-      addMessage('error', 'Failed to reject items', 'Error');
+      addMessage('error', 'Gagal menolak item', 'Error');
     } finally {
       setIsProcessing(false);
     }
@@ -419,8 +419,8 @@ export default function StorageManagementPage() {
       
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Pending Item Approvals</h1>
-          <p className="text-gray-600 mt-1">Review and receive new items for storage</p>
+          <h1 className="text-3xl font-bold text-gray-900">Warehousing</h1>
+          <p className="text-gray-600 mt-1">Tinjau dan terima item baru untuk penyimpanan</p>
         </div>
         <div className="flex items-center space-x-2">
           <UniversalBadge type="status" value="pending" />
@@ -433,7 +433,7 @@ export default function StorageManagementPage() {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
           <Input
-            placeholder="Search items..."
+            placeholder="Cari item..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
@@ -442,10 +442,10 @@ export default function StorageManagementPage() {
         
         <Select value={seasonFilter} onValueChange={setSeasonFilter}>
           <SelectTrigger>
-            <SelectValue placeholder="Season" />
+            <SelectValue placeholder="Musim" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Seasons</SelectItem>
+            <SelectItem value="all">Semua Musim</SelectItem>
             {seasons.map(season => (
               <SelectItem key={season} value={season}>{season}</SelectItem>
             ))}
@@ -454,10 +454,10 @@ export default function StorageManagementPage() {
         
         <Select value={brandFilter} onValueChange={setBrandFilter}>
           <SelectTrigger>
-            <SelectValue placeholder="Brand" />
+            <SelectValue placeholder="Merek" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Brands</SelectItem>
+            <SelectItem value="all">Semua Merek</SelectItem>
             {brands.map(brand => (
               <SelectItem key={brand} value={brand}>{brand}</SelectItem>
             ))}
@@ -466,10 +466,10 @@ export default function StorageManagementPage() {
         
         <Select value={divisionFilter} onValueChange={setDivisionFilter}>
           <SelectTrigger>
-            <SelectValue placeholder="Division" />
+            <SelectValue placeholder="Divisi" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Divisions</SelectItem>
+            <SelectItem value="all">Semua Divisi</SelectItem>
             {divisions.map(division => (
               <SelectItem key={division} value={division}>{division}</SelectItem>
             ))}
@@ -478,10 +478,10 @@ export default function StorageManagementPage() {
         
         <Select value={categoryFilter} onValueChange={setCategoryFilter}>
           <SelectTrigger>
-            <SelectValue placeholder="Category" />
+            <SelectValue placeholder="Kategori" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Categories</SelectItem>
+            <SelectItem value="all">Semua Kategori</SelectItem>
             {categories.map(category => (
               <SelectItem key={category} value={category}>{category}</SelectItem>
             ))}
@@ -490,10 +490,10 @@ export default function StorageManagementPage() {
         
         <Select value={periodFilter} onValueChange={setPeriodFilter}>
           <SelectTrigger>
-            <SelectValue placeholder="Period" />
+            <SelectValue placeholder="Periode" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Periods</SelectItem>
+            <SelectItem value="all">Semua Periode</SelectItem>
             {periods.map(period => (
               <SelectItem key={period} value={period}>{period}</SelectItem>
             ))}
@@ -510,10 +510,10 @@ export default function StorageManagementPage() {
               checked={selectAll}
               onCheckedChange={handleSelectAll}
             />
-            <Label htmlFor="select-all">Select All ({filteredRequests.length})</Label>
+            <Label htmlFor="select-all">Pilih Semua ({filteredRequests.length})</Label>
             {selectedRequestIds.length > 0 && (
               <span className="text-sm text-gray-500">
-                {selectedRequestIds.length} selected
+                {selectedRequestIds.length} dipilih
               </span>
             )}
           </div>
@@ -524,7 +524,7 @@ export default function StorageManagementPage() {
               className="flex items-center space-x-2 bg-green-600 hover:bg-green-700"
             >
               <CheckSquare className="h-4 w-4" />
-              <span>Bulk Receive</span>
+              <span>Terima Massal</span>
             </Button>
             <Button
               onClick={() => setShowBulkRejectModal(true)}
@@ -533,7 +533,7 @@ export default function StorageManagementPage() {
               className="flex items-center space-x-2"
             >
               <XCircle className="h-4 w-4" />
-              <span>Bulk Reject</span>
+              <span>Tolak Massal</span>
             </Button>
           </div>
         </div>
@@ -553,20 +553,20 @@ export default function StorageManagementPage() {
                     <Checkbox
                       checked={selectAll}
                       onCheckedChange={handleSelectAll}
-                      aria-label="Select all"
+                      aria-label="Pilih semua"
                     />
                   </TableHead>
                 )}
                 <TableHead>Item</TableHead>
-                <TableHead>Brand</TableHead>
-                <TableHead>Division</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Season</TableHead>
-                <TableHead>Period</TableHead>
-                <TableHead>Stock</TableHead>
-                <TableHead>Requested By</TableHead>
-                <TableHead>Requested At</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>Merek</TableHead>
+                <TableHead>Divisi</TableHead>
+                <TableHead>Kategori</TableHead>
+                <TableHead>Musim</TableHead>
+                <TableHead>Periode</TableHead>
+                <TableHead>Stok</TableHead>
+                <TableHead>Diajukan Oleh</TableHead>
+                <TableHead>Tanggal Diajukan</TableHead>
+                <TableHead className="text-right">Aksi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -577,7 +577,7 @@ export default function StorageManagementPage() {
                       <Checkbox
                         checked={selectedRequestIds.includes(request.id)}
                         onCheckedChange={(checked) => handleSelectRequest(request.id, checked as boolean)}
-                        aria-label={`Select ${request.item.description}`}
+                        aria-label={`Pilih ${request.item.description}`}
                       />
                     </TableCell>
                   )}
@@ -620,31 +620,31 @@ export default function StorageManagementPage() {
                   </TableCell>
                   <TableCell>
                     <div className="text-sm">
-                      <div>{request.requestedByUser?.name || 'Unknown'}</div>
+                      <div>{request.requestedByUser?.name || 'Tidak Diketahui'}</div>
                     </div>
                   </TableCell>
                   <TableCell className="text-sm text-gray-500">
-                    {new Date(request.requestedAt).toLocaleDateString()}
+                    {new Date(request.requestedAt).toLocaleDateString('id-ID')}
                   </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" className="h-8 w-8 p-0">
-                          <span className="sr-only">Open menu</span>
+                          <span className="sr-only">Buka menu</span>
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                        <DropdownMenuLabel>Aksi</DropdownMenuLabel>
                         <DropdownMenuItem onClick={() => handleViewDetails(request.item)}>
                           <Eye className="mr-2 h-4 w-4" />
-                          View Details
+                          Lihat Detail
                         </DropdownMenuItem>
                         
                         {request.item.images && request.item.images.length > 0 && (
                           <DropdownMenuItem>
                             <Image className="mr-2 h-4 w-4" />
-                            View Images
+                            Lihat Gambar
                           </DropdownMenuItem>
                         )}
                         
@@ -656,14 +656,14 @@ export default function StorageManagementPage() {
                               className="text-green-600"
                             >
                               <CheckCircle className="mr-2 h-4 w-4" />
-                              Receive & Store
+                              Terima & Simpan
                             </DropdownMenuItem>
                             <DropdownMenuItem 
                               onClick={() => handleOpenRejectModal(request)}
                               className="text-red-600"
                             >
                               <XCircle className="mr-2 h-4 w-4" />
-                              Reject
+                              Tolak
                             </DropdownMenuItem>
                           </>
                         )}
@@ -680,11 +680,11 @@ export default function StorageManagementPage() {
       {!isLoading && filteredRequests.length === 0 && (
         <div className="text-center py-12">
           <Package className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No pending items found</h3>
+          <h3 className="mt-2 text-sm font-medium text-gray-900">Tidak ada item tertunda yang ditemukan</h3>
           <p className="mt-1 text-sm text-gray-500">
             {searchTerm || seasonFilter !== 'all' || brandFilter !== 'all' || divisionFilter !== 'all' || categoryFilter !== 'all' || periodFilter !== 'all' 
-              ? 'Try adjusting your search or filters' 
-              : 'All items have been processed'}
+              ? 'Coba sesuaikan pencarian atau filter Anda' 
+              : 'Semua item telah diproses'}
           </p>
         </div>
       )}
@@ -698,24 +698,24 @@ export default function StorageManagementPage() {
       <Dialog open={showReceiveModal} onOpenChange={setShowReceiveModal}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Receive & Store Item</DialogTitle>
+            <DialogTitle>Terima & Simpan Item</DialogTitle>
             <DialogDescription>
-              Select a storage box for this item
+              Pilih kotak penyimpanan untuk item ini
             </DialogDescription>
           </DialogHeader>
           {selectedItem && (
             <div className="space-y-4">
               <div className="bg-gray-50 p-4 rounded-md">
                 <h4 className="font-medium">{selectedItem.description}</h4>
-                <p className="text-sm text-gray-600">Product Code: {selectedItem.productCode}</p>
-                <p className="text-sm text-gray-600">Total Stock: {selectedItem.totalStock} units</p>
+                <p className="text-sm text-gray-600">Kode Produk: {selectedItem.productCode}</p>
+                <p className="text-sm text-gray-600">Total Stok: {selectedItem.totalStock} unit</p>
               </div>
               
               <div>
-                <Label htmlFor="box">Storage Box</Label>
+                <Label htmlFor="box">Kotak Penyimpanan</Label>
                 <Select value={selectedBoxId} onValueChange={setSelectedBoxId}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select storage box" />
+                    <SelectValue placeholder="Pilih kotak penyimpanan" />
                   </SelectTrigger>
                   <SelectContent>
                     {boxes.map(box => (
@@ -730,14 +730,14 @@ export default function StorageManagementPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowReceiveModal(false)}>
-              Cancel
+              Batal
             </Button>
             <Button 
               onClick={() => selectedRequest && handleReceiveItem(selectedRequest.id, selectedBoxId)}
               disabled={isProcessing || !selectedBoxId}
               className="bg-green-600 hover:bg-green-700"
             >
-              {isProcessing ? 'Processing...' : 'Receive & Store'}
+              {isProcessing ? 'Memproses...' : 'Terima & Simpan'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -746,22 +746,22 @@ export default function StorageManagementPage() {
       <Dialog open={showBulkReceiveModal} onOpenChange={setShowBulkReceiveModal}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Bulk Receive Items</DialogTitle>
+            <DialogTitle>Terima Item Massal</DialogTitle>
             <DialogDescription>
-              Select a storage box for {selectedRequestIds.length} items
+              Pilih kotak penyimpanan untuk {selectedRequestIds.length} item
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="bg-gray-50 p-4 rounded-md">
-              <h4 className="font-medium">Items to Receive</h4>
-              <p className="text-sm text-gray-600">{selectedRequestIds.length} items selected</p>
+              <h4 className="font-medium">Item yang Akan Diterima</h4>
+              <p className="text-sm text-gray-600">{selectedRequestIds.length} item dipilih</p>
             </div>
             
             <div>
-              <Label htmlFor="bulk-box">Storage Box</Label>
+              <Label htmlFor="bulk-box">Kotak Penyimpanan</Label>
               <Select value={selectedBoxId} onValueChange={setSelectedBoxId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select storage box" />
+                  <SelectValue placeholder="Pilih kotak penyimpanan" />
                 </SelectTrigger>
                 <SelectContent>
                   {boxes.map(box => (
@@ -775,14 +775,14 @@ export default function StorageManagementPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowBulkReceiveModal(false)}>
-              Cancel
+              Batal
             </Button>
             <Button 
               onClick={() => handleBulkReceive(selectedRequestIds, selectedBoxId)}
               disabled={isProcessing || !selectedBoxId}
               className="bg-green-600 hover:bg-green-700"
             >
-              {isProcessing ? 'Processing...' : `Receive ${selectedRequestIds.length} Items`}
+              {isProcessing ? 'Memproses...' : `Terima ${selectedRequestIds.length} Item`}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -791,38 +791,38 @@ export default function StorageManagementPage() {
       <Dialog open={showBulkRejectModal} onOpenChange={setShowBulkRejectModal}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Bulk Reject Items</DialogTitle>
+            <DialogTitle>Tolak Item Massal</DialogTitle>
             <DialogDescription>
-              Please provide a reason for rejecting {selectedRequestIds.length} items
+              Silakan berikan alasan untuk menolak {selectedRequestIds.length} item
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="bg-gray-50 p-4 rounded-md">
-              <h4 className="font-medium">Items to Reject</h4>
-              <p className="text-sm text-gray-600">{selectedRequestIds.length} items selected</p>
+              <h4 className="font-medium">Item yang Akan Ditolak</h4>
+              <p className="text-sm text-gray-600">{selectedRequestIds.length} item dipilih</p>
             </div>
             
             <div>
-              <Label htmlFor="bulk-rejection-reason">Rejection Reason *</Label>
+              <Label htmlFor="bulk-rejection-reason">Alasan Penolakan *</Label>
               <Textarea
                 id="bulk-rejection-reason"
                 value={bulkRejectionReason}
                 onChange={(e) => setBulkRejectionReason(e.target.value)}
-                placeholder="Enter reason for rejection..."
+                placeholder="Masukkan alasan penolakan..."
                 rows={3}
               />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowBulkRejectModal(false)}>
-              Cancel
+              Batal
             </Button>
             <Button 
               variant="destructive"
               onClick={() => handleBulkReject(selectedRequestIds, bulkRejectionReason)}
               disabled={isProcessing || !bulkRejectionReason.trim()}
             >
-              {isProcessing ? 'Processing...' : `Reject ${selectedRequestIds.length} Items`}
+              {isProcessing ? 'Memproses...' : `Tolak ${selectedRequestIds.length} Item`}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -831,25 +831,25 @@ export default function StorageManagementPage() {
       <Dialog open={showRejectModal} onOpenChange={setShowRejectModal}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Reject Item</DialogTitle>
+            <DialogTitle>Tolak Item</DialogTitle>
             <DialogDescription>
-              Please provide a reason for rejecting this item
+              Silakan berikan alasan untuk menolak item ini
             </DialogDescription>
           </DialogHeader>
           {selectedItem && (
             <div className="space-y-4">
               <div className="bg-gray-50 p-4 rounded-md">
                 <h4 className="font-medium">{selectedItem.description}</h4>
-                <p className="text-sm text-gray-600">Product Code: {selectedItem.productCode}</p>
+                <p className="text-sm text-gray-600">Kode Produk: {selectedItem.productCode}</p>
               </div>
               
               <div>
-                <Label htmlFor="rejectionReason">Rejection Reason *</Label>
+                <Label htmlFor="rejectionReason">Alasan Penolakan *</Label>
                 <Textarea
                   id="rejectionReason"
                   value={rejectionReason}
                   onChange={(e) => setRejectionReason(e.target.value)}
-                  placeholder="Enter reason for rejection..."
+                  placeholder="Masukkan alasan penolakan..."
                   rows={3}
                 />
               </div>
@@ -857,14 +857,14 @@ export default function StorageManagementPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowRejectModal(false)}>
-              Cancel
+              Batal
             </Button>
             <Button 
               variant="destructive"
               onClick={() => selectedRequest && handleRejectItem(selectedRequest.id, rejectionReason)}
               disabled={isProcessing || !rejectionReason.trim()}
             >
-              {isProcessing ? 'Processing...' : 'Reject Item'}
+              {isProcessing ? 'Memproses...' : 'Tolak Item'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -168,59 +168,59 @@ interface ClearanceFormPDFProps {
 export const ClearanceFormPDF: React.FC<ClearanceFormPDFProps> = ({ form, formItems, user }) => (
   <Document>
     <Page size="A4" style={styles.page}>
-      <Text style={styles.title}>CLEARANCE FORM</Text>
+      <Text style={styles.title}>FORMULIR PEMBERSIHAN</Text>
       
       <View style={styles.formDetails}>
         <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Form No:</Text>
+          <Text style={styles.detailLabel}>No. Form:</Text>
           <Text>{form.formNumber}</Text>
         </View>
         <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Date:</Text>
-          <Text>{new Date().toLocaleDateString()}</Text>
+          <Text style={styles.detailLabel}>Tanggal:</Text>
+          <Text>{new Date().toLocaleDateString('id-ID')}</Text>
         </View>
         <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Title:</Text>
+          <Text style={styles.detailLabel}>Judul:</Text>
           <Text>{form.title}</Text>
         </View>
         <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Period:</Text>
+          <Text style={styles.detailLabel}>Periode:</Text>
           <Text>{form.period}</Text>
         </View>
         <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Generated:</Text>
+          <Text style={styles.detailLabel}>Dibuat oleh:</Text>
           <Text>{user.name}</Text>
         </View>
         {form.description && (
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Description:</Text>
+            <Text style={styles.detailLabel}>Deskripsi:</Text>
             <Text>{form.description}</Text>
           </View>
         )}
       </View>
       
-      <Text style={styles.sectionTitle}>ITEMS TO CLEAR:</Text>
+      <Text style={styles.sectionTitle}>ITEM YANG AKAN DIBERSIHKAN:</Text>
       
       <View style={styles.table}>
         {/* Header row */}
         <View style={styles.tableRow}>
           <View style={[styles.tableColHeader, styles.itemCodeCol]}>
-            <Text>Item Code</Text>
+            <Text>Kode Item</Text>
           </View>
           <View style={[styles.tableColHeader, styles.descriptionCol]}>
-            <Text>Description</Text>
+            <Text>Deskripsi</Text>
           </View>
           <View style={[styles.tableColHeader, styles.boxCol]}>
-            <Text>Box</Text>
+            <Text>Kotak</Text>
           </View>
           <View style={[styles.tableColHeader, styles.locationCol]}>
-            <Text>Location</Text>
+            <Text>Lokasi</Text>
           </View>
           <View style={[styles.tableColHeader, styles.qtyCol]}>
-            <Text>Qty</Text>
+            <Text>Jml</Text>
           </View>
           <View style={[styles.tableColHeader, styles.checkedCol]}>
-            <Text>Check</Text>
+            <Text>Centang</Text>
           </View>
         </View>
         
@@ -255,22 +255,22 @@ export const ClearanceFormPDF: React.FC<ClearanceFormPDFProps> = ({ form, formIt
       </View>
       
       <View style={styles.instructions}>
-        <Text style={{ fontWeight: 'bold' as const, marginBottom: 5 }}>Instructions:</Text>
-        <Text>1. Locate each item in the specified location</Text>
-        <Text>2. Verify the item matches the description</Text>
-        <Text>3. Check the box in the "Checked" column for each verified item</Text>
-        <Text>4. Sign below and upload the scanned form</Text>
+        <Text style={{ fontWeight: 'bold' as const, marginBottom: 5 }}>Petunjuk:</Text>
+        <Text>1. Temukan setiap item di lokasi yang ditentukan</Text>
+        <Text>2. Verifikasi bahwa item sesuai dengan deskripsi</Text>
+        <Text>3. Centang kotak di kolom "Centang" untuk setiap item yang telah diverifikasi</Text>
+        <Text>4. Tandatangani di bawah dan unggah formulir yang telah dipindai</Text>
       </View>
       
       <View style={styles.signature}>
         <View style={styles.signatureBox}>
-          <Text>Signature:</Text>
+          <Text>Tanda Tangan:</Text>
           <View style={styles.signatureLine} />
         </View>
         
       </View>
       
-      <Text style={styles.footer}>Generated on {new Date().toLocaleString()}</Text>
+      <Text style={styles.footer}>Dibuat pada {new Date().toLocaleString('id-ID')}</Text>
     </Page>
   </Document>
 );

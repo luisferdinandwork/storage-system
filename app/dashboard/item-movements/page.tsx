@@ -13,11 +13,14 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { RefreshCw, Package, MapPin, Box, GripVertical, Search, Filter, X, Plus, Building } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Checkbox } from '@/components/ui/checkbox';
+import { RefreshCw, Package, MapPin, Box, Search, Filter, X, Plus, Building, ArrowRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 
+// Interfaces remain the same
 interface Location {
   id: string;
   name: string;
@@ -37,7 +40,6 @@ interface Box {
 }
 
 interface StockItem {
-  isHighlighted: any;
   id: string;
   itemId: string;
   productCode: string;
@@ -66,18 +68,30 @@ interface BoxWithItems {
   items: StockItem[];
 }
 
+interface TableItem {
+  id: string;
+  itemId: string;
+  productCode: string;
+  description: string;
+  inStorage: number;
+  condition: string;
+  conditionNotes: string;
+  unitOfMeasure: string;
+  locationId: string;
+  locationName: string;
+  boxId: string;
+  boxNumber: string;
+  isHighlighted: boolean;
+  isFiltered: boolean;
+}
+
 export default function ItemMovementsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [locationsWithBoxes, setLocationsWithBoxes] = useState<LocationWithBoxes[]>([]);
-  const [draggedItem, setDraggedItem] = useState<StockItem | null>(null);
-  const [sourceBoxId, setSourceBoxId] = useState<string | null>(null);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
-  const [showQuantityDialog, setShowQuantityDialog] = useState(false);
-  const [moveQuantity, setMoveQuantity] = useState(1);
-  const [destinationBoxId, setDestinationBoxId] = useState<string | null>(null);
   
   // Search and filter states
   const [searchQuery, setSearchQuery] = useState('');
@@ -92,6 +106,14 @@ export default function ItemMovementsPage() {
   const [newLocation, setNewLocation] = useState({ name: '', description: '' });
   const [isAddingBox, setIsAddingBox] = useState(false);
   const [isAddingLocation, setIsAddingLocation] = useState(false);
+  
+  // Move items states
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [showMoveModal, setShowMoveModal] = useState(false);
+  const [destinationLocation, setDestinationLocation] = useState<string>('');
+  const [destinationBox, setDestinationBox] = useState<string>('');
+  const [moveNotes, setMoveNotes] = useState('');
+  const [isMoving, setIsMoving] = useState(false);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -118,11 +140,9 @@ export default function ItemMovementsPage() {
       const stockItemsData = await stockItemsRes.json();
       
       const organizedLocations = locationsData.map((location: Location) => {
-        // Find all boxes in this location
         const boxesInLocation = boxesData
           .filter((box: Box) => box.location.id === location.id)
           .map((box: Box) => {
-            // Find items in this box
             const itemsInBox = stockItemsData
               .flatMap((item: any) => 
                 item.stockRecords
@@ -183,114 +203,128 @@ export default function ItemMovementsPage() {
     return Array.from(conditions);
   }, [locationsWithBoxes]);
 
-  // Filter and search logic - now highlighting instead of filtering
-  const processedLocations = useMemo(() => {
-    return locationsWithBoxes
-      .map(locationWithBoxes => {
-        // Filter by location
-        if (selectedLocation !== 'all' && locationWithBoxes.location.id !== selectedLocation) {
-          return null;
-        }
-
-        const processedBoxes = locationWithBoxes.boxes
-          .map(boxWithItems => {
-            // Process items to determine if they match search
-            const processedItems = boxWithItems.items.map(item => {
-              // Check if item matches search
-              const matchesSearch = searchQuery === '' || 
-                item.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                item.productCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                boxWithItems.box.boxNumber.toLowerCase().includes(searchQuery.toLowerCase());
-              
-              // Check if item matches condition filter
-              const matchesCondition = selectedCondition === 'all' || item.condition === selectedCondition;
-              
-              return {
-                ...item,
-                isHighlighted: matchesSearch,
-                isFiltered: matchesCondition
-              };
-            });
-
-            return {
-              ...boxWithItems,
-              items: processedItems
-            };
+  // Flatten data for table view
+  const tableData = useMemo(() => {
+    const items: TableItem[] = [];
+    
+    locationsWithBoxes.forEach(loc => {
+      loc.boxes.forEach(box => {
+        box.items.forEach(item => {
+          // Check if item matches search
+          const matchesSearch = searchQuery === '' || 
+            item.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            item.productCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            box.box.boxNumber.toLowerCase().includes(searchQuery.toLowerCase());
+          
+          // Check if item matches condition filter
+          const matchesCondition = selectedCondition === 'all' || item.condition === selectedCondition;
+          
+          items.push({
+            id: item.id,
+            itemId: item.itemId,
+            productCode: item.productCode,
+            description: item.description,
+            inStorage: item.inStorage,
+            condition: item.condition,
+            conditionNotes: item.conditionNotes,
+            unitOfMeasure: item.unitOfMeasure,
+            locationId: loc.location.id,
+            locationName: loc.location.name,
+            boxId: box.box.id,
+            boxNumber: box.box.boxNumber,
+            isHighlighted: matchesSearch,
+            isFiltered: matchesCondition
           });
+        });
+      });
+    });
+    
+    return items;
+  }, [locationsWithBoxes, searchQuery, selectedCondition]);
 
-        return {
-          ...locationWithBoxes,
-          boxes: processedBoxes
-        };
-      })
-      .filter(Boolean) as LocationWithBoxes[];
-  }, [locationsWithBoxes, searchQuery, selectedCondition, selectedLocation]);
+  // Filter table data based on location
+  const filteredTableData = useMemo(() => {
+    if (selectedLocation === 'all') return tableData;
+    return tableData.filter(item => item.locationId === selectedLocation);
+  }, [tableData, selectedLocation]);
 
-  // Count total items
-  const totalItems = useMemo(() => {
-    return processedLocations.reduce((total, loc) => {
-      return total + loc.boxes.reduce((boxTotal, box) => {
-        return boxTotal + box.items.length;
-      }, 0);
-    }, 0);
-  }, [processedLocations]);
+  // Get boxes for selected destination location
+  const destinationBoxes = useMemo(() => {
+    if (!destinationLocation) return [];
+    const location = locationsWithBoxes.find(loc => loc.location.id === destinationLocation);
+    if (!location) return [];
+    return location.boxes.map(boxWithItems => boxWithItems.box);
+  }, [destinationLocation, locationsWithBoxes]);
 
-  const handleDragStart = (item: StockItem, boxId: string) => {
-    setDraggedItem(item);
-    setSourceBoxId(boxId);
+  const handleSelectItem = (itemId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedItems(prev => [...prev, itemId]);
+    } else {
+      setSelectedItems(prev => prev.filter(id => id !== itemId));
+    }
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedItems(filteredTableData.map(item => item.id));
+    } else {
+      setSelectedItems([]);
+    }
   };
 
-  const handleDrop = async (targetBoxId: string) => {
-    if (!draggedItem || !sourceBoxId || sourceBoxId === targetBoxId) {
-      setDraggedItem(null);
-      setSourceBoxId(null);
+  const handleMoveItems = async () => {
+    if (selectedItems.length === 0) {
+      setError('Pilih minimal satu barang untuk dipindahkan');
       return;
     }
-
-    setDestinationBoxId(targetBoxId);
-    setMoveQuantity(draggedItem.inStorage);
-    setShowQuantityDialog(true);
-  };
-
-  const confirmMove = async () => {
-    if (!draggedItem || !destinationBoxId || !sourceBoxId) return;
-
+    
+    if (!destinationBox) {
+      setError('Pilih kotak tujuan');
+      return;
+    }
+    
+    setIsMoving(true);
     try {
-      const response = await fetch('/api/item-movements', {
+      const movements = selectedItems.map(itemId => {
+        const item = tableData.find(i => i.id === itemId);
+        return {
+          sourceStockId: itemId,
+          itemId: item?.itemId || '',
+          quantity: item?.inStorage || 1
+        };
+      });
+      
+      const response = await fetch('/api/item-movements/bulk', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          itemId: draggedItem.itemId,
-          sourceStockId: draggedItem.id,
-          destinationBoxId,
-          quantity: moveQuantity,
-          notes: `Moved ${moveQuantity} ${draggedItem.unitOfMeasure} of ${draggedItem.description}`,
+          movements,
+          destinationBoxId: destinationBox,
+          notes: moveNotes || `Bulk move of ${selectedItems.length} items`
         }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        setSuccess(`Berhasil memindahkan ${moveQuantity} ${draggedItem.unitOfMeasure}`);
+        setSuccess(`Berhasil memindahkan ${selectedItems.length} barang`);
         setTimeout(() => setSuccess(''), 3000);
+        setSelectedItems([]);
+        setShowMoveModal(false);
+        setDestinationLocation('');
+        setDestinationBox('');
+        setMoveNotes('');
         fetchData();
       } else {
         setError(data.error || 'Gagal memindahkan barang');
       }
     } catch (error) {
-      console.error('Failed to move item:', error);
+      console.error('Failed to move items:', error);
       setError('Terjadi kesalahan saat memindahkan barang');
     } finally {
-      setShowQuantityDialog(false);
-      setDraggedItem(null);
-      setSourceBoxId(null);
-      setDestinationBoxId(null);
+      setIsMoving(false);
     }
   };
 
@@ -389,7 +423,7 @@ export default function ItemMovementsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-primary">Perpindahan Barang</h1>
           <p className="text-muted-foreground">
-            Seret dan lepaskan barang untuk memindahkannya antar lokasi
+            Kelola perpindahan barang antar lokasi dan kotak penyimpanan
           </p>
         </div>
         <div className="flex gap-2">
@@ -460,7 +494,7 @@ export default function ItemMovementsPage() {
                     className="w-full px-3 py-2 border rounded-md bg-background"
                   >
                     <option value="all">Semua Lokasi</option>
-                    {processedLocations.map(loc => (
+                    {locationsWithBoxes.map(loc => (
                       <option key={loc.location.id} value={loc.location.id}>
                         {loc.location.name}
                       </option>
@@ -497,29 +531,41 @@ export default function ItemMovementsPage() {
               </div>
             )}
 
-            {/* Results Count */}
-            <div className="text-sm text-muted-foreground">
-              Menampilkan {totalItems} barang
-              {(searchQuery || selectedCondition !== 'all' || selectedLocation !== 'all') && 
-                ' (difilter)'}
+            {/* Results Count and Actions */}
+            <div className="flex justify-between items-center">
+              <div className="text-sm text-muted-foreground">
+                Menampilkan {filteredTableData.length} barang
+                {(searchQuery || selectedCondition !== 'all' || selectedLocation !== 'all') && 
+                  ' (difilter)'}
+              </div>
+              
+              {selectedItems.length > 0 && (
+                <Button 
+                  onClick={() => setShowMoveModal(true)}
+                  className="bg-primary hover:bg-primary/90"
+                >
+                  <ArrowRight className="h-4 w-4 mr-2" />
+                  Pindahkan {selectedItems.length} Barang
+                </Button>
+              )}
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {processedLocations.length === 0 ? (
+      {filteredTableData.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Package className="h-12 w-12 text-muted-foreground mb-4" />
             <h3 className="text-lg font-medium mb-2">
               {searchQuery || selectedCondition !== 'all' || selectedLocation !== 'all' 
                 ? 'Tidak Ada Hasil' 
-                : 'Tidak Ada Lokasi'}
+                : 'Tidak Ada Barang'}
             </h3>
             <p className="text-muted-foreground text-center mb-4">
               {searchQuery || selectedCondition !== 'all' || selectedLocation !== 'all'
                 ? 'Tidak ada barang yang sesuai dengan pencarian atau filter Anda.'
-                : 'Tidak ada lokasi penyimpanan yang tersedia.'}
+                : 'Tidak ada barang yang tersedia.'}
             </p>
             {(searchQuery || selectedCondition !== 'all' || selectedLocation !== 'all') ? (
               <Button onClick={clearFilters} variant="outline">
@@ -544,180 +590,146 @@ export default function ItemMovementsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {processedLocations.map((locationWithBoxes) => (
-            <Card key={locationWithBoxes.location.id} className="flex flex-col">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center text-lg text-primary">
-                  <MapPin className="h-5 w-5 mr-2 text-primary" />
-                  {locationWithBoxes.location.name}
-                </CardTitle>
-                <CardDescription>
-                  {locationWithBoxes.location.description}
-                  <span className="ml-2 text-xs">
-                    ({locationWithBoxes.boxes.reduce((sum, box) => sum + box.items.length, 0)} barang)
-                  </span>
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex-1 space-y-4 max-h-[600px] overflow-y-auto">
-                {locationWithBoxes.boxes.length === 0 ? (
-                  <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
-                    <Box className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                    <p className="text-sm text-muted-foreground mb-2">Tidak ada kotak di lokasi ini</p>
-                    {canManageStorage && (
-                      <Button 
-                        onClick={() => {
-                          setShowAddBoxDialog(true);
-                          setNewBox({ ...newBox, locationId: locationWithBoxes.location.id });
-                        }}
-                        variant="outline"
-                        size="sm"
-                      >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Tambah Kotak
-                      </Button>
-                    )}
-                  </div>
-                ) : (
-                  locationWithBoxes.boxes.map((boxWithItems) => (
-                    <div 
-                      key={boxWithItems.box.id}
-                      className={`border rounded-lg p-3 transition-colors ${
-                        boxWithItems.items.length === 0 
-                          ? 'bg-muted/20 border-dashed border-muted-foreground/30' 
-                          : 'bg-muted/30'
-                      }`}
-                      onDragOver={handleDragOver}
-                      onDrop={() => handleDrop(boxWithItems.box.id)}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center">
-                          <Box className="h-4 w-4 mr-2 text-muted-foreground" />
-                          <h3 className="font-medium">{boxWithItems.box.boxNumber}</h3>
-                          {boxWithItems.box.description && (
-                            <span className="text-xs text-muted-foreground ml-2">
-                              - {boxWithItems.box.description}
-                            </span>
-                          )}
-                        </div>
-                        <Badge variant={boxWithItems.items.length > 0 ? "default" : "secondary"}>
-                          {boxWithItems.items.length} barang
-                        </Badge>
-                      </div>
-                      
-                      {boxWithItems.items.length === 0 ? (
-                        <div className="text-center py-4">
-                          <Package className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                          <p className="text-sm text-muted-foreground">Kotak kosong</p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Seret barang ke sini untuk memindahkannya
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {boxWithItems.items.map((item) => (
-                            <div
-                              key={item.id}
-                              draggable
-                              onDragStart={() => handleDragStart(item, boxWithItems.box.id)}
-                              className={cn(
-                                "bg-white border rounded-lg p-3 cursor-move hover:shadow-md transition-all",
-                                item.isHighlighted ? "border-primary-400 bg-primary-50" : "hover:border-primary/50"
-                              )}
-                            >
-                              <div className="flex items-start gap-2">
-                                <GripVertical className="h-5 w-5 mt-0.5 text-muted-foreground flex-shrink-0" />
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-start justify-between gap-2 mb-1">
-                                    <h4 className={cn(
-                                      "font-medium text-sm leading-tight",
-                                      item.isHighlighted ? "text-primary" : ""
-                                    )}>
-                                      {item.description}
-                                    </h4>
-                                    <Badge variant="outline" className="flex-shrink-0">
-                                      {item.inStorage} {item.unitOfMeasure}
-                                    </Badge>
-                                  </div>
-                                  <div className="text-xs text-muted-foreground mb-2">
-                                    {item.productCode}
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <Badge variant="secondary" className="text-xs">
-                                      {item.condition}
-                                    </Badge>
-                                    {item.conditionNotes && (
-                                      <span className="text-xs text-muted-foreground truncate">
-                                        {item.conditionNotes}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={selectedItems.length === filteredTableData.length && filteredTableData.length > 0}
+                        onCheckedChange={handleSelectAll}
+                      />
+                    </TableHead>
+                    <TableHead>Kode Barang</TableHead>
+                    <TableHead>Deskripsi</TableHead>
+                    <TableHead>Lokasi</TableHead>
+                    <TableHead>Kotak</TableHead>
+                    <TableHead>Jumlah</TableHead>
+                    <TableHead>Kondisi</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredTableData.map((item) => (
+                    <TableRow 
+                      key={item.id}
+                      className={cn(
+                        item.isHighlighted ? "bg-primary/10" : "",
+                        !item.isFiltered ? "opacity-50" : ""
                       )}
-                    </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                    >
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedItems.includes(item.id)}
+                          onCheckedChange={(checked) => handleSelectItem(item.id, checked as boolean)}
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">{item.productCode}</TableCell>
+                      <TableCell>{item.description}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center">
+                          <MapPin className="h-4 w-4 mr-1 text-muted-foreground" />
+                          {item.locationName}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center">
+                          <Box className="h-4 w-4 mr-1 text-muted-foreground" />
+                          {item.boxNumber}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {item.inStorage} {item.unitOfMeasure}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{item.condition}</Badge>
+                        {item.conditionNotes && (
+                          <p className="text-xs text-muted-foreground mt-1 truncate max-w-xs">
+                            {item.conditionNotes}
+                          </p>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
-      {draggedItem && (
-        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-primary text-primary-foreground px-4 py-2 rounded-lg shadow-lg flex items-center z-50">
-          <Package className="h-4 w-4 mr-2" />
-          Memindahkan: {draggedItem.description}
-        </div>
-      )}
-
-      {/* Quantity Dialog */}
-      {showQuantityDialog && draggedItem && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <Card className="w-96 max-w-[90vw]">
-            <CardHeader>
-              <CardTitle className="text-primary">Tentukan Jumlah</CardTitle>
-              <CardDescription>
-                Berapa banyak {draggedItem.description} yang ingin dipindahkan?
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+      {/* Move Items Modal */}
+      <Dialog open={showMoveModal} onOpenChange={setShowMoveModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-primary">Pindahkan Barang</DialogTitle>
+            <DialogDescription>
+              Pindahkan {selectedItems.length} barang ke lokasi dan kotak baru
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="destinationLocation">Lokasi Tujuan</Label>
+              <Select value={destinationLocation} onValueChange={setDestinationLocation}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pilih lokasi tujuan" />
+                </SelectTrigger>
+                <SelectContent>
+                  {locationsWithBoxes.map(loc => (
+                    <SelectItem key={loc.location.id} value={loc.location.id}>
+                      {loc.location.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {destinationLocation && (
               <div>
-                <label className="text-sm font-medium">Jumlah</label>
-                <Input
-                  type="number"
-                  min="1"
-                  max={draggedItem.inStorage}
-                  value={moveQuantity}
-                  onChange={(e) => setMoveQuantity(parseInt(e.target.value) || 1)}
-                  className="mt-1"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Tersedia: {draggedItem.inStorage} {draggedItem.unitOfMeasure}
-                </p>
+                <Label htmlFor="destinationBox">Kotak Tujuan</Label>
+                <Select value={destinationBox} onValueChange={setDestinationBox}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih kotak tujuan" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {destinationBoxes.map(box => (
+                      <SelectItem key={box.id} value={box.id}>
+                        {box.boxNumber} {box.description && `- ${box.description}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowQuantityDialog(false);
-                    setDraggedItem(null);
-                    setSourceBoxId(null);
-                  }}
-                >
-                  Batal
-                </Button>
-                <Button onClick={confirmMove} className="bg-primary hover:bg-primary/90">
-                  Pindahkan
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+            )}
+            
+            <div>
+              <Label htmlFor="moveNotes">Catatan (Opsional)</Label>
+              <Textarea
+                id="moveNotes"
+                value={moveNotes}
+                onChange={(e) => setMoveNotes(e.target.value)}
+                placeholder="Masukkan catatan untuk perpindahan ini"
+                rows={2}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowMoveModal(false)}>
+              Batal
+            </Button>
+            <Button 
+              onClick={handleMoveItems}
+              disabled={isMoving || !destinationBox}
+              className="bg-primary hover:bg-primary/90"
+            >
+              {isMoving ? 'Memindahkan...' : 'Pindahkan Barang'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Box Dialog */}
       <Dialog open={showAddBoxDialog} onOpenChange={setShowAddBoxDialog}>
@@ -755,7 +767,7 @@ export default function ItemMovementsPage() {
                   <SelectValue placeholder="Pilih lokasi" />
                 </SelectTrigger>
                 <SelectContent>
-                  {processedLocations.map(loc => (
+                  {locationsWithBoxes.map(loc => (
                     <SelectItem key={loc.location.id} value={loc.location.id}>
                       {loc.location.name}
                     </SelectItem>

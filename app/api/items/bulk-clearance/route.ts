@@ -4,8 +4,14 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { items, itemStock, itemClearances, stockMovements, boxes, locations } from '@/lib/db/schema';
-import { eq, inArray, and, isNull } from 'drizzle-orm';
+import { eq, inArray, and, isNull, sql } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
+
+// Define the enum types to match our schema
+type MovementType = 'initial_stock' | 'borrow' | 'complete' | 'clearance' | 'seed' | 'revert_seed' | 'adjustment';
+type StockState = 'storage' | 'borrowed' | 'clearance' | 'seeded' | 'none' | 'pending';
+type ReferenceType = 'borrow_request' | 'borrow_request_item' | 'clearance' | 'manual';
+type ClearanceStatus = 'pending' | 'approved' | 'rejected' | 'completed';
 
 // Helper function to generate a short ID
 function generateShortId(length = 10) {
@@ -50,80 +56,132 @@ export async function POST(request: NextRequest) {
 
     // Process each item
     for (const item of clearanceItems) {
-      const { itemId, quantity, stockId } = item;
+      const { itemId, quantity } = item;
 
       if (!itemId || !quantity || quantity <= 0) {
         errors.push({ itemId, error: 'Invalid item ID or quantity' });
         continue;
       }
 
-      // Get the current stock for the item
-      // If stockId is provided, get that specific stock record
-      // Otherwise, get any available stock record for the item
-      let stock;
-      if (stockId) {
-        stock = await db.query.itemStock.findFirst({
-          where: and(
-            eq(itemStock.id, stockId),
-            eq(itemStock.itemId, itemId)
-          ),
-        });
-      } else {
-        stock = await db.query.itemStock.findFirst({
-          where: eq(itemStock.itemId, itemId),
-        });
-      }
+      // Get ALL stock records for this item, ordered by available stock
+      const allStockRecords = await db
+        .select({
+          stock: itemStock,
+          box: boxes,
+          location: locations,
+          availableStock: sql`${itemStock.pending} + ${itemStock.inStorage}`.as('available_stock')
+        })
+        .from(itemStock)
+        .leftJoin(boxes, eq(itemStock.boxId, boxes.id))
+        .leftJoin(locations, eq(boxes.locationId, locations.id))
+        .where(eq(itemStock.itemId, itemId))
+        .orderBy(sql`available_stock DESC`); // Prioritize stock with more available quantity
 
-      if (!stock) {
-        errors.push({ itemId, error: 'Item stock not found' });
+      if (!allStockRecords || allStockRecords.length === 0) {
+        errors.push({ itemId, error: 'No stock records found for this item' });
         continue;
       }
 
-      // Check if there's enough available stock (pending + inStorage)
-      const availableStock = stock.pending + stock.inStorage;
-      if (availableStock < quantity) {
+      // Calculate total available stock across all locations
+      const totalAvailableStock = allStockRecords.reduce(
+        (total, record) => total + (record.stock.pending + record.stock.inStorage),
+        0
+      );
+
+      if (totalAvailableStock < quantity) {
         errors.push({ 
           itemId, 
-          error: `Insufficient stock. Available: ${availableStock}, Requested: ${quantity}` 
+          error: `Insufficient stock. Available: ${totalAvailableStock}, Requested: ${quantity}` 
         });
         continue;
       }
 
-      // Determine how much to take from pending and inStorage
-      let pendingToClear = 0;
-      let inStorageToClear = 0;
+      // Distribute the clearance quantity across available stock records
+      let remainingQuantity = quantity;
+      const updatedStockRecords = [];
+      const stockMovementsData: {
+        itemId: string;
+        stockId: string;
+        movementType: MovementType;
+        quantity: number;
+        fromState: StockState;
+        toState: StockState;
+        referenceId: string;
+        referenceType: ReferenceType;
+        performedBy: string;
+        notes: string;
+        boxId: string | null;
+      }[] = [];
+      const clearedFromLocations = [];
 
-      if (stock.pending >= quantity) {
-        pendingToClear = quantity;
-      } else {
-        pendingToClear = stock.pending;
-        inStorageToClear = quantity - stock.pending;
-      }
+      for (const record of allStockRecords) {
+        if (remainingQuantity <= 0) break;
 
-      // Update item stock - location (boxId) remains unchanged
-      const updatedStock = await db
-        .update(itemStock)
-        .set({
-          pending: stock.pending - pendingToClear,
-          inStorage: stock.inStorage - inStorageToClear,
-          inClearance: stock.inClearance + quantity,
-          updatedAt: new Date(),
-        })
-        .where(eq(itemStock.id, stock.id))
-        .returning();
+        const { stock, box, location } = record;
+        const availableInRecord = stock.pending + stock.inStorage;
+        
+        if (availableInRecord <= 0) continue;
 
-      // Get location information for the stock record
-      let locationInfo = null;
-      if (stock.boxId) {
-        locationInfo = await db.query.boxes.findFirst({
-          where: eq(boxes.id, stock.boxId),
-          with: {
-            location: true
-          }
+        // Determine how much to clear from this record
+        const quantityToClear = Math.min(remainingQuantity, availableInRecord);
+        
+        // Determine how much to take from pending and inStorage in this record
+        let pendingToClear = 0;
+        let inStorageToClear = 0;
+
+        if (stock.pending >= quantityToClear) {
+          pendingToClear = quantityToClear;
+        } else {
+          pendingToClear = stock.pending;
+          inStorageToClear = quantityToClear - stock.pending;
+        }
+
+        // Update this stock record
+        const updatedStock = await db
+          .update(itemStock)
+          .set({
+            pending: stock.pending - pendingToClear,
+            inStorage: stock.inStorage - inStorageToClear,
+            inClearance: stock.inClearance + quantityToClear,
+            updatedAt: new Date(),
+          })
+          .where(eq(itemStock.id, stock.id))
+          .returning();
+
+        updatedStockRecords.push(updatedStock[0]);
+        
+        // Record stock movement for this specific stock record
+        const shortReferenceId = generateShortId(10);
+        stockMovementsData.push({
+          itemId: itemId,
+          stockId: stock.id,
+          movementType: 'clearance', 
+          quantity: quantityToClear,
+          fromState: pendingToClear > 0 ? 'pending' : 'storage',
+          toState: 'clearance', 
+          referenceId: shortReferenceId,
+          referenceType: 'clearance',
+          performedBy: session.user.id,
+          notes: `Moved to clearance: ${reason}`,
+          boxId: stock.boxId,
         });
+
+        // Track location information for reporting
+        clearedFromLocations.push({
+          stockId: stock.id,
+          boxId: stock.boxId,
+          boxNumber: box?.boxNumber,
+          locationId: location?.id,
+          locationName: location?.name,
+          quantityCleared: quantityToClear,
+          pendingCleared: pendingToClear,
+          inStorageCleared: inStorageToClear,
+        });
+
+        remainingQuantity -= quantityToClear;
       }
 
-      // Create clearance record
+      // Create a single clearance record for the item with the total quantity
       const [clearance] = await db
         .insert(itemClearances)
         .values({
@@ -133,46 +191,21 @@ export async function POST(request: NextRequest) {
           reason,
           status: 'completed',
           metadata: {
-            pendingCleared: pendingToClear,
-            inStorageCleared: inStorageToClear,
-            stockId: stock.id,
-            boxId: stock.boxId,
-            locationId: locationInfo?.location?.id,
-            locationName: locationInfo?.location?.name,
-            boxNumber: locationInfo?.boxNumber,
+            clearedFromLocations,
+            totalPendingCleared: clearedFromLocations.reduce((sum, loc) => sum + loc.pendingCleared, 0),
+            totalInStorageCleared: clearedFromLocations.reduce((sum, loc) => sum + loc.inStorageCleared, 0),
           },
         })
         .returning();
 
-      // Generate a short reference ID
-      const shortReferenceId = generateShortId(10);
-
-      // Record stock movement - include location information
-      await db.insert(stockMovements).values({
-        itemId,
-        stockId: updatedStock[0].id,
-        movementType: 'clearance',
-        quantity,
-        fromState: pendingToClear > 0 ? 'pending' : 'storage',
-        toState: 'clearance',
-        referenceId: shortReferenceId,
-        referenceType: 'clearance',
-        performedBy: session.user.id,
-        notes: `Moved to clearance: ${reason}`,
-        boxId: stock.boxId, // Include the boxId in the movement record
-      });
+      // Insert all stock movement records
+      await db.insert(stockMovements).values(stockMovementsData);
 
       results.push({
         itemId,
         quantity,
-        pendingCleared: pendingToClear,
-        inStorageCleared: inStorageToClear,
         clearanceId: clearance.id,
-        referenceId: shortReferenceId,
-        stockId: stock.id,
-        boxId: stock.boxId,
-        locationName: locationInfo?.location?.name,
-        boxNumber: locationInfo?.boxNumber,
+        clearedFromLocations,
       });
     }
 
@@ -184,7 +217,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Failed to move items to clearance:', error);
     return NextResponse.json(
-      { error: 'Failed to move items to clearance' },
+      { error: 'Failed to move items to clearance', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }
