@@ -466,10 +466,8 @@ export function AddItemModal({ isOpen, onClose, onSuccess }: AddItemModalProps) 
                   <SelectValue placeholder="Pilih kondisi" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="excellent">Sangat Baik</SelectItem>
-                  <SelectItem value="good">Baik</SelectItem>
-                  <SelectItem value="fair">Cukup</SelectItem>
-                  <SelectItem value="poor">Buruk</SelectItem>
+                  <SelectItem value="good">Good</SelectItem>
+                  <SelectItem value="poor">Poor</SelectItem>
                 </SelectContent>
               </Select>
             </div>

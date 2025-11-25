@@ -20,10 +20,13 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import { MessageContainer } from '@/components/ui/message';
 import { useMessages } from '@/hooks/use-messages';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   Search, 
   Plus, 
@@ -32,7 +35,9 @@ import {
   AlertTriangle,
   CheckCircle,
   MapPin,
-  XCircle
+  XCircle,
+  Filter,
+  X
 } from 'lucide-react';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
 
@@ -78,10 +83,11 @@ export default function MyRequestsPage() {
   const { messages, addMessage, dismissMessage } = useMessages();
   const [requests, setRequests] = useState<BorrowRequest[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilters, setStatusFilters] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<BorrowRequest | null>(null);
+  const [showFilterDialog, setShowFilterDialog] = useState(false);
 
   useEffect(() => {
     fetchRequests();
@@ -93,12 +99,16 @@ export default function MyRequestsPage() {
       const response = await fetch('/api/borrow-requests');
       if (response.ok) {
         const data = await response.json();
-        setRequests(data);
+        // Sort by requestedAt in descending order (latest first)
+        const sortedData = [...data].sort((a, b) => 
+          new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime()
+        );
+        setRequests(sortedData);
       } else {
-        addMessage('error', 'Failed to fetch requests', 'Error');
+        addMessage('error', 'Gagal mengambil permintaan', 'Error');
       }
     } catch (error) {
-      addMessage('error', 'Failed to fetch requests', 'Error');
+      addMessage('error', 'Gagal mengambil permintaan', 'Error');
     } finally {
       setIsLoading(false);
     }
@@ -128,8 +138,8 @@ export default function MyRequestsPage() {
   };
 
   const filteredRequests = requests.filter(request => {
-    if (statusFilter !== 'all') {
-      if (request.status !== statusFilter) return false;
+    if (statusFilters.length > 0) {
+      if (!statusFilters.includes(request.status)) return false;
     }
     
     if (searchTerm) {
@@ -146,14 +156,14 @@ export default function MyRequestsPage() {
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
-      pending_manager: { color: 'bg-yellow-100 text-yellow-800', label: 'Pending Manager' },
-      pending_storage: { color: 'bg-blue-100 text-blue-800', label: 'Pending Storage' },
-      approved: { color: 'bg-indigo-100 text-indigo-800', label: 'Approved' },
-      active: { color: 'bg-green-100 text-green-800', label: 'Active' },
-      complete: { color: 'bg-gray-100 text-gray-800', label: 'Complete' },
-      rejected: { color: 'bg-red-100 text-red-800', label: 'Rejected' },
-      seeded: { color: 'bg-purple-100 text-purple-800', label: 'Seeded' },
-      reverted: { color: 'bg-orange-100 text-orange-800', label: 'Reverted' },
+      pending_manager: { color: 'bg-yellow-100 text-yellow-800', label: 'Approval Manager' },
+      pending_storage: { color: 'bg-blue-100 text-blue-800', label: 'Approval Storage Master' },
+      approved: { color: 'bg-indigo-100 text-indigo-800', label: 'Disetujui' },
+      active: { color: 'bg-green-100 text-green-800', label: 'Aktif' },
+      complete: { color: 'bg-gray-100 text-gray-800', label: 'Selesai' },
+      rejected: { color: 'bg-red-100 text-red-800', label: 'Ditolak' },
+      seeded: { color: 'bg-purple-100 text-purple-800', label: 'Ditanam' },
+      reverted: { color: 'bg-orange-100 text-orange-800', label: 'Dikembalikan' },
     };
     
     const config = statusConfig[status as keyof typeof statusConfig] || { color: '', label: status };
@@ -162,10 +172,37 @@ export default function MyRequestsPage() {
 
   const getPrimaryImage = (images: any[]) => images.find(img => img.isPrimary) || images[0];
 
+  // Status filter options
+  const statusOptions = [
+    { value: 'pending_manager', label: 'Approval Manager' },
+    { value: 'pending_storage', label: 'Approval Storage Master' },
+    { value: 'approved', label: 'Disetujui' },
+    { value: 'active', label: 'Aktif' },
+    { value: 'complete', label: 'Selesai' },
+    { value: 'rejected', label: 'Ditolak' },
+    { value: 'seeded', label: 'Ditanam' },
+    { value: 'reverted', label: 'Dikembalikan' },
+  ];
+
+  const handleStatusFilterChange = (value: string, checked: boolean) => {
+    if (checked) {
+      setStatusFilters(prev => [...prev, value]);
+    } else {
+      setStatusFilters(prev => prev.filter(v => v !== value));
+    }
+  };
+
+  const clearAllFilters = () => {
+    setStatusFilters([]);
+  };
+
+  // Check if any filter is active
+  const hasActiveFilters = statusFilters.length > 0;
+
   if (isLoading) {
     return (
       <div className="p-6 flex items-center justify-center">
-        <div className="text-gray-600">Loading requests...</div>
+        <div className="text-gray-600">Memuat permintaan...</div>
       </div>
     );
   }
@@ -176,12 +213,12 @@ export default function MyRequestsPage() {
       
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">My Lending Requests</h1>
-          <p className="text-gray-600">View and manage your borrow requests</p>
+          <h1 className="text-2xl font-bold text-gray-900">Permintaan Peminjaman Saya</h1>
+          <p className="text-gray-600">Lihat dan kelola permintaan peminjaman Anda</p>
         </div>
         <Button onClick={() => window.location.href = '/dashboard/requests/new-requests'}>
           <Plus className="mr-2 h-4 w-4" />
-          New Request
+          Permintaan Baru
         </Button>
       </div>
 
@@ -195,7 +232,7 @@ export default function MyRequestsPage() {
                 <div className="text-2xl font-bold text-yellow-600">
                   {requests.filter(r => r.status === 'pending_manager').length}
                 </div>
-                <p className="text-xs text-gray-500">Pending Manager</p>
+                <p className="text-xs text-gray-500">Approval Manager</p>
               </div>
             </div>
           </CardContent>
@@ -208,7 +245,7 @@ export default function MyRequestsPage() {
                 <div className="text-2xl font-bold text-blue-600">
                   {requests.filter(r => r.status === 'pending_storage').length}
                 </div>
-                <p className="text-xs text-gray-500">Pending Storage</p>
+                <p className="text-xs text-gray-500">Approval Storage Master</p>
               </div>
             </div>
           </CardContent>
@@ -221,7 +258,7 @@ export default function MyRequestsPage() {
                 <div className="text-2xl font-bold text-green-600">
                   {requests.filter(r => r.status === 'active').length}
                 </div>
-                <p className="text-xs text-gray-500">Active</p>
+                <p className="text-xs text-gray-500">Aktif</p>
               </div>
             </div>
           </CardContent>
@@ -234,7 +271,7 @@ export default function MyRequestsPage() {
                 <div className="text-2xl font-bold text-gray-600">
                   {requests.filter(r => r.status === 'complete').length}
                 </div>
-                <p className="text-xs text-gray-500">Complete</p>
+                <p className="text-xs text-gray-500">Selesai</p>
               </div>
             </div>
           </CardContent>
@@ -247,38 +284,63 @@ export default function MyRequestsPage() {
                 <div className="text-2xl font-bold text-red-600">
                   {requests.filter(r => r.status === 'rejected').length}
                 </div>
-                <p className="text-xs text-gray-500">Rejected</p>
+                <p className="text-xs text-gray-500">Ditolak</p>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
+      {/* Active Filters Display */}
+      {hasActiveFilters && (
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="text-sm text-gray-500">Filter aktif:</span>
+          
+          {statusFilters.map(value => (
+            <Badge key={value} variant="secondary" className="flex items-center gap-1">
+              {statusOptions.find(opt => opt.value === value)?.label || value}
+              <X 
+                className="h-3 w-3 cursor-pointer" 
+                onClick={() => handleStatusFilterChange(value, false)}
+              />
+            </Badge>
+          ))}
+          
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={clearAllFilters}
+            className="h-6 px-2 text-xs"
+          >
+            Hapus Semua
+          </Button>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="flex gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
           <Input
-            placeholder="Search requests..."
+            placeholder="Cari permintaan..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
           />
         </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+        <Button 
+          variant="outline" 
+          onClick={() => setShowFilterDialog(true)}
+          className={hasActiveFilters ? "bg-gray-100" : ""}
         >
-          <option value="all">All</option>
-          <option value="pending_manager">Pending Manager</option>
-          <option value="pending_storage">Pending Storage</option>
-          <option value="approved">Approved</option>
-          <option value="active">Active</option>
-          <option value="seeded">Seeded</option>
-          <option value="complete">Complete</option>
-          <option value="rejected">Rejected</option>
-        </select>
+          <Filter className="mr-2 h-4 w-4" />
+          Filter
+          {hasActiveFilters && (
+            <span className="ml-1 bg-primary text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+              {statusFilters.length}
+            </span>
+          )}
+        </Button>
       </div>
 
       {/* Table */}
@@ -300,7 +362,7 @@ export default function MyRequestsPage() {
             {filteredRequests.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} className="text-center text-gray-500 py-8">
-                  No requests found
+                  Tidak ada permintaan ditemukan
                 </TableCell>
               </TableRow>
             ) : (
@@ -350,7 +412,7 @@ export default function MyRequestsPage() {
                         if (daysLeft === null) {
                           return (
                             <div className="text-sm text-gray-400">
-                              Pending approval
+                              Menunggu persetujuan
                             </div>
                           );
                         }
@@ -358,12 +420,12 @@ export default function MyRequestsPage() {
                           <>
                             <div className={`text-sm font-medium ${getDaysLeftColor(daysLeft)}`}>
                               {daysLeft < 0 
-                                ? `Ended (${Math.abs(daysLeft)} days ago)` 
-                                : `${daysLeft} day${daysLeft !== 1 ? 's' : ''}`
+                                ? `Berakhir (${Math.abs(daysLeft)} hari yang lalu)` 
+                                : `${daysLeft} hari${daysLeft !== 1 ? '' : ''}`
                               }
                             </div>
                             <div className="text-xs text-gray-500">
-                              End: {formatDate(request.endDate, { format: 'short' })}
+                              Selesai: {formatDate(request.endDate, { format: 'short' })}
                             </div>
                           </>
                         );
@@ -387,83 +449,77 @@ export default function MyRequestsPage() {
       <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Request Details</DialogTitle>
+            <DialogTitle>Detail Permintaan</DialogTitle>
           </DialogHeader>
           {selectedRequest && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="font-medium">Request ID:</span> {selectedRequest.id}
+                  <span className="font-medium">ID Permintaan:</span> {selectedRequest.id}
                 </div>
                 <div>
                   <span className="font-medium">Status:</span> {getStatusBadge(selectedRequest.status)}
                 </div>
                 <div>
-                  <span className="font-medium">Requested By:</span> {selectedRequest.user.name}
+                  <span className="font-medium">Dipinta Oleh:</span> {selectedRequest.user.name}
                 </div>
                 <div>
-                  <span className="font-medium">Department:</span> {selectedRequest.user.department?.name || 'No Department'}
+                  <span className="font-medium">Departemen:</span> {selectedRequest.user.department?.name || 'No Department'}
                 </div>
                 <div>
-                  <span className="font-medium">Start Date:</span> {formatDate(selectedRequest.startDate, { format: 'datetime' })}
-                </div>
-                <div>
-                  <span className="font-medium">End Date:</span> {formatDate(selectedRequest.endDate, { format: 'datetime' })}
-                </div>
-                <div>
-                  <span className="font-medium">Start Date:</span> 
+                  <span className="font-medium">Tanggal Mulai:</span> 
                   {isPlaceholderDate(selectedRequest.startDate) 
-                    ? <span className="ml-2 text-gray-400">Will be set upon approval</span>
+                    ? <span className="ml-2 text-gray-400">Akan ditetapkan setelah disetujui</span>
                     : formatDate(selectedRequest.startDate, { format: 'datetime' })
                   }
                 </div>
                 <div>
-                  <span className="font-medium">End Date:</span> 
+                  <span className="font-medium">Tanggal Selesai:</span> 
                   {isPlaceholderDate(selectedRequest.endDate)
-                    ? <span className="ml-2 text-gray-400">Will be set upon approval</span>
+                    ? <span className="ml-2 text-gray-400">Akan ditetapkan setelah disetujui</span>
                     : formatDate(selectedRequest.endDate, { format: 'datetime' })
                   }
                 </div>
                 <div>
-                  <span className="font-medium">Days Left:</span> 
+                  <span className="font-medium">Sisa Hari:</span> 
                   {(() => {
                     if (isPlaceholderDate(selectedRequest.endDate)) {
-                      return <span className="ml-2 text-gray-400">Pending approval</span>;
+                      return <span className="ml-2 text-gray-400">Menunggu persetujuan</span>;
                     }
                     const daysLeft = calculateDaysLeft(selectedRequest.endDate);
                     if (daysLeft === null) {
-                      return <span className="ml-2 text-gray-400">Pending approval</span>;
+                      return <span className="ml-2 text-gray-400">Menunggu persetujuan</span>;
                     }
                     return (
                       <span className={`ml-2 ${getDaysLeftColor(daysLeft)}`}>
                         {daysLeft < 0 
-                          ? `Ended (${Math.abs(daysLeft)} days ago)` 
-                          : `${daysLeft} day${daysLeft !== 1 ? 's' : ''}`
+                          ? `Berakhir (${Math.abs(daysLeft)} hari yang lalu)` 
+                          : `${daysLeft} hari${daysLeft !== 1 ? '' : ''}`
                         }
                       </span>
                     );
                   })()}
                 </div>
                 <div>
-                  <span className="font-medium">Requested At:</span> {formatDate(selectedRequest.requestedAt, { format: 'datetime' })}
+                  <span className="font-medium">Dipinta Pada:</span> {formatDate(selectedRequest.requestedAt, { format: 'datetime' })}
                 </div>
                 {selectedRequest.managerApprovedBy && (
                   <div>
-                    <span className="font-medium">Manager Approved By:</span> {selectedRequest.managerApprovedBy.name}
+                    <span className="font-medium">Disetujui Manajer Oleh:</span> {selectedRequest.managerApprovedBy.name}
                   </div>
                 )}
                 {selectedRequest.storageApprovedBy && (
                   <div>
-                    <span className="font-medium">Storage Approved By:</span> {selectedRequest.storageApprovedBy.name}
+                    <span className="font-medium">Disetujui Gudang Oleh:</span> {selectedRequest.storageApprovedBy.name}
                   </div>
                 )}
               </div>
               <div>
-                <span className="font-medium">Reason:</span>
+                <span className="font-medium">Alasan:</span>
                 <p className="text-sm text-gray-600 mt-1">{selectedRequest.reason}</p>
               </div>
               <div>
-                <span className="font-medium">Items:</span>
+                <span className="font-medium">Item:</span>
                 <div className="mt-2 space-y-2">
                   {selectedRequest.items.map((reqItem) => (
                     <div key={reqItem.id} className="flex items-center space-x-3 p-2 border rounded">
@@ -479,7 +535,7 @@ export default function MyRequestsPage() {
                       <div>
                         <div className="font-bold">{reqItem.item.productCode}</div>
                         <div className="text-sm text-gray-600">{reqItem.item.description}</div>
-                        <div className="text-xs text-gray-500">Quantity: {reqItem.quantity}</div>
+                        <div className="text-xs text-gray-500">Jumlah: {reqItem.quantity}</div>
                       </div>
                     </div>
                   ))}
@@ -487,6 +543,60 @@ export default function MyRequestsPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Filter Dialog */}
+      <Dialog open={showFilterDialog} onOpenChange={setShowFilterDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Filter Permintaan</DialogTitle>
+            <DialogDescription>
+              Pilih status untuk menyaring permintaan
+            </DialogDescription>
+          </DialogHeader>
+          
+          <ScrollArea className="max-h-[60vh]">
+            <div className="space-y-4">
+              <div>
+                <h3 className="font-medium mb-3">Status</h3>
+                <div className="space-y-2">
+                  {statusOptions.map(option => (
+                    <div key={option.value} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`status-${option.value}`}
+                        checked={statusFilters.includes(option.value)}
+                        onCheckedChange={(checked) => 
+                          handleStatusFilterChange(option.value, checked as boolean)
+                        }
+                      />
+                      <label 
+                        htmlFor={`status-${option.value}`}
+                        className="text-sm cursor-pointer"
+                      >
+                        {option.label}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </ScrollArea>
+          
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={clearAllFilters}
+            >
+              Hapus Semua Filter
+            </Button>
+            <Button 
+              onClick={() => setShowFilterDialog(false)}
+              className="bg-primary hover:bg-primary/90"
+            >
+              Terapkan Filter
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

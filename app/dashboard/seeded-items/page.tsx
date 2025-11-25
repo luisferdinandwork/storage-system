@@ -668,9 +668,7 @@ export default function SeededItemsPage() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="excellent">Excellent</SelectItem>
                             <SelectItem value="good">Good</SelectItem>
-                            <SelectItem value="fair">Fair</SelectItem>
                             <SelectItem value="poor">Poor</SelectItem>
                           </SelectContent>
                         </Select>

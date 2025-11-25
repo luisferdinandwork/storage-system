@@ -535,7 +535,8 @@ export default function StockLocationsPage() {
                       {item.stockRecords && item.stockRecords.length > 0 ? (
                         <div className="text-sm">
                           {item.stockRecords
-                            .map((record) => record.box?.boxNumber || 'Unknown Box')
+                          // Untuk ganti label barang tidak dilokasi
+                            .map((record) => record.box?.boxNumber || 'Null')
                             .join(', ')}
                         </div>
                       ) : (

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Package, Plus, Search, Filter, Columns, Upload, Download, Trash2, Archive, ChevronRight, MoreHorizontal, Edit, Eye, X } from 'lucide-react';
+import { Package, Plus, Search, Filter, Columns, Upload, Download, Trash2, Archive, ChevronRight, MoreHorizontal, Edit, Eye, X, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AddItemModal } from '@/components/items/add-item-modal';
 import { MessageContainer } from '@/components/ui/message';
@@ -26,15 +26,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useExportItems } from '@/hooks/use-export-items';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 // Define all possible columns
 const ALL_COLUMNS = [
@@ -51,19 +45,50 @@ const ALL_COLUMNS = [
   { id: 'actions', label: 'Aksi', defaultVisible: true },
 ];
 
+// Filter options
+const CATEGORY_OPTIONS = [
+  { value: '00', label: 'Lifestyle' },
+  { value: '01', label: 'Football' },
+  { value: '02', label: 'Futsal' },
+  { value: '03', label: 'Street Soccer' },
+  { value: '04', label: 'Running' },
+  { value: '05', label: 'Training' },
+  { value: '06', label: 'Volley' },
+  { value: '08', label: 'Badminton' },
+  { value: '09', label: 'Tennis' },
+  { value: '10', label: 'Basketball' },
+  { value: '12', label: 'Skateboard' },
+  { value: '14', label: 'Swimming' },
+  { value: '17', label: 'Back to school' },
+];
+
+const STATUS_OPTIONS = [
+  { value: 'pending_approval', label: 'Menunggu Persetujuan' },
+  { value: 'approved', label: 'Disetujui' },
+  { value: 'available', label: 'Tersedia' },
+  { value: 'borrowed', label: 'Dipinjam' },
+  { value: 'in_clearance', label: 'Dalam Pembersihan' },
+  { value: 'rejected', label: 'Ditolak' },
+];
+
+const UNIT_OPTIONS = [
+  { value: 'PCS', label: 'Pieces (PCS)' },
+  { value: 'PRS', label: 'Pairs (PRS)' },
+];
+
 export default function ItemsPage() {
   const { data: session } = useSession();
   const { messages, addMessage, dismissMessage } = useMessages();
   const [items, setItems] = useState<any[]>([]);
   const [boxes, setBoxes] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [divisionFilter, setDivisionFilter] = useState<string>('all');
-  const [brandFilter, setBrandFilter] = useState<string>('all');
-  const [seasonFilter, setSeasonFilter] = useState<string>('all');
-  const [periodFilter, setPeriodFilter] = useState<string>('all');
-  const [unitFilter, setUnitFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [categoryFilters, setCategoryFilters] = useState<string[]>([]);
+  const [divisionFilters, setDivisionFilters] = useState<string[]>([]);
+  const [brandFilters, setBrandFilters] = useState<string[]>([]);
+  const [seasonFilters, setSeasonFilters] = useState<string[]>([]);
+  const [periodFilters, setPeriodFilters] = useState<string[]>([]);
+  const [unitFilters, setUnitFilters] = useState<string[]>([]);
+  const [statusFilters, setStatusFilters] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showColumnSelector, setShowColumnSelector] = useState(false);
@@ -327,13 +352,13 @@ export default function ItemsPage() {
   const filteredItems = items.filter(item => {
     const matchesSearch = item.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
                        item.productCode.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = categoryFilter === 'all' || item.productCategory === categoryFilter;
-    const matchesDivision = divisionFilter === 'all' || item.productDivision === divisionFilter;
-    const matchesBrand = brandFilter === 'all' || item.brandCode === brandFilter;
-    const matchesSeason = seasonFilter === 'all' || item.season === seasonFilter;
-    const matchesPeriod = periodFilter === 'all' || item.period === periodFilter;
-    const matchesUnit = unitFilter === 'all' || item.unitOfMeasure === unitFilter;
-    const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
+    const matchesCategory = categoryFilters.length === 0 || categoryFilters.includes(item.productCategory);
+    const matchesDivision = divisionFilters.length === 0 || divisionFilters.includes(item.productDivision);
+    const matchesBrand = brandFilters.length === 0 || brandFilters.includes(item.brandCode);
+    const matchesSeason = seasonFilters.length === 0 || seasonFilters.includes(item.season);
+    const matchesPeriod = periodFilters.length === 0 || periodFilters.includes(item.period);
+    const matchesUnit = unitFilters.length === 0 || unitFilters.includes(item.unitOfMeasure);
+    const matchesStatus = statusFilters.length === 0 || statusFilters.includes(item.status);
 
     return matchesSearch && matchesCategory && matchesDivision && matchesBrand && 
            matchesSeason && matchesPeriod && matchesUnit && matchesStatus;
@@ -354,6 +379,107 @@ export default function ItemsPage() {
   const canDeleteItem = isSuperAdmin;
   const canExportItems = isSuperAdmin || isItemMaster;
   const canClearance = isSuperAdmin || isItemMaster;
+
+  // Handle filter changes
+  const handleCategoryFilterChange = (value: string, checked: boolean) => {
+    if (checked) {
+      setCategoryFilters(prev => [...prev, value]);
+    } else {
+      setCategoryFilters(prev => prev.filter(v => v !== value));
+    }
+    setCurrentPage(1);
+  };
+
+  const handleDivisionFilterChange = (value: string, checked: boolean) => {
+    if (checked) {
+      setDivisionFilters(prev => [...prev, value]);
+    } else {
+      setDivisionFilters(prev => prev.filter(v => v !== value));
+    }
+    setCurrentPage(1);
+  };
+
+  const handleBrandFilterChange = (value: string, checked: boolean) => {
+    if (checked) {
+      setBrandFilters(prev => [...prev, value]);
+    } else {
+      setBrandFilters(prev => prev.filter(v => v !== value));
+    }
+    setCurrentPage(1);
+  };
+
+  const handleSeasonFilterChange = (value: string, checked: boolean) => {
+    if (checked) {
+      setSeasonFilters(prev => [...prev, value]);
+    } else {
+      setSeasonFilters(prev => prev.filter(v => v !== value));
+    }
+    setCurrentPage(1);
+  };
+
+  const handlePeriodFilterChange = (value: string, checked: boolean) => {
+    if (checked) {
+      setPeriodFilters(prev => [...prev, value]);
+    } else {
+      setPeriodFilters(prev => prev.filter(v => v !== value));
+    }
+    setCurrentPage(1);
+  };
+
+  const handleUnitFilterChange = (value: string, checked: boolean) => {
+    if (checked) {
+      setUnitFilters(prev => [...prev, value]);
+    } else {
+      setUnitFilters(prev => prev.filter(v => v !== value));
+    }
+    setCurrentPage(1);
+  };
+
+  const handleStatusFilterChange = (value: string, checked: boolean) => {
+    if (checked) {
+      setStatusFilters(prev => [...prev, value]);
+    } else {
+      setStatusFilters(prev => prev.filter(v => v !== value));
+    }
+    setCurrentPage(1);
+  };
+
+  // Clear all filters
+  const clearAllFilters = () => {
+    setCategoryFilters([]);
+    setDivisionFilters([]);
+    setBrandFilters([]);
+    setSeasonFilters([]);
+    setPeriodFilters([]);
+    setUnitFilters([]);
+    setStatusFilters([]);
+    setCurrentPage(1);
+  };
+
+  // Check if any filter is active
+  const hasActiveFilters = categoryFilters.length > 0 || 
+                          divisionFilters.length > 0 || 
+                          brandFilters.length > 0 || 
+                          seasonFilters.length > 0 || 
+                          periodFilters.length > 0 || 
+                          unitFilters.length > 0 || 
+                          statusFilters.length > 0;
+
+  // Get filter label by value
+  const getCategoryLabel = (value: string) => {
+    const category = CATEGORY_OPTIONS.find(c => c.value === value);
+    return category ? category.label : value;
+  };
+
+  const getStatusLabel = (value: string) => {
+    const status = STATUS_OPTIONS.find(s => s.value === value);
+    return status ? status.label : value;
+  };
+
+  const getUnitLabel = (value: string) => {
+    const unit = UNIT_OPTIONS.find(u => u.value === value);
+    return unit ? unit.label : value;
+  };
 
   return (
     <div className="space-y-6">
@@ -527,178 +653,304 @@ export default function ItemsPage() {
         >
           <Filter className="mr-2 h-4 w-4" />
           Filter
+          {hasActiveFilters && (
+            <span className="ml-1 bg-primary text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+              {categoryFilters.length + divisionFilters.length + brandFilters.length + 
+               seasonFilters.length + periodFilters.length + unitFilters.length + statusFilters.length}
+            </span>
+          )}
         </Button>
       </div>
 
-      {/* Filter Panel */}
+      {/* Active Filters Display */}
+      {hasActiveFilters && (
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="text-sm text-gray-500">Filter aktif:</span>
+          
+          {categoryFilters.map(value => (
+            <Badge key={`cat-${value}`} variant="secondary" className="flex items-center gap-1">
+              Kategori: {getCategoryLabel(value)}
+              <X 
+                className="h-3 w-3 cursor-pointer" 
+                onClick={() => handleCategoryFilterChange(value, false)}
+              />
+            </Badge>
+          ))}
+          
+          {divisionFilters.map(value => (
+            <Badge key={`div-${value}`} variant="secondary" className="flex items-center gap-1">
+              Divisi: {value}
+              <X 
+                className="h-3 w-3 cursor-pointer" 
+                onClick={() => handleDivisionFilterChange(value, false)}
+              />
+            </Badge>
+          ))}
+          
+          {brandFilters.map(value => (
+            <Badge key={`brand-${value}`} variant="secondary" className="flex items-center gap-1">
+              Merek: {value}
+              <X 
+                className="h-3 w-3 cursor-pointer" 
+                onClick={() => handleBrandFilterChange(value, false)}
+              />
+            </Badge>
+          ))}
+          
+          {seasonFilters.map(value => (
+            <Badge key={`season-${value}`} variant="secondary" className="flex items-center gap-1">
+              Musim: {value}
+              <X 
+                className="h-3 w-3 cursor-pointer" 
+                onClick={() => handleSeasonFilterChange(value, false)}
+              />
+            </Badge>
+          ))}
+          
+          {periodFilters.map(value => (
+            <Badge key={`period-${value}`} variant="secondary" className="flex items-center gap-1">
+              Periode: {value}
+              <X 
+                className="h-3 w-3 cursor-pointer" 
+                onClick={() => handlePeriodFilterChange(value, false)}
+              />
+            </Badge>
+          ))}
+          
+          {unitFilters.map(value => (
+            <Badge key={`unit-${value}`} variant="secondary" className="flex items-center gap-1">
+              Satuan: {getUnitLabel(value)}
+              <X 
+                className="h-3 w-3 cursor-pointer" 
+                onClick={() => handleUnitFilterChange(value, false)}
+              />
+            </Badge>
+          ))}
+          
+          {statusFilters.map(value => (
+            <Badge key={`status-${value}`} variant="secondary" className="flex items-center gap-1">
+              Status: {getStatusLabel(value)}
+              <X 
+                className="h-3 w-3 cursor-pointer" 
+                onClick={() => handleStatusFilterChange(value, false)}
+              />
+            </Badge>
+          ))}
+          
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={clearAllFilters}
+            className="h-6 px-2 text-xs"
+          >
+            Hapus Semua
+          </Button>
+        </div>
+      )}
+
+      {/* Filter Panel Overlay */}
       {showFilterPanel && (
-        <div className="bg-gray-50 p-4 rounded-md space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Kategori</label>
-              <Select
-                value={categoryFilter}
-                onValueChange={(value) => {
-                  setCategoryFilter(value);
-                  setCurrentPage(1);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Semua Kategori" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Kategori</SelectItem>
-                  <SelectItem value="00">Lifestyle</SelectItem>
-                  <SelectItem value="01">Football</SelectItem>
-                  <SelectItem value="02">Futsal</SelectItem>
-                  <SelectItem value="03">Street Soccer</SelectItem>
-                  <SelectItem value="04">Running</SelectItem>
-                  <SelectItem value="05">Training</SelectItem>
-                  <SelectItem value="06">Volley</SelectItem>
-                  <SelectItem value="08">Badminton</SelectItem>
-                  <SelectItem value="09">Tennis</SelectItem>
-                  <SelectItem value="10">Basketball</SelectItem>
-                  <SelectItem value="12">Skateboard</SelectItem>
-                  <SelectItem value="14">Swimming</SelectItem>
-                  <SelectItem value="17">Back to school</SelectItem>
-                </SelectContent>
-              </Select>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b">
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-bold">Filter Item</h2>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => setShowFilterPanel(false)}
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+              <p className="text-gray-500 mt-1">Pilih filter untuk menyaring item</p>
             </div>
             
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Divisi</label>
-              <Select
-                value={divisionFilter}
-                onValueChange={(value) => {
-                  setDivisionFilter(value);
-                  setCurrentPage(1);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Semua Divisi" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Divisi</SelectItem>
-                  {uniqueDivisions.map(division => (
-                    <SelectItem key={division} value={division}>
-                      {division}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <ScrollArea className="flex-1 p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* Category Filter */}
+                <div>
+                  <h3 className="font-medium mb-3">Kategori</h3>
+                  <div className="space-y-2">
+                    {CATEGORY_OPTIONS.map(option => (
+                      <div key={option.value} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`category-${option.value}`}
+                          checked={categoryFilters.includes(option.value)}
+                          onCheckedChange={(checked) => 
+                            handleCategoryFilterChange(option.value, checked as boolean)
+                          }
+                        />
+                        <label 
+                          htmlFor={`category-${option.value}`}
+                          className="text-sm cursor-pointer"
+                        >
+                          {option.label}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Division Filter */}
+                <div>
+                  <h3 className="font-medium mb-3">Divisi</h3>
+                  <div className="space-y-2">
+                    {uniqueDivisions.map(division => (
+                      <div key={division} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`division-${division}`}
+                          checked={divisionFilters.includes(division)}
+                          onCheckedChange={(checked) => 
+                            handleDivisionFilterChange(division, checked as boolean)
+                          }
+                        />
+                        <label 
+                          htmlFor={`division-${division}`}
+                          className="text-sm cursor-pointer"
+                        >
+                          {division}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Brand Filter */}
+                <div>
+                  <h3 className="font-medium mb-3">Merek</h3>
+                  <div className="space-y-2">
+                    {uniqueBrands.map(brand => (
+                      <div key={brand} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`brand-${brand}`}
+                          checked={brandFilters.includes(brand)}
+                          onCheckedChange={(checked) => 
+                            handleBrandFilterChange(brand, checked as boolean)
+                          }
+                        />
+                        <label 
+                          htmlFor={`brand-${brand}`}
+                          className="text-sm cursor-pointer"
+                        >
+                          {brand}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Season Filter */}
+                <div>
+                  <h3 className="font-medium mb-3">Musim</h3>
+                  <div className="space-y-2">
+                    {uniqueSeasons.map(season => (
+                      <div key={season} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`season-${season}`}
+                          checked={seasonFilters.includes(season)}
+                          onCheckedChange={(checked) => 
+                            handleSeasonFilterChange(season, checked as boolean)
+                          }
+                        />
+                        <label 
+                          htmlFor={`season-${season}`}
+                          className="text-sm cursor-pointer"
+                        >
+                          {season}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Period Filter */}
+                <div>
+                  <h3 className="font-medium mb-3">Periode</h3>
+                  <div className="space-y-2">
+                    {uniquePeriods.map(period => (
+                      <div key={period} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`period-${period}`}
+                          checked={periodFilters.includes(period)}
+                          onCheckedChange={(checked) => 
+                            handlePeriodFilterChange(period, checked as boolean)
+                          }
+                        />
+                        <label 
+                          htmlFor={`period-${period}`}
+                          className="text-sm cursor-pointer"
+                        >
+                          {period}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Unit Filter */}
+                <div>
+                  <h3 className="font-medium mb-3">Satuan</h3>
+                  <div className="space-y-2">
+                    {UNIT_OPTIONS.map(option => (
+                      <div key={option.value} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`unit-${option.value}`}
+                          checked={unitFilters.includes(option.value)}
+                          onCheckedChange={(checked) => 
+                            handleUnitFilterChange(option.value, checked as boolean)
+                          }
+                        />
+                        <label 
+                          htmlFor={`unit-${option.value}`}
+                          className="text-sm cursor-pointer"
+                        >
+                          {option.label}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Status Filter */}
+                <div>
+                  <h3 className="font-medium mb-3">Status</h3>
+                  <div className="space-y-2">
+                    {STATUS_OPTIONS.map(option => (
+                      <div key={option.value} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`status-${option.value}`}
+                          checked={statusFilters.includes(option.value)}
+                          onCheckedChange={(checked) => 
+                            handleStatusFilterChange(option.value, checked as boolean)
+                          }
+                        />
+                        <label 
+                          htmlFor={`status-${option.value}`}
+                          className="text-sm cursor-pointer"
+                        >
+                          {option.label}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </ScrollArea>
             
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Merek</label>
-              <Select
-                value={brandFilter}
-                onValueChange={(value) => {
-                  setBrandFilter(value);
-                  setCurrentPage(1);
-                }}
+            <div className="p-6 border-t flex justify-between">
+              <Button 
+                variant="outline" 
+                onClick={clearAllFilters}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Semua Merek" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Merek</SelectItem>
-                  {uniqueBrands.map(brand => (
-                    <SelectItem key={brand} value={brand}>
-                      {brand}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Musim</label>
-              <Select
-                value={seasonFilter}
-                onValueChange={(value) => {
-                  setSeasonFilter(value);
-                  setCurrentPage(1);
-                }}
+                Hapus Semua Filter
+              </Button>
+              <Button 
+                onClick={() => setShowFilterPanel(false)}
+                className="bg-primary hover:bg-primary/90"
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Semua Musim" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Musim</SelectItem>
-                  {uniqueSeasons.map(season => (
-                    <SelectItem key={season} value={season}>
-                      {season}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Periode</label>
-              <Select
-                value={periodFilter}
-                onValueChange={(value) => {
-                  setPeriodFilter(value);
-                  setCurrentPage(1);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Semua Periode" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Periode</SelectItem>
-                  {uniquePeriods.map(period => (
-                    <SelectItem key={period} value={period}>
-                      {period}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Satuan</label>
-              <Select
-                value={unitFilter}
-                onValueChange={(value) => {
-                  setUnitFilter(value);
-                  setCurrentPage(1);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Semua Satuan" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Satuan</SelectItem>
-                  <SelectItem value="PCS">Pieces (PCS)</SelectItem>
-                  <SelectItem value="PRS">Pairs (PRS)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-              <Select
-                value={statusFilter}
-                onValueChange={(value) => {
-                  setStatusFilter(value);
-                  setCurrentPage(1);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Semua Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Status</SelectItem>
-                  <SelectItem value="pending_approval">Menunggu Persetujuan</SelectItem>
-                  <SelectItem value="approved">Disetujui</SelectItem>
-                  <SelectItem value="available">Tersedia</SelectItem>
-                  <SelectItem value="borrowed">Dipinjam</SelectItem>
-                  <SelectItem value="in_clearance">Dalam Pembersihan</SelectItem>
-                  <SelectItem value="rejected">Ditolak</SelectItem>
-                </SelectContent>
-              </Select>
+                Terapkan Filter
+              </Button>
             </div>
           </div>
         </div>
